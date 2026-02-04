@@ -1,5 +1,6 @@
 {
-  "name": "@lumi-ops/extension",
+  "name": "lumi-ops",
+
   "displayName": "Lumi-Ops",
   "description": "Shadow Clone Protocol - Git Worktree Automation for AI Agents",
   "version": "0.1.0",
@@ -12,6 +13,12 @@
   ],
   "activationEvents": [],
   "main": "./dist/extension.js",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yyy110011/lumi-ops"
+  },
+
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -98,6 +105,8 @@
   "scripts": {
     "vscode:prepublish": "pnpm run build",
     "build": "tsc -p ./",
+
+
     "watch": "tsc -watch -p ./",
     "pretest": "pnpm run build && pnpm run lint",
     "lint": "eslint src --ext ts",
