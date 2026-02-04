@@ -3,7 +3,7 @@
 
   "displayName": "Lumi-Ops",
   "description": "Shadow Clone Protocol - Git Worktree Automation for AI Agents",
-  "version": "0.1.1",
+  "version": "0.1.2",
 
   "publisher": "ZunRenYao",
 
@@ -107,15 +107,11 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "tsc -p ./",
-    "build": "tsc -p ./",
-
-
-
-    "watch": "tsc -watch -p ./",
-    "pretest": "pnpm run build && pnpm run lint",
-    "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js"
+    "vscode:prepublish": "npm run package",
+    "package": "npx esbuild src/extension.ts --bundle --format=cjs --platform=node --outfile=dist/extension.js --external:vscode --minify",
+    "build": "npx esbuild src/extension.ts --bundle --format=cjs --platform=node --outfile=dist/extension.js --external:vscode --sourcemap",
+    "watch": "npx esbuild src/extension.ts --bundle --format=cjs --platform=node --outfile=dist/extension.js --external:vscode --sourcemap --watch",
+    "lint": "eslint src --ext ts"
   },
   "dependencies": {
     "@lumi-ops/cli": "workspace:*"
