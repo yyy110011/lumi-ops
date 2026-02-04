@@ -1,0 +1,122 @@
+{
+  "name": "@lumi-ops/extension",
+  "displayName": "Lumi-Ops",
+  "description": "Shadow Clone Protocol - Git Worktree Automation for AI Agents",
+  "version": "0.1.0",
+  "publisher": "lumadient",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "lumi-ops",
+          "title": "Shadow Ops",
+          "icon": "$(git-branch)"
+        }
+      ]
+    },
+    "views": {
+      "lumi-ops": [
+        {
+          "id": "lumi-ops.activeClones",
+          "name": "Active Clones"
+        },
+        {
+          "id": "lumi-ops.creator",
+          "name": "Create Shadow Clone",
+          "type": "webview"
+        }
+
+      ]
+    },
+    "commands": [
+      {
+        "command": "lumi-ops.spawn",
+        "title": "Lumi-Ops: Spawn Shadow Clone",
+        "icon": "$(add)"
+      },
+      {
+        "command": "lumi-ops.kill",
+        "title": "Lumi-Ops: Kill Shadow Clone",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "lumi-ops.merge",
+        "title": "⚡ Squash & Merge"
+      },
+
+      {
+        "command": "lumi-ops.refresh",
+        "title": "Lumi-Ops: Refresh Clones",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "lumi-ops.open",
+        "title": "Lumi-Ops: Open Clone"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "lumi-ops.refresh",
+          "when": "view == lumi-ops.activeClones",
+          "group": "navigation"
+        },
+        {
+          "command": "lumi-ops.spawn",
+          "when": "view == lumi-ops.activeClones",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "lumi-ops.kill",
+          "when": "view == lumi-ops.activeClones",
+          "group": "inline"
+        },
+        {
+          "command": "lumi-ops.merge",
+          "when": "view == lumi-ops.activeClones",
+          "group": "modification@1"
+        },
+        {
+          "command": "lumi-ops.kill",
+          "when": "view == lumi-ops.activeClones",
+          "group": "modification@2"
+        }
+      ]
+
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run build",
+    "build": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "pnpm run build && pnpm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "dependencies": {
+    "@lumi-ops/cli": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "20.x",
+    "@typescript-eslint/eslint-plugin": "^6.19.1",
+    "@typescript-eslint/parser": "^6.19.1",
+    "eslint": "^8.56.0",
+    "glob": "^10.3.10",
+    "mocha": "^10.2.0",
+    "typescript": "^5.3.3",
+    "@vscode/test-electron": "^2.3.9"
+  }
+}

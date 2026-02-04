@@ -1,0 +1,27 @@
+{
+  "name": "@lumi-ops/cli",
+  "version": "0.1.0",
+  "description": "Core logic for Lumi-Ops Shadow Clone Protocol",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "lumi-ops": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "rimraf dist && tsc",
+    "dev": "tsc -w",
+    "prepare": "npm run build"
+  },
+
+  "dependencies": {
+    "simple-git": "^3.22.0",
+    "commander": "^11.1.0",
+    "fs-extra": "^11.2.0",
+    "zod": "^3.22.4",
+    "dotenv": "^16.4.1",
+    "chalk": "^4.1.2"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4"
+  }
+}
