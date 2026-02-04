@@ -6,6 +6,8 @@ Scale your development by spawning isolated "Shadow Clones" for your AI Agents.
 ![Lumi-Ops Icon](icon.png)
 
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/ZunRenYao.lumi-ops?style=flat&label=VS%20Code%20Marketplace&logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=ZunRenYao.lumi-ops)
+[![Open VSX](https://img.shields.io/open-vsx/v/ZunRenYao/lumi-ops?style=flat&label=Open%20VSX&logo=eclipse-ide)](https://open-vsx.org/extension/ZunRenYao/lumi-ops)
+
 
 
 ## 💡 What is Lumi-Ops?
