@@ -5,6 +5,9 @@ Scale your development by spawning isolated "Shadow Clones" for your AI Agents.
 
 ![Lumi-Ops Icon](icon.png)
 
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/ZunRenYao.lumi-ops?style=flat&label=VS%20Code%20Marketplace&logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=ZunRenYao.lumi-ops)
+
+
 ## 💡 What is Lumi-Ops?
 
 Lumi-Ops enables a **Multi-Threaded Coding Workflow**. Instead of blocking your main editor while an AI Agent (like Cursor Composer or Windsurf) writes code, you can "Spawn a Shadow Clone".

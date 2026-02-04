@@ -1,5 +1,8 @@
 # 👻 Lumi-Ops
 
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/ZunRenYao.lumi-ops?style=flat&label=VS%20Code%20Marketplace&logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=ZunRenYao.lumi-ops)
+
+
 **Lumi-Ops** (Luminescent Operations) is a **Shadow Clone Protocol** for AI Agents in VS Code.
 
 It allows you to spawn isolated **Git Worktrees** ("Shadow Clones") for AI Agents to work on features without interfering with your main development environment.

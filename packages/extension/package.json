@@ -4,7 +4,8 @@
   "displayName": "Lumi-Ops",
   "description": "Shadow Clone Protocol - Git Worktree Automation for AI Agents",
   "version": "0.1.0",
-  "publisher": "lumadient",
+  "publisher": "ZunRenYao",
+
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -103,8 +104,9 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "pnpm run build",
+    "vscode:prepublish": "tsc -p ./",
     "build": "tsc -p ./",
+
 
 
     "watch": "tsc -watch -p ./",
