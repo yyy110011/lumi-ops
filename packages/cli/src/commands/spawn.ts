@@ -20,10 +20,32 @@ export async function spawn(branchName: string, options: { root: string; descrip
     // 1. Ensure .shadow-clones exists
     await fs.ensureDir(shadowDir);
 
-    // 2. Add worktree
+    // 2. Add .shadow-clones to .gitignore (if not already present)
+    const gitignorePath = path.join(rootDir, '.gitignore');
+    const shadowClonesEntry = '.shadow-clones';
+    
+    try {
+      let gitignoreContent = '';
+      if (await fs.pathExists(gitignorePath)) {
+        gitignoreContent = await fs.readFile(gitignorePath, 'utf-8');
+      }
+      
+      // Check if .shadow-clones is already in .gitignore
+      const lines = gitignoreContent.split('\n').map(l => l.trim());
+      if (!lines.includes(shadowClonesEntry)) {
+        // Append to .gitignore
+        const newLine = gitignoreContent.endsWith('\n') || gitignoreContent === '' ? '' : '\n';
+        await fs.appendFile(gitignorePath, `${newLine}${shadowClonesEntry}\n`);
+        console.log(chalk.gray('✓ Added .shadow-clones to .gitignore.'));
+      }
+    } catch (e) {
+      // Silently ignore gitignore errors
+    }
+
+    // 3. Add worktree
     await git.addWorktree(branchName, targetPath, 'main');
 
-    // 3. Copy .env from root to worktree (if exists)
+    // 4. Copy .env from root to worktree (if exists)
     const rootEnv = path.join(rootDir, '.env');
     const targetEnv = path.join(targetPath, '.env');
     if (await fs.pathExists(rootEnv)) {
@@ -31,7 +53,7 @@ export async function spawn(branchName: string, options: { root: string; descrip
       console.log(chalk.gray('✓ Copied .env to shadow clone.'));
     }
 
-    // 4. Create .cursorrules (AI Agent Context)
+    // 5. Create .cursorrules (AI Agent Context)
     const contextFile = path.join(targetPath, '.cursorrules');
 
     const description = options.description || 'No specific objective provided.';
@@ -60,4 +82,3 @@ ${description}
     process.exit(1);
   }
 }
-
