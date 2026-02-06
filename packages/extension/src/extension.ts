@@ -1,11 +1,10 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { ShadowTreeProvider } from './ShadowTreeProvider';
+import * as fs from 'fs';
+import { execSync } from 'child_process';
+import { ShadowTreeProvider, ShadowItem, LumiStatus } from './ShadowTreeProvider';
 import { ShadowCreatorProvider } from './ShadowCreatorProvider';
-
-
 import { spawn, kill, merge } from '@lumi-ops/cli';
-
 
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -64,6 +63,16 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('lumi-ops.creator', creatorProvider)
   );
+
+  // -- Polling for live updates --
+  const pollInterval = setInterval(() => {
+    shadowTreeProvider.refresh();
+  }, 5000);
+
+  // Clean up on deactivate
+  context.subscriptions.push({
+    dispose: () => clearInterval(pollInterval)
+  });
 
 
   // -- Commands --
@@ -199,6 +208,60 @@ export async function activate(context: vscode.ExtensionContext) {
       if (clone && clone.path) {
         const uri = vscode.Uri.file(clone.path);
         vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: true });
+      }
+    })
+  );
+
+  // -- Attach to tmux session command --
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.attach', async (item: ShadowItem) => {
+      if (!item.status?.session) {
+        vscode.window.showWarningMessage('No active tmux session for this clone');
+        return;
+      }
+
+      const terminal = vscode.window.createTerminal({
+        name: `🤖 ${item.status.session}`,
+        shellPath: '/bin/zsh',
+        shellArgs: ['-c', `tmux attach -t ${item.status.session}`]
+      });
+
+      terminal.show();
+    })
+  );
+
+  // -- Kill tmux session command --
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.killSession', async (item: ShadowItem) => {
+      if (!item.status?.session) {
+        vscode.window.showWarningMessage('No active session to kill');
+        return;
+      }
+
+      const confirm = await vscode.window.showWarningMessage(
+        `Kill agent session "${item.status.session}"?`,
+        { modal: true },
+        'Kill'
+      );
+
+      if (confirm === 'Kill') {
+        try {
+          execSync(`tmux kill-session -t ${item.status.session}`);
+
+          // Update status file
+          const statusPath = path.join(item.clone.path, '.lumi-status.json');
+          const newStatus: LumiStatus = {
+            ...item.status,
+            status: 'idle',
+            message: 'Session terminated'
+          };
+          fs.writeFileSync(statusPath, JSON.stringify(newStatus, null, 2));
+
+          shadowTreeProvider.refresh();
+          vscode.window.showInformationMessage(`Killed session: ${item.status.session}`);
+        } catch (e) {
+          vscode.window.showErrorMessage(`Failed to kill session: ${e}`);
+        }
       }
     })
   );

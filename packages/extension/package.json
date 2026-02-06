@@ -71,6 +71,16 @@
       {
         "command": "lumi-ops.open",
         "title": "Lumi-Ops: Open Clone"
+      },
+      {
+        "command": "lumi-ops.attach",
+        "title": "Attach to Agent",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "lumi-ops.killSession",
+        "title": "Kill Agent Session",
+        "icon": "$(debug-stop)"
       }
     ],
     "menus": {
@@ -88,9 +98,19 @@
       ],
       "view/item/context": [
         {
+          "command": "lumi-ops.attach",
+          "when": "view == lumi-ops.activeClones && viewItem == activeAgent",
+          "group": "inline"
+        },
+        {
           "command": "lumi-ops.kill",
           "when": "view == lumi-ops.activeClones",
           "group": "inline"
+        },
+        {
+          "command": "lumi-ops.killSession",
+          "when": "view == lumi-ops.activeClones && viewItem == activeAgent",
+          "group": "modification@0"
         },
         {
           "command": "lumi-ops.merge",
