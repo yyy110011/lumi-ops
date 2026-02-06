@@ -114,7 +114,7 @@ ${description}
         // Session doesn't exist, which is what we want
       }
 
-      const tmuxCmd = `tmux new-session -d -s "${sessionName}" "cd '${targetPath}' && ${options.driver}"`;
+      const tmuxCmd = `tmux new-session -d -s "${sessionName}" "cd '${targetPath}' && ${options.driver} > agent.log 2>&1"`;
 
       try {
         execSync(tmuxCmd);

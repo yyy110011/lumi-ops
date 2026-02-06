@@ -221,12 +221,11 @@ export async function activate(context: vscode.ExtensionContext) {
       }
 
       const terminal = vscode.window.createTerminal({
-        name: `🤖 ${item.status.session}`,
-        shellPath: '/bin/zsh',
-        shellArgs: ['-c', `tmux attach -t ${item.status.session}`]
+        name: `🤖 ${item.status.session}`
       });
 
       terminal.show();
+      terminal.sendText(`tmux attach -t ${item.status.session}`);
     })
   );
 
