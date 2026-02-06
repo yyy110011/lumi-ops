@@ -27,6 +27,9 @@ program
   .description('Create a new shadow clone (worktree) for a feature branch')
   .argument('<branchName>', 'Name of the feature branch')
   .option('-r, --root <path>', 'Root directory of the project', process.cwd())
+  .option('-d, --description <desc>', 'Task description for .cursorrules')
+  .option('--driver <cmd>', 'Driver command for agent execution (required for background mode)')
+  .option('--mode <mode>', 'Execution mode: background | interactive', 'interactive')
   .action(spawn);
 
 program
