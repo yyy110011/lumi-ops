@@ -212,6 +212,43 @@ server.tool(
   }
 );
 
+// Tool: garbage_collect
+server.tool(
+  'garbage_collect',
+  'Clean up orphaned worktrees and tmux sessions',
+  {
+    root: z.string().optional().describe('Root directory of the git repository'),
+    dryRun: z.boolean().optional().describe('Preview cleanup without deleting'),
+  },
+  async ({ root, dryRun }) => {
+    const workingDir = root || process.cwd();
+    
+    try {
+      const args = dryRun ? '--dry-run' : '';
+      const output = execSync(`lumi-ops gc --root "${workingDir}" ${args}`, { 
+        encoding: 'utf-8',
+        cwd: workingDir 
+      });
+      
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({
+            success: true,
+            output: output.trim()
+          }, null, 2),
+        }],
+      };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        content: [{ type: 'text', text: `Error running GC: ${message}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
 // Start server
 async function main() {
   const transport = new StdioServerTransport();

@@ -3,6 +3,7 @@ import * as fs from 'fs-extra';
 import { execSync } from 'child_process';
 import { GitUtils } from '../utils/git';
 import chalk from 'chalk';
+import { quickGC } from './gc';
 
 export interface SpawnOptions {
   root: string;
@@ -13,6 +14,14 @@ export interface SpawnOptions {
 
 export async function spawn(branchName: string, options: SpawnOptions) {
   const rootDir = path.resolve(options.root);
+  
+  // Quick GC before spawning (silent cleanup)
+  try {
+    await quickGC(rootDir);
+  } catch (e) {
+    // Ignore GC errors, don't block spawn
+  }
+  
   const git = new GitUtils(rootDir);
   const shadowDir = path.join(rootDir, '.shadow-clones');
   const targetPath = path.join(shadowDir, branchName);

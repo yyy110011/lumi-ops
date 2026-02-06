@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import { spawn } from './commands/spawn';
 import { kill } from './commands/kill';
 import { list } from './commands/list';
+import { gc } from './commands/gc';
 import * as path from 'path';
 
 // Export for library usage
@@ -10,6 +11,7 @@ export * from './commands/spawn';
 export * from './commands/kill';
 export * from './commands/list';
 export * from './commands/merge';
+export * from './commands/gc';
 export * from './utils/git';
 
 
@@ -46,4 +48,13 @@ program
   .option('--json', 'Output results as JSON')
   .action(list);
 
+program
+  .command('gc')
+  .description('Garbage collect orphaned worktrees and tmux sessions')
+  .option('-r, --root <path>', 'Root directory of the project', process.cwd())
+  .option('--dry-run', 'Show what would be cleaned without actually cleaning')
+  .option('-v, --verbose', 'Show detailed output')
+  .action(gc);
+
 program.parse();
+
