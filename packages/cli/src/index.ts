@@ -54,7 +54,7 @@ program
   .option('-r, --root <path>', 'Root directory of the project', process.cwd())
   .option('--dry-run', 'Show what would be cleaned without actually cleaning')
   .option('-v, --verbose', 'Show detailed output')
-  .action(gc);
+  .action(async (options) => { await gc(options); });
 
 program.parse();
 
