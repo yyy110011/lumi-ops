@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { execSync } from 'child_process';
 import { ShadowTreeProvider, ShadowItem, LumiStatus } from './ShadowTreeProvider';
 import { ShadowCreatorProvider } from './ShadowCreatorProvider';
+import { StatusWatcher } from './StatusWatcher';
 import { spawn, kill, merge } from '@lumi-ops/cli';
 
 
@@ -335,6 +336,68 @@ export async function activate(context: vscode.ExtensionContext) {
       logWatchers.clear();
     }
   });
+
+  // -- Status Watcher for Panic Button --
+  if (rootPath) {
+    const statusWatcher = new StatusWatcher(
+      rootPath,
+      async (branch, message, worktreePath) => {
+        // Show error notification with action button
+        const action = await vscode.window.showErrorMessage(
+          `🚨 Agent "${branch}" is stuck: ${message}`,
+          { modal: false },
+          'Jump In'
+        );
+        
+        if (action === 'Jump In') {
+          // 1. Open new VS Code window with worktree
+          const uri = vscode.Uri.file(worktreePath);
+          vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: true });
+          
+          // 2. Read status to get session name and attach
+          const statusPath = path.join(worktreePath, '.lumi-status.json');
+          try {
+            const status: LumiStatus = JSON.parse(fs.readFileSync(statusPath, 'utf-8'));
+            if (status.session) {
+              const terminal = vscode.window.createTerminal({
+                name: `🤖 ${status.session}`
+              });
+              terminal.show();
+              terminal.sendText(`tmux attach -t ${status.session}`);
+            }
+          } catch (e) {
+            // Fallback: just open the window
+          }
+        }
+      }
+    );
+    
+    statusWatcher.start();
+    
+    context.subscriptions.push({
+      dispose: () => statusWatcher.dispose()
+    });
+  }
+
+  // -- Jump In Command (manual intervention from tree view) --
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.jumpIn', async (item: ShadowItem) => {
+      if (!item) return;
+      
+      // Open window
+      const uri = vscode.Uri.file(item.clone.path);
+      vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: true });
+      
+      // Attach terminal if session exists
+      if (item.status?.session) {
+        const terminal = vscode.window.createTerminal({
+          name: `🤖 ${item.status.session}`
+        });
+        terminal.show();
+        terminal.sendText(`tmux attach -t ${item.status.session}`);
+      }
+    })
+  );
 }
 
 export function deactivate() {}

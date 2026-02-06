@@ -91,6 +91,11 @@
         "command": "lumi-ops.watchLogs",
         "title": "Watch Agent Logs (Live)",
         "icon": "$(eye)"
+      },
+      {
+        "command": "lumi-ops.jumpIn",
+        "title": "Jump In (Open + Attach)",
+        "icon": "$(debug-start)"
       }
     ],
     "menus": {
@@ -141,6 +146,11 @@
           "command": "lumi-ops.watchLogs",
           "when": "view == lumi-ops.activeClones && viewItem == activeAgent",
           "group": "navigation@1"
+        },
+        {
+          "command": "lumi-ops.jumpIn",
+          "when": "view == lumi-ops.activeClones && viewItem == activeAgent",
+          "group": "inline"
         }
       ]
 

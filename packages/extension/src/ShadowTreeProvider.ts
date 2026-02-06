@@ -200,7 +200,7 @@ export class ShadowItem extends vscode.TreeItem {
       case 'testing':
         return new vscode.ThemeIcon('beaker', new vscode.ThemeColor('charts.blue'));
       case 'blocked':
-        return new vscode.ThemeIcon('warning', new vscode.ThemeColor('charts.red'));
+        return new vscode.ThemeIcon('alert', new vscode.ThemeColor('errorForeground'));
       case 'done':
         return new vscode.ThemeIcon('check', new vscode.ThemeColor('charts.green'));
       case 'idle':
