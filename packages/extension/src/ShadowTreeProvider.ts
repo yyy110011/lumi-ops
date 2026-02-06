@@ -14,6 +14,27 @@ export interface LumiStatus {
   driver?: string;        // driver command used
 }
 
+/**
+ * Read the last N lines from an agent's log file
+ */
+function getLogSnippet(worktreePath: string, lines: number = 50): string | null {
+  const logPath = path.join(worktreePath, 'agent.log');
+
+  try {
+    if (!fs.existsSync(logPath)) {
+      return null;
+    }
+
+    const content = fs.readFileSync(logPath, 'utf-8');
+    const allLines = content.split('\n');
+    const lastLines = allLines.slice(-lines).join('\n');
+
+    return lastLines || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
   private _onDidChangeTreeData: vscode.EventEmitter<ShadowItem | undefined | void> = new vscode.EventEmitter<ShadowItem | undefined | void>();
   readonly onDidChangeTreeData: vscode.Event<ShadowItem | undefined | void> = this._onDidChangeTreeData.event;
@@ -104,6 +125,8 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
 }
 
 export class ShadowItem extends vscode.TreeItem {
+  public readonly logPath: string;
+
   constructor(
     public readonly label: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
@@ -112,6 +135,7 @@ export class ShadowItem extends vscode.TreeItem {
   ) {
     super(label, collapsibleState);
     
+    this.logPath = path.join(clone.path, 'agent.log');
     this.tooltip = this.getTooltip();
     this.description = this.getDescription();
     this.contextValue = this.getContextValue();
@@ -127,11 +151,28 @@ export class ShadowItem extends vscode.TreeItem {
     }
   }
   
-  private getTooltip(): string {
+  private getTooltip(): vscode.MarkdownString {
+    const md = new vscode.MarkdownString();
+    md.isTrusted = true;
+
+    // Basic info
+    md.appendMarkdown(`**Path:** \`${this.clone.path}\`\n\n`);
+
     if (this.status) {
-      return `${this.clone.path}\n\nStatus: ${this.status.status}\n${this.status.message}${this.status.session ? `\nSession: ${this.status.session}` : ''}`;
+      md.appendMarkdown(`**Status:** ${this.status.status}\n\n`);
+      md.appendMarkdown(`**Message:** ${this.status.message}\n\n`);
+      if (this.status.session) {
+        md.appendMarkdown(`**Session:** \`${this.status.session}\`\n\n`);
+      }
     }
-    return this.clone.path;
+
+    // Log preview (last 10 lines for tooltip)
+    const logSnippet = getLogSnippet(this.clone.path, 10);
+    if (logSnippet) {
+      md.appendMarkdown(`---\n**Recent Log:**\n\`\`\`\n${logSnippet}\n\`\`\``);
+    }
+
+    return md;
   }
   
   private getDescription(): string {

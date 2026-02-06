@@ -81,6 +81,16 @@
         "command": "lumi-ops.killSession",
         "title": "Kill Agent Session",
         "icon": "$(debug-stop)"
+      },
+      {
+        "command": "lumi-ops.showLogs",
+        "title": "View Agent Logs",
+        "icon": "$(output)"
+      },
+      {
+        "command": "lumi-ops.watchLogs",
+        "title": "Watch Agent Logs (Live)",
+        "icon": "$(eye)"
       }
     ],
     "menus": {
@@ -121,6 +131,16 @@
           "command": "lumi-ops.kill",
           "when": "view == lumi-ops.activeClones",
           "group": "modification@2"
+        },
+        {
+          "command": "lumi-ops.showLogs",
+          "when": "view == lumi-ops.activeClones",
+          "group": "navigation@0"
+        },
+        {
+          "command": "lumi-ops.watchLogs",
+          "when": "view == lumi-ops.activeClones && viewItem == activeAgent",
+          "group": "navigation@1"
         }
       ]
 

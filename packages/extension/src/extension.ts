@@ -264,6 +264,77 @@ export async function activate(context: vscode.ExtensionContext) {
       }
     })
   );
+
+  // -- Show Agent Logs Command --
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.showLogs', async (item: ShadowItem) => {
+      const logPath = path.join(item.clone.path, 'agent.log');
+
+      // Check if log file exists
+      if (!fs.existsSync(logPath)) {
+        vscode.window.showWarningMessage(`No agent.log found for ${item.label}`);
+        return;
+      }
+
+      // Open as read-only document
+      const uri = vscode.Uri.file(logPath);
+      const doc = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(doc, {
+        preview: true,
+        preserveFocus: false
+      });
+    })
+  );
+
+  // -- Watch Agent Logs (Live) Command --
+  const logWatchers = new Map<string, fs.FSWatcher>();
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.watchLogs', async (item: ShadowItem) => {
+      const logPath = path.join(item.clone.path, 'agent.log');
+      const channelName = `🤖 ${item.label}`;
+
+      // Create or reuse output channel
+      const channel = vscode.window.createOutputChannel(channelName);
+      channel.show();
+
+      // Initial content
+      if (fs.existsSync(logPath)) {
+        channel.append(fs.readFileSync(logPath, 'utf-8'));
+      }
+
+      // Watch for changes
+      if (logWatchers.has(logPath)) {
+        logWatchers.get(logPath)?.close();
+      }
+
+      try {
+        const watcher = fs.watch(logPath, (event) => {
+          if (event === 'change') {
+            // Re-read and update
+            channel.clear();
+            if (fs.existsSync(logPath)) {
+              channel.append(fs.readFileSync(logPath, 'utf-8'));
+            }
+          }
+        });
+
+        logWatchers.set(logPath, watcher);
+      } catch (e) {
+        vscode.window.showWarningMessage(`Could not watch log file: ${e}`);
+      }
+    })
+  );
+
+  // Cleanup log watchers on deactivate
+  context.subscriptions.push({
+    dispose: () => {
+      for (const watcher of logWatchers.values()) {
+        watcher.close();
+      }
+      logWatchers.clear();
+    }
+  });
 }
 
 export function deactivate() {}
