@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- Background -->
+  <rect width="256" height="256" rx="32" fill="#1a1040"/>
+  
+  <!-- Glow effect -->
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="45%" r="40%">
+      <stop offset="0%" stop-color="#4eeadb" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#1a1040" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ghostGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#c8f0ed"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="32" fill="url(#glow)"/>
+  
+  <!-- Ghost body -->
+  <path d="M128 50C92 50 65 80 65 115v75c0 0 10-8 18 0s12 8 20 0 12-8 20 0 12 8 20 0 12-8 20 0 12 8 18 0V115c0-35-27-65-63-65z" 
+        fill="url(#ghostGrad)" opacity="0.95"/>
+  
+  <!-- Left eye -->
+  <ellipse cx="105" cy="120" rx="12" ry="14" fill="#1a1040"/>
+  <ellipse cx="108" cy="116" rx="4" ry="5" fill="#4eeadb"/>
+  
+  <!-- Right eye -->
+  <ellipse cx="151" cy="120" rx="12" ry="14" fill="#1a1040"/>
+  <ellipse cx="154" cy="116" rx="4" ry="5" fill="#4eeadb"/>
+  
+  <!-- Smile -->
+  <path d="M112 145 Q128 160 144 145" stroke="#1a1040" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>
