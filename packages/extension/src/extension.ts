@@ -24,30 +24,33 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   }
 
-  // Auto-open context file logic
+  // Auto-open MISSION.md and send prompt to chat when in a shadow clone
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0];
   if (workspaceRoot) {
-    const targetFile = vscode.Uri.joinPath(workspaceRoot.uri, '.cursorrules');
+    const missionFile = vscode.Uri.joinPath(workspaceRoot.uri, 'MISSION.md');
     
-    // Use a small timeout to ensure UI is ready (Race condition fix)
     setTimeout(async () => {
       try {
-        // Check if file exists
-        await vscode.workspace.fs.stat(targetFile);
+        await vscode.workspace.fs.stat(missionFile);
         
-        // Force Open and Pin
-        const doc = await vscode.workspace.openTextDocument(targetFile);
+        // Open MISSION.md pinned
+        const doc = await vscode.workspace.openTextDocument(missionFile);
         await vscode.window.showTextDocument(doc, { 
-          preview: false, // Don't open in italic/preview mode
+          preview: false,
           preserveFocus: true 
         });
         
-        // Optional: Show a subtle message
-        vscode.window.setStatusBarMessage('👻 Shadow Clone Context Loaded', 3000);
+        // Auto-open chat with mission prompt (pre-filled, user can review before sending)
+        vscode.commands.executeCommand('workbench.action.chat.open', {
+          query: 'Please read @MISSION.md and start working on the objective described in it.',
+          isPartialQuery: true
+        });
+        
+        vscode.window.setStatusBarMessage('👻 Shadow Clone Context Loaded — Chat ready!', 5000);
       } catch (e) {
-        // console.log('No .cursorrules found, skipping auto-open.');
+        // No MISSION.md found, not a shadow clone workspace
       }
-    }, 500); // 500ms delay
+    }, 1000); // 1s delay to ensure UI is fully ready
   }
 
 
