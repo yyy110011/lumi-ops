@@ -51,6 +51,7 @@ jobs:
           pat: ${{ secrets.OVSX_PAT }}
           registryUrl: https://open-vsx.org
           packagePath: packages/extension
+          dependencies: false
 
       - name: Create version bump PR
         run: |
