@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
-import { execSync } from 'child_process';
+import { execSync, spawn as spawnProcess } from 'child_process';
 import { GitUtils } from '../utils/git';
 import chalk from 'chalk';
 import { quickGC } from './gc';
@@ -122,11 +122,25 @@ ${description}
       } catch {
         // Session doesn't exist, which is what we want
       }
-
-      const tmuxCmd = `tmux new-session -d -s "${sessionName}" "cd '${targetPath}' && ${options.driver} > agent.log 2>&1"`;
-
+      // Write a runner script for reliable execution with logging
+      const runnerScript = path.join(targetPath, '.lumi-runner.sh');
+      const logFile = path.join(targetPath, 'agent.log');
+      const scriptContent = `#!/bin/bash
+cd "${targetPath}"
+(${options.driver}) >> "${logFile}" 2>&1
+`;
+      await fs.writeFile(runnerScript, scriptContent, { mode: 0o755 });
+      
+      // Use spawn with detached mode to ensure tmux session persists
       try {
-        execSync(tmuxCmd);
+        const tmuxProcess = spawnProcess('tmux', [
+          'new-session', '-d', '-s', sessionName, runnerScript
+        ], {
+          detached: true,
+          stdio: 'ignore',
+          shell: true
+        });
+        tmuxProcess.unref();
 
         // Write status file
         const statusFile = path.join(targetPath, '.lumi-status.json');

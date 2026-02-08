@@ -13,8 +13,10 @@ async function main() {
     sourcesContent: false,
     platform: 'node',
     outfile: 'dist/extension.js',
-    external: ['vscode'], // vscode is provided by the host
+    external: ['vscode'],
     logLevel: 'info',
+    // Let esbuild handle exports properly via define + mainFields
+    // The extension.ts already exports activate/deactivate, esbuild CJS will preserve them
   });
 
   if (watch) {
