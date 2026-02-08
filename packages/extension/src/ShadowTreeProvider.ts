@@ -26,13 +26,32 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
       return [];
     } else {
       try {
-        // Fetch clones using the logic from the CLI
         const clones = await this.getShadowClones();
-        return clones.map(clone => new ShadowItem(
-          clone.branch,
-          clone.isShadow ? vscode.TreeItemCollapsibleState.None : vscode.TreeItemCollapsibleState.None,
-          clone
-        ));
+        const items: ShadowItem[] = [];
+
+        // 1. Find current workspace worktree (non-shadow) and show it first
+        const currentWorktree = clones.find(c => !c.isShadow);
+        if (currentWorktree) {
+          items.push(new ShadowItem(
+            currentWorktree.branch,
+            vscode.TreeItemCollapsibleState.None,
+            currentWorktree,
+            'currentBranch'  // Protected - no kill/merge menu
+          ));
+        }
+
+        // 2. Show only shadow clones below
+        const shadowClones = clones.filter(c => c.isShadow);
+        for (const clone of shadowClones) {
+          items.push(new ShadowItem(
+            clone.branch,
+            vscode.TreeItemCollapsibleState.None,
+            clone,
+            'shadowClone'
+          ));
+        }
+
+        return items;
       } catch (error) {
         vscode.window.showErrorMessage(`Failed to list shadow clones: ${error}`);
         return [];
@@ -43,16 +62,8 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
   private async getShadowClones(): Promise<ShadowClone[]> {
     if (!this.workspaceRoot) return [];
     
-    // We'll capture the console output or directly call the logic.
-    // For this MVP, we'll re-implement the list logic slightly or use the imported function.
-    // Note: In a real monorepo, you'd want to make sure the CLI logic is exported cleanly.
-    
     const worktrees: ShadowClone[] = [];
-    // Here we wrap the list logic or call it
-    // For now, let's assume we can call the function directly if the import works.
-    // Since we are in a monorepo, we might need to handle the 'root' option.
-    
-    // Mocking for now to avoid execution issues during extension loading if CLI isn't built
+
     try {
         const git = new GitUtils(this.workspaceRoot);
 
@@ -84,18 +95,25 @@ class ShadowItem extends vscode.TreeItem {
   constructor(
     public readonly label: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-    public readonly clone: ShadowClone
+    public readonly clone: ShadowClone,
+    public readonly role: 'currentBranch' | 'shadowClone'
   ) {
     super(label, collapsibleState);
-    this.tooltip = `${this.clone.path}`;
-    this.description = this.clone.isShadow ? 'Shadow Clone' : 'Main Repository';
-    this.contextValue = this.clone.isShadow ? 'shadowClone' : 'coreRepo';
-    this.iconPath = new vscode.ThemeIcon(this.clone.isShadow ? 'git-branch' : 'repo');
-    
-    this.command = {
-      command: 'lumi-ops.open',
-      title: 'Open Clone',
-      arguments: [this.clone]
-    };
+    this.contextValue = role;
+
+    if (role === 'currentBranch') {
+      this.tooltip = `Current workspace: ${this.clone.path}`;
+      this.description = '🏠 Current Branch';
+      this.iconPath = new vscode.ThemeIcon('home');
+    } else {
+      this.tooltip = `${this.clone.path}`;
+      this.description = 'Shadow Clone';
+      this.iconPath = new vscode.ThemeIcon('git-branch');
+      this.command = {
+        command: 'lumi-ops.open',
+        title: 'Open Clone',
+        arguments: [this.clone]
+      };
+    }
   }
 }
