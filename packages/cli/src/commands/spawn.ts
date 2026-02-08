@@ -54,8 +54,8 @@ export async function spawn(branchName: string, options: { root: string; descrip
       console.log(chalk.gray('✓ Copied .env to shadow clone.'));
     }
 
-    // 5. Create .cursorrules (AI Agent Context)
-    const contextFile = path.join(targetPath, '.cursorrules');
+    // 5. Create MISSION.md (AI Agent Context - tool-agnostic)
+    const contextFile = path.join(targetPath, 'MISSION.md');
 
     const description = options.description || 'No specific objective provided.';
     
@@ -74,7 +74,7 @@ ${description}
 3. Run tests before committing.
 `;
     await fs.writeFile(contextFile, contextContent);
-    console.log(chalk.gray('✓ Generated .cursorrules.'));
+    console.log(chalk.gray('✓ Generated MISSION.md.'));
 
 
     console.log(chalk.green(`\n✨ Shadow clone ready at: ${targetPath}`));
