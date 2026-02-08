@@ -24,7 +24,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   }
 
-  // Auto-open MISSION.md and send prompt to chat when in a shadow clone
+  // Auto-open MISSION.md and prompt user to start agent when in a shadow clone
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0];
   if (workspaceRoot) {
     const missionFile = vscode.Uri.joinPath(workspaceRoot.uri, 'MISSION.md');
@@ -40,15 +40,19 @@ export async function activate(context: vscode.ExtensionContext) {
           preserveFocus: true 
         });
         
-        // Auto-open chat with mission prompt (string shorthand for broader compatibility)
-        setTimeout(() => {
+        // Show popup — user click ensures chat UI is fully ready
+        const action = await vscode.window.showInformationMessage(
+          '👻 Shadow Clone ready! Send mission to Agent?',
+          'Start Mission',
+          'Skip'
+        );
+        
+        if (action === 'Start Mission') {
           vscode.commands.executeCommand(
             'workbench.action.chat.open',
             'Please read @MISSION.md and start working on the objective described in it.'
           );
-        }, 1500);
-        
-        vscode.window.setStatusBarMessage('👻 Shadow Clone Context Loaded — Chat ready!', 5000);
+        }
       } catch (e) {
         // No MISSION.md found, not a shadow clone workspace
       }
