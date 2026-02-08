@@ -29,7 +29,7 @@
         {
           "id": "lumi-ops",
           "title": "Shadow Ops",
-          "icon": "$(git-branch)"
+          "icon": "media/icon.svg"
         }
       ]
     },
