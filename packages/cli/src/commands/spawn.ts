@@ -68,6 +68,9 @@ ${description}
 - You are working in an isolated Git Worktree.
 - Path: \`${targetPath}\`
 
+## ⚠️ Important Rules
+- This worktree directory IS your workspace. Run all commands directly from here. Do NOT use the scratch directory.
+
 ## ⚡ Instructions
 1. Analyze the objective.
 2. Implement the changes in this directory.
