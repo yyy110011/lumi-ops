@@ -32,7 +32,8 @@ export async function spawn(branchName: string, options: { root: string; descrip
       
       // Check if .shadow-clones is already in .gitignore
       const lines = gitignoreContent.split('\n').map(l => l.trim());
-      if (!lines.includes(shadowClonesEntry)) {
+      const alreadyIgnored = lines.includes(shadowClonesEntry) || lines.includes(`${shadowClonesEntry}/`);
+      if (!alreadyIgnored) {
         // Append to .gitignore
         const newLine = gitignoreContent.endsWith('\n') || gitignoreContent === '' ? '' : '\n';
         await fs.appendFile(gitignorePath, `${newLine}${shadowClonesEntry}\n`);
