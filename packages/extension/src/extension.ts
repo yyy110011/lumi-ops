@@ -203,11 +203,36 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('lumi-ops.open', (clone: any) => {
+    vscode.commands.registerCommand('lumi-ops.open', async (clone: any) => {
 
       if (clone && clone.path) {
         const uri = vscode.Uri.file(clone.path);
-        vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: true });
+
+        // Check if MISSION.md exists in the clone
+        const missionUri = vscode.Uri.joinPath(uri, 'MISSION.md');
+        let hasMission = false;
+        try {
+          await vscode.workspace.fs.stat(missionUri);
+          hasMission = true;
+        } catch {}
+
+        // Open the clone in a new window
+        await vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: true });
+
+        // If MISSION.md exists, offer to copy the prompt for the agent
+        if (hasMission) {
+          const action = await vscode.window.showInformationMessage(
+            '👻 Shadow Clone opened! Copy mission prompt to clipboard?',
+            'Copy Prompt',
+            'Skip'
+          );
+
+          if (action === 'Copy Prompt') {
+            const prompt = 'Please read @MISSION.md and start working on the objective described in it.';
+            await vscode.env.clipboard.writeText(prompt);
+            vscode.window.showInformationMessage('✅ Prompt copied! Paste it in the Agent chat of the new window.');
+          }
+        }
       }
     })
   );
