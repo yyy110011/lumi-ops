@@ -24,6 +24,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Run CLI Tests
+        run: pnpm --filter @lumi-ops/cli test
+
       - name: Build CLI
         run: pnpm --filter @lumi-ops/cli build
 
