@@ -24,7 +24,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   }
 
-  // Auto-open MISSION.md and prompt user to start agent when in a shadow clone
+  // Auto-open MISSION.md when in a shadow clone workspace
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0];
   if (workspaceRoot) {
     const missionFile = vscode.Uri.joinPath(workspaceRoot.uri, 'MISSION.md');
@@ -33,26 +33,13 @@ export async function activate(context: vscode.ExtensionContext) {
       try {
         await vscode.workspace.fs.stat(missionFile);
         
-        // Open MISSION.md pinned
         const doc = await vscode.workspace.openTextDocument(missionFile);
         await vscode.window.showTextDocument(doc, { 
           preview: false,
           preserveFocus: true 
         });
         
-        // Show popup — user click ensures chat UI is fully ready
-        const action = await vscode.window.showInformationMessage(
-          '👻 Shadow Clone ready! Send mission to Agent?',
-          'Start Mission',
-          'Skip'
-        );
-        
-        if (action === 'Start Mission') {
-          vscode.commands.executeCommand(
-            'workbench.action.chat.open',
-            'Please read @MISSION.md and start working on the objective described in it.'
-          );
-        }
+        vscode.window.setStatusBarMessage('👻 Shadow Clone — tag @MISSION.md in chat to start!', 8000);
       } catch (e) {
         // No MISSION.md found, not a shadow clone workspace
       }
@@ -203,36 +190,10 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('lumi-ops.open', async (clone: any) => {
-
+    vscode.commands.registerCommand('lumi-ops.open', (clone: any) => {
       if (clone && clone.path) {
         const uri = vscode.Uri.file(clone.path);
-
-        // Check if MISSION.md exists in the clone
-        const missionUri = vscode.Uri.joinPath(uri, 'MISSION.md');
-        let hasMission = false;
-        try {
-          await vscode.workspace.fs.stat(missionUri);
-          hasMission = true;
-        } catch {}
-
-        // Open the clone in a new window
-        await vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: true });
-
-        // If MISSION.md exists, offer to copy the prompt for the agent
-        if (hasMission) {
-          const action = await vscode.window.showInformationMessage(
-            '👻 Shadow Clone opened! Copy mission prompt to clipboard?',
-            'Copy Prompt',
-            'Skip'
-          );
-
-          if (action === 'Copy Prompt') {
-            const prompt = 'Please read @MISSION.md and start working on the objective described in it.';
-            await vscode.env.clipboard.writeText(prompt);
-            vscode.window.showInformationMessage('✅ Prompt copied! Paste it in the Agent chat of the new window.');
-          }
-        }
+        vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: true });
       }
     })
   );
