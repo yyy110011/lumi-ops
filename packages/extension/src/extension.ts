@@ -39,7 +39,16 @@ export async function activate(context: vscode.ExtensionContext) {
           preserveFocus: true 
         });
         
-        vscode.window.setStatusBarMessage('👻 Shadow Clone — tag @MISSION.md in chat to start!', 8000);
+        const action = await vscode.window.showInformationMessage(
+          '👻 Shadow Clone ready! Copy prompt to paste in chat?',
+          'Copy Prompt'
+        );
+        if (action === 'Copy Prompt') {
+          await vscode.env.clipboard.writeText(
+            'Please read @MISSION.md and start working on the objective described in it.'
+          );
+          vscode.window.showInformationMessage('✅ Prompt copied to clipboard!');
+        }
       } catch (e) {
         // No MISSION.md found, not a shadow clone workspace
       }
