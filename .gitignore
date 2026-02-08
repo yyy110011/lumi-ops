@@ -6,4 +6,4 @@ out/
 .DS_Store
 .vscode-test/
 *.vsix
-.shadow-clones
+MISSION.md
