@@ -3,7 +3,7 @@
 
   "displayName": "Lumi-Ops",
   "description": "Shadow Clone Protocol - Git Worktree Automation for AI Agents",
-  "version": "0.1.4",
+  "version": "0.1.5",
 
 
   "publisher": "ZunRenYao",
@@ -89,17 +89,17 @@
       "view/item/context": [
         {
           "command": "lumi-ops.kill",
-          "when": "view == lumi-ops.activeClones",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "inline"
         },
         {
           "command": "lumi-ops.merge",
-          "when": "view == lumi-ops.activeClones",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "modification@1"
         },
         {
           "command": "lumi-ops.kill",
-          "when": "view == lumi-ops.activeClones",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "modification@2"
         }
       ]
@@ -108,8 +108,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
-    "package": "npx --yes esbuild src/extension.ts --bundle --format=cjs --platform=node --outfile=dist/extension.js --external:vscode --minify && echo 'module.exports={activate:T0,deactivate:x0};' >> dist/extension.js",
-    "build": "npx --yes esbuild src/extension.ts --bundle --format=cjs --platform=node --outfile=dist/extension.js --external:vscode --sourcemap && echo 'module.exports={activate:T0,deactivate:x0};' >> dist/extension.js",
+    "package": "npx --yes esbuild src/extension.ts --bundle --format=cjs --platform=node --outfile=dist/extension.js --external:vscode --minify",
+    "build": "npx --yes esbuild src/extension.ts --bundle --format=cjs --platform=node --outfile=dist/extension.js --external:vscode --sourcemap",
     "watch": "npx --yes esbuild src/extension.ts --bundle --format=cjs --platform=node --outfile=dist/extension.js --external:vscode --sourcemap --watch",
     "lint": "eslint src --ext ts"
   },

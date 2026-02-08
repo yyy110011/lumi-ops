@@ -42,8 +42,9 @@ export async function spawn(branchName: string, options: { root: string; descrip
       // Silently ignore gitignore errors
     }
 
-    // 3. Add worktree
-    await git.addWorktree(branchName, targetPath, 'main');
+    // 3. Add worktree (branch from current branch, not hardcoded 'main')
+    const currentBranch = await git.getCurrentBranch();
+    await git.addWorktree(branchName, targetPath, currentBranch);
 
     // 4. Copy .env from root to worktree (if exists)
     const rootEnv = path.join(rootDir, '.env');
