@@ -1,7 +1,6 @@
 {
   "name": "@lumi-ops/cli",
-  "version": "0.1.2",
-
+  "version": "0.1.6",
   "description": "Core logic for Lumi-Ops Shadow Clone Protocol",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -13,7 +12,6 @@
     "dev": "tsc -w",
     "prepare": "npm run build"
   },
-
   "dependencies": {
     "simple-git": "^3.22.0",
     "commander": "^11.1.0",

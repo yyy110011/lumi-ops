@@ -1,14 +1,9 @@
 {
   "name": "lumi-ops",
-
   "displayName": "Lumi-Ops",
   "description": "Shadow Clone Protocol - Git Worktree Automation for AI Agents",
-  "version": "0.1.5",
-
-
+  "version": "0.1.6",
   "publisher": "ZunRenYao",
-
-
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -22,7 +17,6 @@
     "type": "git",
     "url": "https://github.com/yyy110011/lumi-ops"
   },
-
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -44,7 +38,6 @@
           "name": "Create Shadow Clone",
           "type": "webview"
         }
-
       ]
     },
     "commands": [
@@ -62,7 +55,6 @@
         "command": "lumi-ops.merge",
         "title": "⚡ Squash & Merge"
       },
-
       {
         "command": "lumi-ops.refresh",
         "title": "Lumi-Ops: Refresh Clones",
@@ -103,7 +95,6 @@
           "group": "modification@2"
         }
       ]
-
     }
   },
   "scripts": {
@@ -113,7 +104,6 @@
     "watch": "npx --yes esbuild src/extension.ts --bundle --format=cjs --platform=node --outfile=dist/extension.js --external:vscode --sourcemap --watch",
     "lint": "eslint src --ext ts"
   },
-
   "dependencies": {
     "@lumi-ops/cli": "workspace:*"
   },
