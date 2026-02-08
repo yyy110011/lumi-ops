@@ -10,7 +10,8 @@
   "scripts": {
     "build": "rimraf dist && tsc",
     "dev": "tsc -w",
-    "test": "vitest run",
+    "test": "vitest run --exclude src/__tests__/e2e.test.ts",
+    "test:e2e": "vitest run src/__tests__/e2e.test.ts --timeout 30000",
     "prepare": "npm run build"
   },
   "dependencies": {
