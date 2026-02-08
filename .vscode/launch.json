@@ -13,7 +13,7 @@
       "outFiles": [
         "${workspaceFolder}/packages/extension/dist/**/*.js"
       ],
-      // "preLaunchTask": "npm: build"
+      "preLaunchTask": "build:all"
     }
   ]
 }

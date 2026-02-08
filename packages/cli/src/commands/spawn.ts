@@ -50,7 +50,8 @@ export async function spawn(branchName: string, options: SpawnOptions) {
       
       // Check if .shadow-clones is already in .gitignore
       const lines = gitignoreContent.split('\n').map(l => l.trim());
-      if (!lines.includes(shadowClonesEntry)) {
+      const alreadyIgnored = lines.includes(shadowClonesEntry) || lines.includes(`${shadowClonesEntry}/`);
+      if (!alreadyIgnored) {
         // Append to .gitignore
         const newLine = gitignoreContent.endsWith('\n') || gitignoreContent === '' ? '' : '\n';
         await fs.appendFile(gitignorePath, `${newLine}${shadowClonesEntry}\n`);
@@ -60,8 +61,9 @@ export async function spawn(branchName: string, options: SpawnOptions) {
       // Silently ignore gitignore errors
     }
 
-    // 3. Add worktree
-    await git.addWorktree(branchName, targetPath, 'main');
+    // 3. Add worktree (branch from current branch, not hardcoded 'main')
+    const currentBranch = await git.getCurrentBranch();
+    await git.addWorktree(branchName, targetPath, currentBranch);
 
     // 4. Copy .env from root to worktree (if exists)
     const rootEnv = path.join(rootDir, '.env');
@@ -71,8 +73,8 @@ export async function spawn(branchName: string, options: SpawnOptions) {
       console.log(chalk.gray('✓ Copied .env to shadow clone.'));
     }
 
-    // 5. Create .cursorrules (AI Agent Context)
-    const contextFile = path.join(targetPath, '.cursorrules');
+    // 5. Create MISSION.md (AI Agent Context - tool-agnostic)
+    const contextFile = path.join(targetPath, 'MISSION.md');
 
     const description = options.description || 'No specific objective provided.';
     
@@ -85,13 +87,20 @@ ${description}
 - You are working in an isolated Git Worktree.
 - Path: \`${targetPath}\`
 
+## ⚠️ Important Rules
+- This worktree directory IS your workspace. Run all commands directly from here. Do NOT use the scratch directory.
+
 ## ⚡ Instructions
 1. Analyze the objective.
 2. Implement the changes in this directory.
 3. Run tests before committing.
+4. When finished, provide a **commit message** following Conventional Commits format:
+   - Example: \`feat: add OAuth login with Google provider\`
+   - Example: \`fix: resolve race condition in data fetching\`
+   - Include a brief summary of all changes made.
 `;
     await fs.writeFile(contextFile, contextContent);
-    console.log(chalk.gray('✓ Generated .cursorrules.'));
+    console.log(chalk.gray('✓ Generated MISSION.md.'));
 
     console.log(chalk.green(`\n✨ Shadow clone ready at: ${targetPath}`));
 

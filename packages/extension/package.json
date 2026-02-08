@@ -1,35 +1,31 @@
 {
   "name": "lumi-ops",
-
   "displayName": "Lumi-Ops",
   "description": "Shadow Clone Protocol - Git Worktree Automation for AI Agents",
-  "version": "0.1.4",
-
-
+  "version": "0.2.1",
   "publisher": "ZunRenYao",
-
-
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "icon": "icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/yyy110011/lumi-ops"
   },
-
   "contributes": {
     "viewsContainers": {
       "activitybar": [
         {
           "id": "lumi-ops",
           "title": "Shadow Ops",
-          "icon": "$(git-branch)"
+          "icon": "media/icon.svg"
         }
       ]
     },
@@ -44,7 +40,6 @@
           "name": "Create Shadow Clone",
           "type": "webview"
         }
-
       ]
     },
     "commands": [
@@ -62,7 +57,6 @@
         "command": "lumi-ops.merge",
         "title": "⚡ Squash & Merge"
       },
-
       {
         "command": "lumi-ops.refresh",
         "title": "Lumi-Ops: Refresh Clones",
@@ -119,7 +113,7 @@
         },
         {
           "command": "lumi-ops.kill",
-          "when": "view == lumi-ops.activeClones",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "inline"
         },
         {
@@ -129,12 +123,12 @@
         },
         {
           "command": "lumi-ops.merge",
-          "when": "view == lumi-ops.activeClones",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "modification@1"
         },
         {
           "command": "lumi-ops.kill",
-          "when": "view == lumi-ops.activeClones",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "modification@2"
         },
         {
@@ -153,7 +147,6 @@
           "group": "inline"
         }
       ]
-
     }
   },
   "scripts": {
@@ -163,21 +156,21 @@
     "watch": "npx --yes esbuild src/extension.ts --bundle --format=cjs --platform=node --outfile=dist/extension.js --external:vscode --sourcemap --watch",
     "lint": "eslint src --ext ts"
   },
-
   "dependencies": {
     "@lumi-ops/cli": "workspace:*"
   },
   "devDependencies": {
-    "@types/vscode": "^1.85.0",
     "@types/glob": "^8.1.0",
     "@types/mocha": "^10.0.6",
     "@types/node": "20.x",
+    "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^6.19.1",
     "@typescript-eslint/parser": "^6.19.1",
+    "@vscode/test-electron": "^2.3.9",
+    "esbuild": "^0.27.3",
     "eslint": "^8.56.0",
     "glob": "^10.3.10",
     "mocha": "^10.2.0",
-    "typescript": "^5.3.3",
-    "@vscode/test-electron": "^2.3.9"
+    "typescript": "^5.3.3"
   }
 }

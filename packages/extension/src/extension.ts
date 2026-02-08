@@ -24,30 +24,35 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   }
 
-  // Auto-open context file logic
+  // Auto-open MISSION.md when in a shadow clone workspace
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0];
   if (workspaceRoot) {
-    const targetFile = vscode.Uri.joinPath(workspaceRoot.uri, '.cursorrules');
+    const missionFile = vscode.Uri.joinPath(workspaceRoot.uri, 'MISSION.md');
     
-    // Use a small timeout to ensure UI is ready (Race condition fix)
     setTimeout(async () => {
       try {
-        // Check if file exists
-        await vscode.workspace.fs.stat(targetFile);
+        await vscode.workspace.fs.stat(missionFile);
         
-        // Force Open and Pin
-        const doc = await vscode.workspace.openTextDocument(targetFile);
+        const doc = await vscode.workspace.openTextDocument(missionFile);
         await vscode.window.showTextDocument(doc, { 
-          preview: false, // Don't open in italic/preview mode
+          preview: false,
           preserveFocus: true 
         });
         
-        // Optional: Show a subtle message
-        vscode.window.setStatusBarMessage('👻 Shadow Clone Context Loaded', 3000);
+        const action = await vscode.window.showInformationMessage(
+          '👻 Shadow Clone ready! Copy prompt to paste in chat?',
+          'Copy Prompt'
+        );
+        if (action === 'Copy Prompt') {
+          await vscode.env.clipboard.writeText(
+            'Please read @MISSION.md and start working on the objective described in it.'
+          );
+          vscode.window.showInformationMessage('✅ Prompt copied to clipboard!');
+        }
       } catch (e) {
-        // console.log('No .cursorrules found, skipping auto-open.');
+        // No MISSION.md found, not a shadow clone workspace
       }
-    }, 500); // 500ms delay
+    }, 1000);
   }
 
 
@@ -205,7 +210,6 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('lumi-ops.open', (clone: any) => {
-
       if (clone && clone.path) {
         const uri = vscode.Uri.file(clone.path);
         vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: true });

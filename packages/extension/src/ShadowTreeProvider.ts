@@ -59,13 +59,27 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
     } else {
       try {
         const clones = await this.getShadowClones();
-        
-        // Read status for each clone
-        const itemsWithStatus = await Promise.all(
-          clones.map(async (clone) => {
+        const items: ShadowItem[] = [];
+
+        // 1. Find current workspace worktree (non-shadow) and show it first
+        const currentWorktree = clones.find(c => !c.isShadow);
+        if (currentWorktree) {
+          items.push(new ShadowItem(
+            currentWorktree.branch,
+            vscode.TreeItemCollapsibleState.None,
+            currentWorktree,
+            undefined,             // no status for current branch
+            'currentBranch'        // protected - no kill/merge menu
+          ));
+        }
+
+        // 2. Show shadow clones with status
+        const shadowClones = clones.filter(c => c.isShadow);
+        const shadowItems = await Promise.all(
+          shadowClones.map(async (clone) => {
             const statusPath = path.join(clone.path, '.lumi-status.json');
             let status: LumiStatus | undefined;
-            
+
             try {
               if (fs.existsSync(statusPath)) {
                 const content = fs.readFileSync(statusPath, 'utf-8');
@@ -74,17 +88,19 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
             } catch (e) {
               // Ignore read errors
             }
-            
+
             return new ShadowItem(
               clone.branch,
               vscode.TreeItemCollapsibleState.None,
               clone,
-              status
+              status,
+              'shadowClone'
             );
           })
         );
-        
-        return itemsWithStatus;
+
+        items.push(...shadowItems);
+        return items;
       } catch (error) {
         vscode.window.showErrorMessage(`Failed to list shadow clones: ${error}`);
         return [];
@@ -94,14 +110,14 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
 
   private async getShadowClones(): Promise<ShadowClone[]> {
     if (!this.workspaceRoot) return [];
-    
+
     const worktrees: ShadowClone[] = [];
-    
+
     try {
         const git = new GitUtils(this.workspaceRoot);
 
         const worktreesRaw = await git.listWorktrees();
-        
+
         for (const entry of worktreesRaw) {
           const lines = entry.split('\n');
           const worktreePath = lines.find((l: string) => l.startsWith('worktree'))?.split(' ')[1];
@@ -131,26 +147,37 @@ export class ShadowItem extends vscode.TreeItem {
     public readonly label: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
     public readonly clone: ShadowClone,
-    public readonly status?: LumiStatus
+    public readonly status?: LumiStatus,
+    public readonly role: 'currentBranch' | 'shadowClone' = 'shadowClone'
   ) {
     super(label, collapsibleState);
-    
+
     this.logPath = path.join(clone.path, 'agent.log');
-    this.tooltip = this.getTooltip();
-    this.description = this.getDescription();
-    this.contextValue = this.getContextValue();
-    this.iconPath = this.getIcon();
-    
-    // Only set default command if no active session
-    if (!this.status?.session) {
-      this.command = {
-        command: 'lumi-ops.open',
-        title: 'Open Clone',
-        arguments: [this.clone]
-      };
+
+    if (role === 'currentBranch') {
+      // Current branch: simple display, protected from kill/merge
+      this.tooltip = `Current workspace: ${this.clone.path}`;
+      this.description = '🏠 Current Branch';
+      this.iconPath = new vscode.ThemeIcon('home');
+      this.contextValue = 'currentBranch';
+    } else {
+      // Shadow clone: full dashboard with status
+      this.tooltip = this.getTooltip();
+      this.description = this.getDescription();
+      this.contextValue = this.getContextValue();
+      this.iconPath = this.getIcon();
+
+      // Only set default command if no active session
+      if (!this.status?.session) {
+        this.command = {
+          command: 'lumi-ops.open',
+          title: 'Open Clone',
+          arguments: [this.clone]
+        };
+      }
     }
   }
-  
+
   private getTooltip(): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.isTrusted = true;
@@ -174,26 +201,26 @@ export class ShadowItem extends vscode.TreeItem {
 
     return md;
   }
-  
+
   private getDescription(): string {
     if (this.status) {
       return `[${this.status.status.toUpperCase()}] ${this.status.message}`;
     }
-    return this.clone.isShadow ? 'Shadow Clone' : 'Main Repository';
+    return 'Shadow Clone';
   }
-  
+
   private getContextValue(): string {
     if (this.status?.session) {
       return 'activeAgent';  // Has context menu for attach
     }
-    return this.clone.isShadow ? 'shadowClone' : 'coreRepo';
+    return 'shadowClone';
   }
-  
+
   private getIcon(): vscode.ThemeIcon {
     if (!this.status) {
-      return new vscode.ThemeIcon(this.clone.isShadow ? 'git-branch' : 'repo');
+      return new vscode.ThemeIcon('git-branch');
     }
-    
+
     switch (this.status.status) {
       case 'coding':
         return new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.yellow'));
