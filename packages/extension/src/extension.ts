@@ -40,17 +40,19 @@ export async function activate(context: vscode.ExtensionContext) {
           preserveFocus: true 
         });
         
-        // Auto-open chat with mission prompt (pre-filled, user can review before sending)
-        vscode.commands.executeCommand('workbench.action.chat.open', {
-          query: 'Please read @MISSION.md and start working on the objective described in it.',
-          isPartialQuery: true
-        });
+        // Auto-open chat with mission prompt (string shorthand for broader compatibility)
+        setTimeout(() => {
+          vscode.commands.executeCommand(
+            'workbench.action.chat.open',
+            'Please read @MISSION.md and start working on the objective described in it.'
+          );
+        }, 1500);
         
         vscode.window.setStatusBarMessage('👻 Shadow Clone Context Loaded — Chat ready!', 5000);
       } catch (e) {
         // No MISSION.md found, not a shadow clone workspace
       }
-    }, 1000); // 1s delay to ensure UI is fully ready
+    }, 1000);
   }
 
 
