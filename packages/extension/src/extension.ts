@@ -4,7 +4,7 @@ import { ShadowTreeProvider } from './ShadowTreeProvider';
 import { ShadowCreatorProvider } from './ShadowCreatorProvider';
 
 
-import { spawn, kill, merge } from '@lumi-ops/cli';
+import { spawn, kill, merge, GitUtils } from '@lumi-ops/cli';
 
 
 
@@ -96,9 +96,9 @@ export async function activate(context: vscode.ExtensionContext) {
         });
       }
 
-      if (branchName && !description) {
+      if (!args && branchName && !description) {
         description = await vscode.window.showInputBox({
-          prompt: 'Enter a task description / objective for this agent',
+          prompt: 'Enter a task description / objective for this agent (leave empty to skip)',
           placeHolder: 'e.g. Refactor the login page using Zod validation'
         });
       }
@@ -118,6 +118,7 @@ export async function activate(context: vscode.ExtensionContext) {
           
           vscode.window.showInformationMessage(`Shadow clone ${branchName} created successfully.`);
           shadowTreeProvider.refresh();
+          creatorProvider.resetForm();
         } catch (error: any) {
           vscode.window.showErrorMessage(`Failed to spawn shadow clone: ${error.message}`);
         }
@@ -133,25 +134,30 @@ export async function activate(context: vscode.ExtensionContext) {
       });
 
       if (branchName) {
-        const confirm = await vscode.window.showWarningMessage(
-          `Are you sure you want to kill the shadow clone for ${branchName}? This will delete the worktree and the branch.`,
+        const choice = await vscode.window.showWarningMessage(
+          `How do you want to kill the shadow clone for "${branchName}"?`,
           { modal: true },
-          'Yes, Kill it'
+          'Remove Clone Only',
+          'Kill Clone + Branch'
         );
 
-        if (confirm === 'Yes, Kill it') {
+        if (choice === 'Kill Clone + Branch' || choice === 'Remove Clone Only') {
+          const keepBranch = choice === 'Remove Clone Only';
           try {
             await vscode.window.withProgress({
               location: vscode.ProgressLocation.Notification,
               title: `Killing shadow clone: ${branchName}`,
               cancellable: false
             }, async () => {
-              await kill(branchName, { root: rootPath! });
-
+              await kill(branchName, { root: rootPath!, keepBranch });
             });
             
-            vscode.window.showInformationMessage(`Shadow clone ${branchName} killed.`);
+            const msg = keepBranch
+              ? `Shadow clone ${branchName} removed (branch preserved).`
+              : `Shadow clone ${branchName} killed.`;
+            vscode.window.showInformationMessage(msg);
             shadowTreeProvider.refresh();
+            creatorProvider.resetForm();
           } catch (error: any) {
             vscode.window.showErrorMessage(`Failed to kill shadow clone: ${error.message}`);
           }
@@ -203,6 +209,34 @@ export async function activate(context: vscode.ExtensionContext) {
       if (clone && clone.path) {
         const uri = vscode.Uri.file(clone.path);
         vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: true });
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.getBranches', async () => {
+      if (!rootPath) return;
+      try {
+        const git = new GitUtils(rootPath);
+        const currentBranch = await git.getCurrentBranch();
+
+        // Parse worktree branches from porcelain output
+        const worktreeEntries = await git.listWorktrees();
+        const worktreeBranches = new Set(
+          worktreeEntries
+            .map(entry => {
+              const match = entry.match(/branch refs\/heads\/(.+)/);
+              return match ? match[1] : null;
+            })
+            .filter(Boolean) as string[]
+        );
+
+        const branches = (await git.listBranches()).filter(
+          b => b !== currentBranch && !worktreeBranches.has(b)
+        );
+        creatorProvider.updateBranches(branches);
+      } catch (e) {
+        // Silently ignore — branches just won't populate
       }
     })
   );

@@ -42,6 +42,13 @@ describe('kill', () => {
     expect(mockGitUtils.deleteBranch).toHaveBeenCalledWith(branchName, true);
   });
 
+  it('should NOT delete branch when keepBranch is true', async () => {
+    await kill(branchName, { root: rootDir, keepBranch: true });
+
+    expect(mockGitUtils.removeWorktree).toHaveBeenCalledWith(targetPath, true);
+    expect(mockGitUtils.deleteBranch).not.toHaveBeenCalled();
+  });
+
   it('should call removeWorktree before deleteBranch', async () => {
     const callOrder: string[] = [];
     mockGitUtils.removeWorktree.mockImplementation(async () => {

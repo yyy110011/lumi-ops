@@ -90,6 +90,38 @@ describe('e2e: spawn', () => {
     const content = await fs.readFile(gitignorePath, 'utf-8');
     expect(content).toContain('.shadow-clones');
   });
+
+  it('should attach to an existing branch instead of creating a new one', async () => {
+    // Pre-create a branch with a commit
+    await git.checkoutLocalBranch('feat/existing-branch');
+    const tempFile = path.join(tmpDir, 'existing.txt');
+    await fs.writeFile(tempFile, 'from existing branch\n');
+    await git.add('.');
+    await git.commit('feat: existing branch commit');
+    await git.checkout('main');
+
+    // Spawn should attach to the existing branch, not fail
+    await spawn('feat/existing-branch', { root: tmpDir });
+
+    const worktreePath = path.join(tmpDir, '.shadow-clones', 'feat/existing-branch');
+    expect(await fs.pathExists(worktreePath)).toBe(true);
+
+    // The file from the existing branch should be present
+    const existingFile = path.join(worktreePath, 'existing.txt');
+    expect(await fs.pathExists(existingFile)).toBe(true);
+    const content = await fs.readFile(existingFile, 'utf-8');
+    expect(content).toBe('from existing branch\n');
+  });
+
+  it('should NOT generate MISSION.md when no description is provided', async () => {
+    await spawn('feat/no-desc', { root: tmpDir });
+
+    const worktreePath = path.join(tmpDir, '.shadow-clones', 'feat/no-desc');
+    expect(await fs.pathExists(worktreePath)).toBe(true);
+
+    const missionPath = path.join(worktreePath, 'MISSION.md');
+    expect(await fs.pathExists(missionPath)).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -139,6 +171,23 @@ describe('e2e: kill', () => {
     // Branch should be deleted
     const branches = await git.branchLocal();
     expect(branches.all).not.toContain(branchName);
+  });
+
+  it('should preserve the branch when keepBranch is true', async () => {
+    const branchName = 'feat/keep-branch-test';
+    await spawn(branchName, { root: tmpDir });
+
+    const worktreePath = path.join(tmpDir, '.shadow-clones', branchName);
+    expect(await fs.pathExists(worktreePath)).toBe(true);
+
+    await kill(branchName, { root: tmpDir, keepBranch: true });
+
+    // Worktree directory should be gone
+    expect(await fs.pathExists(worktreePath)).toBe(false);
+
+    // Branch should still exist
+    const branches = await git.branchLocal();
+    expect(branches.all).toContain(branchName);
   });
 });
 

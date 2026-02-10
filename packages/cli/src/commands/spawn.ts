@@ -43,9 +43,16 @@ export async function spawn(branchName: string, options: { root: string; descrip
       // Silently ignore gitignore errors
     }
 
-    // 3. Add worktree (branch from current branch, not hardcoded 'main')
+    // 3. Add worktree — if branch exists, attach to it; otherwise create new from current branch
     const currentBranch = await git.getCurrentBranch();
-    await git.addWorktree(branchName, targetPath, currentBranch);
+    const exists = await git.branchExists(branchName);
+
+    if (exists) {
+      console.log(chalk.gray(`✓ Branch "${branchName}" exists — attaching worktree to existing branch.`));
+      await git.addWorktreeExisting(targetPath, branchName);
+    } else {
+      await git.addWorktree(branchName, targetPath, currentBranch);
+    }
 
     // 4. Copy .env from root to worktree (if exists)
     const rootEnv = path.join(rootDir, '.env');
@@ -55,15 +62,13 @@ export async function spawn(branchName: string, options: { root: string; descrip
       console.log(chalk.gray('✓ Copied .env to shadow clone.'));
     }
 
-    // 5. Create MISSION.md (AI Agent Context - tool-agnostic)
-    const contextFile = path.join(targetPath, 'MISSION.md');
-
-    const description = options.description || 'No specific objective provided.';
-    
-    const contextContent = `# 🤖 Agent Mission: ${branchName}
+    // 5. Create MISSION.md (AI Agent Context - only when description is provided)
+    if (options.description) {
+      const contextFile = path.join(targetPath, 'MISSION.md');
+      const contextContent = `# 🤖 Agent Mission: ${branchName}
 
 ## 🎯 Objective
-${description}
+${options.description}
 
 ## 📂 Environment
 - You are working in an isolated Git Worktree.
@@ -81,9 +86,9 @@ ${description}
    - Example: \`fix: resolve race condition in data fetching\`
    - Include a brief summary of all changes made.
 `;
-    await fs.writeFile(contextFile, contextContent);
-    console.log(chalk.gray('✓ Generated MISSION.md.'));
-
+      await fs.writeFile(contextFile, contextContent);
+      console.log(chalk.gray('✓ Generated MISSION.md.'));
+    }
 
     console.log(chalk.green(`\n✨ Shadow clone ready at: ${targetPath}`));
   } catch (error: any) {

@@ -7,6 +7,8 @@ const { mockGitUtils, mockFs } = vi.hoisted(() => ({
     isGitRepo: vi.fn(),
     getCurrentBranch: vi.fn(),
     addWorktree: vi.fn(),
+    addWorktreeExisting: vi.fn(),
+    branchExists: vi.fn(),
   },
   mockFs: {
     ensureDir: vi.fn(),
@@ -52,6 +54,8 @@ describe('spawn', () => {
     mockGitUtils.isGitRepo.mockResolvedValue(true);
     mockGitUtils.getCurrentBranch.mockResolvedValue('main');
     mockGitUtils.addWorktree.mockResolvedValue(undefined);
+    mockGitUtils.addWorktreeExisting.mockResolvedValue(undefined);
+    mockGitUtils.branchExists.mockResolvedValue(false);
     mockFs.ensureDir.mockResolvedValue(undefined);
     mockFs.pathExists.mockResolvedValue(false);
     mockFs.readFile.mockResolvedValue('');
@@ -101,12 +105,23 @@ describe('spawn', () => {
     expect(mockFs.appendFile).toHaveBeenCalled();
   });
 
-  it('should add worktree from current branch', async () => {
+  it('should create new worktree from current branch when branch does not exist', async () => {
     mockGitUtils.getCurrentBranch.mockResolvedValue('develop');
+    mockGitUtils.branchExists.mockResolvedValue(false);
 
     await spawn(branchName, { root: rootDir });
 
     expect(mockGitUtils.addWorktree).toHaveBeenCalledWith(branchName, targetPath, 'develop');
+    expect(mockGitUtils.addWorktreeExisting).not.toHaveBeenCalled();
+  });
+
+  it('should attach to existing branch when branch already exists', async () => {
+    mockGitUtils.branchExists.mockResolvedValue(true);
+
+    await spawn(branchName, { root: rootDir });
+
+    expect(mockGitUtils.addWorktreeExisting).toHaveBeenCalledWith(targetPath, branchName);
+    expect(mockGitUtils.addWorktree).not.toHaveBeenCalled();
   });
 
   it('should copy .env when it exists', async () => {
@@ -144,12 +159,11 @@ describe('spawn', () => {
     expect(content).toContain(targetPath);
   });
 
-  it('should use default description when none provided', async () => {
+  it('should NOT generate MISSION.md when no description provided', async () => {
     await spawn(branchName, { root: rootDir });
 
-    const writeCall = mockFs.writeFile.mock.calls[0];
-    const content = writeCall[1] as string;
-    expect(content).toContain('No specific objective provided.');
+    // writeFile should not be called at all (no MISSION.md)
+    expect(mockFs.writeFile).not.toHaveBeenCalled();
   });
 
   it('should exit with code 1 when not a git repo', async () => {

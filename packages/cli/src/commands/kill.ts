@@ -2,7 +2,7 @@ import * as path from 'path';
 import { GitUtils } from '../utils/git';
 import chalk from 'chalk';
 
-export async function kill(branchName: string, options: { root: string }) {
+export async function kill(branchName: string, options: { root: string; keepBranch?: boolean }) {
   const rootDir = path.resolve(options.root);
   const git = new GitUtils(rootDir);
   const targetPath = path.join(rootDir, '.shadow-clones', branchName);
@@ -14,9 +14,13 @@ export async function kill(branchName: string, options: { root: string }) {
     await git.removeWorktree(targetPath, true);
     console.log(chalk.gray('✓ Removed git worktree.'));
 
-    // 2. Delete branch
-    await git.deleteBranch(branchName, true);
-    console.log(chalk.gray(`✓ Deleted branch: ${branchName}`));
+    // 2. Delete branch (unless keepBranch is set)
+    if (!options.keepBranch) {
+      await git.deleteBranch(branchName, true);
+      console.log(chalk.gray(`✓ Deleted branch: ${branchName}`));
+    } else {
+      console.log(chalk.gray(`✓ Branch "${branchName}" preserved.`));
+    }
 
     console.log(chalk.green(`\n✅ Shadow clone ${branchName} successfully killed.`));
   } catch (error: any) {

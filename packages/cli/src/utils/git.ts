@@ -22,9 +22,24 @@ export class GitUtils {
     return rev.trim();
   }
 
+  async listBranches(): Promise<string[]> {
+    const output = await this.git.raw(['branch', '--list', '--format=%(refname:short)']);
+    return output.split('\n').map(b => b.trim()).filter(Boolean);
+  }
+
+  async branchExists(branchName: string): Promise<boolean> {
+    const branches = await this.listBranches();
+    return branches.includes(branchName);
+  }
+
   async addWorktree(branchName: string, targetPath: string, baseBranch: string = 'main'): Promise<void> {
     // git worktree add -b <branchName> <targetPath> <baseBranch>
     await this.git.raw(['worktree', 'add', '-b', branchName, targetPath, baseBranch]);
+  }
+
+  async addWorktreeExisting(targetPath: string, branchName: string): Promise<void> {
+    // git worktree add <targetPath> <branchName>
+    await this.git.raw(['worktree', 'add', targetPath, branchName]);
   }
 
   async removeWorktree(targetPath: string, force: boolean = false): Promise<void> {

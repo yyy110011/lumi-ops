@@ -69,6 +69,45 @@ describe('GitUtils', () => {
     });
   });
 
+  describe('addWorktreeExisting', () => {
+    it('should add worktree for an existing branch without -b', async () => {
+      mockGit.raw.mockResolvedValue('');
+      await gitUtils.addWorktreeExisting('/target/path', 'feat/existing');
+      expect(mockGit.raw).toHaveBeenCalledWith([
+        'worktree', 'add', '/target/path', 'feat/existing',
+      ]);
+    });
+  });
+
+  describe('listBranches', () => {
+    it('should return trimmed branch names', async () => {
+      mockGit.raw.mockResolvedValue('main\nfeat/a\nfeat/b\n');
+      const branches = await gitUtils.listBranches();
+      expect(branches).toEqual(['main', 'feat/a', 'feat/b']);
+      expect(mockGit.raw).toHaveBeenCalledWith([
+        'branch', '--list', '--format=%(refname:short)',
+      ]);
+    });
+
+    it('should filter empty strings', async () => {
+      mockGit.raw.mockResolvedValue('main\n\n\n');
+      const branches = await gitUtils.listBranches();
+      expect(branches).toEqual(['main']);
+    });
+  });
+
+  describe('branchExists', () => {
+    it('should return true when branch is in the list', async () => {
+      mockGit.raw.mockResolvedValue('main\nfeat/existing\n');
+      expect(await gitUtils.branchExists('feat/existing')).toBe(true);
+    });
+
+    it('should return false when branch is not in the list', async () => {
+      mockGit.raw.mockResolvedValue('main\nfeat/other\n');
+      expect(await gitUtils.branchExists('feat/new')).toBe(false);
+    });
+  });
+
   describe('removeWorktree', () => {
     it('should remove worktree without force', async () => {
       mockGit.raw.mockResolvedValue('');
