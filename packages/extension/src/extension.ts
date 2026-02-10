@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { ShadowTreeProvider } from './ShadowTreeProvider';
 import { ShadowCreatorProvider } from './ShadowCreatorProvider';
+import { PromptLibraryProvider, PromptItem } from './PromptLibraryProvider';
 
 
 import { spawn, kill, merge, GitUtils } from '@lumi-ops/cli';
@@ -69,6 +70,9 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('lumi-ops.creator', creatorProvider)
   );
+
+  const promptLibraryProvider = new PromptLibraryProvider(context.globalStorageUri);
+  vscode.window.registerTreeDataProvider('lumi-ops.promptLibrary', promptLibraryProvider);
 
   // -- Polling for live updates --
   const pollInterval = setInterval(() => {
@@ -289,6 +293,89 @@ export async function activate(context: vscode.ExtensionContext) {
         creatorProvider.updateBranches(branches);
       } catch (e) {
         // Silently ignore — branches just won't populate
+      }
+    })
+  );
+
+  // -- Prompt Library Commands --
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.importPrompt', async () => {
+      const files = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        filters: { 'Markdown': ['md'] },
+        openLabel: 'Import Prompt'
+      });
+      if (files && files.length > 0) {
+        await promptLibraryProvider.importPrompt(files[0]);
+        vscode.window.showInformationMessage('Prompt imported successfully.');
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.newPrompt', async () => {
+      const name = await vscode.window.showInputBox({
+        prompt: 'Enter a name for the new prompt template',
+        placeHolder: 'e.g. refactor-component'
+      });
+      if (name) {
+        const fileName = name.endsWith('.md') ? name : `${name}.md`;
+        await promptLibraryProvider.savePrompt(fileName, '');
+        const fileUri = promptLibraryProvider.getPromptFileUri(fileName);
+        const doc = await vscode.workspace.openTextDocument(fileUri);
+        await vscode.window.showTextDocument(doc);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.usePrompt', async (item: PromptItem) => {
+      if (!item) return;
+      try {
+        const content = await promptLibraryProvider.getPromptContent(item.fileName);
+        creatorProvider.loadPrompt(item.label, content);
+      } catch (error: any) {
+        vscode.window.showErrorMessage(`Failed to load prompt: ${error.message}`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.editPrompt', async (item: PromptItem) => {
+      if (!item) return;
+      const fileUri = promptLibraryProvider.getPromptFileUri(item.fileName);
+      const doc = await vscode.workspace.openTextDocument(fileUri);
+      await vscode.window.showTextDocument(doc);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.deletePrompt', async (item: PromptItem) => {
+      if (!item) return;
+      const confirm = await vscode.window.showWarningMessage(
+        `Delete prompt "${item.label}"?`,
+        { modal: true },
+        'Delete'
+      );
+      if (confirm === 'Delete') {
+        await promptLibraryProvider.deletePrompt(item.fileName);
+        vscode.window.showInformationMessage(`Prompt "${item.label}" deleted.`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.saveAsPrompt', async (content?: string) => {
+      if (!content) return;
+      const name = await vscode.window.showInputBox({
+        prompt: 'Enter a name for this prompt template',
+        placeHolder: 'e.g. my-agent-prompt'
+      });
+      if (name) {
+        const fileName = name.endsWith('.md') ? name : `${name}.md`;
+        await promptLibraryProvider.savePrompt(fileName, content);
+        vscode.window.showInformationMessage(`Prompt "${name}" saved to library.`);
       }
     })
   );

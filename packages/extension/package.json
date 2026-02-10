@@ -36,6 +36,10 @@
           "name": "Active Clones"
         },
         {
+          "id": "lumi-ops.promptLibrary",
+          "name": "Prompt Library"
+        },
+        {
           "id": "lumi-ops.creator",
           "name": "Create Shadow Clone",
           "type": "webview"
@@ -65,6 +69,35 @@
       {
         "command": "lumi-ops.open",
         "title": "Lumi-Ops: Open Clone"
+      },
+      {
+        "command": "lumi-ops.importPrompt",
+        "title": "Import Prompt",
+        "icon": "$(add)"
+      },
+      {
+        "command": "lumi-ops.newPrompt",
+        "title": "New Prompt",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "lumi-ops.usePrompt",
+        "title": "Use Prompt",
+        "icon": "$(play)"
+      },
+      {
+        "command": "lumi-ops.editPrompt",
+        "title": "Edit Prompt",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "lumi-ops.deletePrompt",
+        "title": "Delete Prompt",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "lumi-ops.saveAsPrompt",
+        "title": "Save as Prompt Template"
       }
     ],
     "menus": {
@@ -77,6 +110,16 @@
         {
           "command": "lumi-ops.spawn",
           "when": "view == lumi-ops.activeClones",
+          "group": "navigation"
+        },
+        {
+          "command": "lumi-ops.importPrompt",
+          "when": "view == lumi-ops.promptLibrary",
+          "group": "navigation"
+        },
+        {
+          "command": "lumi-ops.newPrompt",
+          "when": "view == lumi-ops.promptLibrary",
           "group": "navigation"
         }
       ],
@@ -95,6 +138,21 @@
           "command": "lumi-ops.kill",
           "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "modification@2"
+        },
+        {
+          "command": "lumi-ops.usePrompt",
+          "when": "view == lumi-ops.promptLibrary && viewItem == promptItem",
+          "group": "inline"
+        },
+        {
+          "command": "lumi-ops.editPrompt",
+          "when": "view == lumi-ops.promptLibrary && viewItem == promptItem",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "lumi-ops.deletePrompt",
+          "when": "view == lumi-ops.promptLibrary && viewItem == promptItem",
+          "group": "1_actions@2"
         }
       ]
     }

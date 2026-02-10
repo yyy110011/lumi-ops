@@ -32,6 +32,9 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         case 'getBranches':
           vscode.commands.executeCommand('lumi-ops.getBranches');
           break;
+        case 'saveAsPrompt':
+          vscode.commands.executeCommand('lumi-ops.saveAsPrompt', data.content);
+          break;
       }
     });
   }
@@ -45,6 +48,13 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
   public resetForm() {
     if (this._view) {
       this._view.webview.postMessage({ command: 'resetForm' });
+    }
+  }
+
+  public loadPrompt(name: string, content: string) {
+    if (this._view) {
+      this._view.show?.(true);
+      this._view.webview.postMessage({ command: 'loadPrompt', name, content });
     }
   }
 
@@ -193,7 +203,9 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
       
       <div class="form-group">
         <label for="description">Task Description</label>
+        <div id="promptSource" style="display:none; font-size:11px; color:var(--vscode-descriptionForeground); margin-bottom:4px;">📎 Loaded from: <span id="promptSourceName"></span></div>
         <textarea id="description" rows="5" placeholder="Describe the objective for the AI Agent..."></textarea>
+        <button id="saveAsTemplateBtn" type="button" style="margin-top:6px; padding:4px 8px; font-size:11px; background:var(--vscode-button-secondaryBackground, var(--vscode-button-background)); color:var(--vscode-button-secondaryForeground, var(--vscode-button-foreground)); border:1px solid var(--vscode-input-border); border-radius:2px; cursor:pointer;">💾 Save as Template</button>
       </div>
 
       <button id="spawnBtn">Create Clone Only</button>
@@ -219,8 +231,14 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
             branchInput.value = '';
             descriptionEl.value = '';
             spawnBtn.textContent = 'Create Clone Only';
+            document.getElementById('promptSource').style.display = 'none';
             // Re-fetch branches after spawn/kill
             vscode.postMessage({ command: 'getBranches' });
+          } else if (msg.command === 'loadPrompt') {
+            descriptionEl.value = msg.content;
+            spawnBtn.textContent = 'Spawn Agent';
+            document.getElementById('promptSourceName').textContent = msg.name;
+            document.getElementById('promptSource').style.display = 'block';
           }
         });
 
@@ -296,6 +314,13 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         // Dynamic button text based on description
         descriptionEl.addEventListener('input', () => {
           spawnBtn.textContent = descriptionEl.value.trim() ? 'Spawn Agent' : 'Create Clone Only';
+        });
+
+        document.getElementById('saveAsTemplateBtn').addEventListener('click', () => {
+          const content = descriptionEl.value.trim();
+          if (content) {
+            vscode.postMessage({ command: 'saveAsPrompt', content });
+          }
         });
 
         spawnBtn.addEventListener('click', () => {
