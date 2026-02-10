@@ -1,14 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as path from 'path';
 
-// --- Mocks ---
-const mockGitUtils = {
-  removeWorktree: vi.fn(),
-  deleteBranch: vi.fn(),
-};
+// --- Mocks (vi.hoisted ensures these are available when vi.mock factories run) ---
+const { mockGitUtils, mockFs } = vi.hoisted(() => ({
+  mockGitUtils: {
+    removeWorktree: vi.fn(),
+    deleteBranch: vi.fn(),
+  },
+  mockFs: {
+    readJSON: vi.fn(),
+    writeJSON: vi.fn(),
+  },
+}));
 
 vi.mock('../utils/git', () => ({
   GitUtils: vi.fn(() => mockGitUtils),
+}));
+
+vi.mock('fs-extra', () => ({
+  default: mockFs,
+  ...mockFs,
 }));
 
 vi.mock('chalk', () => ({
@@ -28,11 +39,14 @@ describe('kill', () => {
   const branchName = 'feat/old-feature';
   const rootDir = '/fake/root';
   const targetPath = path.join(rootDir, '.shadow-clones', branchName);
+  const metadataPath = path.join(rootDir, '.shadow-clones', '.lumi-metadata.json');
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockGitUtils.removeWorktree.mockResolvedValue(undefined);
     mockGitUtils.deleteBranch.mockResolvedValue(undefined);
+    mockFs.readJSON.mockRejectedValue(new Error('ENOENT'));
+    mockFs.writeJSON.mockResolvedValue(undefined);
   });
 
   it('should remove worktree with force and delete branch with force', async () => {
@@ -61,6 +75,30 @@ describe('kill', () => {
     await kill(branchName, { root: rootDir });
 
     expect(callOrder).toEqual(['removeWorktree', 'deleteBranch']);
+  });
+
+  it('should remove branch entry from centralized metadata', async () => {
+    mockFs.readJSON.mockResolvedValue({
+      'feat/old-feature': { baseBranch: 'main' },
+      'feat/other': { baseBranch: 'develop' },
+    });
+
+    await kill(branchName, { root: rootDir });
+
+    expect(mockFs.writeJSON).toHaveBeenCalledWith(
+      metadataPath,
+      { 'feat/other': { baseBranch: 'develop' } },
+      { spaces: 2 },
+    );
+  });
+
+  it('should not fail when metadata file does not exist', async () => {
+    mockFs.readJSON.mockRejectedValue(new Error('ENOENT'));
+
+    await kill(branchName, { root: rootDir });
+
+    expect(mockFs.writeJSON).not.toHaveBeenCalled();
+    expect(mockExit).not.toHaveBeenCalled();
   });
 
   it('should exit with code 1 when removeWorktree fails', async () => {

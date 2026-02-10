@@ -6,6 +6,7 @@ export interface ShadowClone {
   branch: string;
   path: string;
   isShadow: boolean;
+  baseBranch?: string;
 }
 
 export async function list(options: { root: string; json?: boolean }) {

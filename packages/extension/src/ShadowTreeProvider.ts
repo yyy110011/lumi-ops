@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { list, ShadowClone, GitUtils } from '@lumi-ops/cli';
 
 
@@ -67,6 +68,16 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
     try {
         const git = new GitUtils(this.workspaceRoot);
 
+        // Load centralized metadata once
+        const metadataPath = path.join(this.workspaceRoot, '.shadow-clones', '.lumi-metadata.json');
+        let metadata: Record<string, { baseBranch: string }> = {};
+        try {
+          const raw = fs.readFileSync(metadataPath, 'utf-8');
+          metadata = JSON.parse(raw);
+        } catch {
+          // No metadata file yet
+        }
+
         const worktreesRaw = await git.listWorktrees();
         
         for (const entry of worktreesRaw) {
@@ -75,11 +86,19 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
           const branch = lines.find((l: string) => l.startsWith('branch'))?.split(' ').pop();
 
           if (worktreePath && branch) {
+            const branchName = branch.replace('refs/heads/', '');
             const isShadow = worktreePath.includes('.shadow-clones');
+            let baseBranch: string | undefined;
+            
+            if (isShadow) {
+              // Look up from centralized metadata
+              baseBranch = metadata[branchName]?.baseBranch;
+            }
             worktrees.push({
-              branch: branch.replace('refs/heads/', ''),
+              branch: branchName,
               path: worktreePath,
-              isShadow
+              isShadow,
+              baseBranch
             });
           }
         }
@@ -107,7 +126,7 @@ class ShadowItem extends vscode.TreeItem {
       this.iconPath = new vscode.ThemeIcon('home');
     } else {
       this.tooltip = `${this.clone.path}`;
-      this.description = 'Shadow Clone';
+      this.description = this.clone.baseBranch ? `← ${this.clone.baseBranch}` : 'Shadow Clone';
       this.iconPath = new vscode.ThemeIcon('git-branch');
       this.command = {
         command: 'lumi-ops.open',

@@ -14,9 +14,11 @@ const { mockGitUtils, mockFs } = vi.hoisted(() => ({
     ensureDir: vi.fn(),
     pathExists: vi.fn(),
     readFile: vi.fn(),
+    readJSON: vi.fn(),
     appendFile: vi.fn(),
     copy: vi.fn(),
     writeFile: vi.fn(),
+    writeJSON: vi.fn(),
   },
 }));
 
@@ -62,6 +64,8 @@ describe('spawn', () => {
     mockFs.appendFile.mockResolvedValue(undefined);
     mockFs.copy.mockResolvedValue(undefined);
     mockFs.writeFile.mockResolvedValue(undefined);
+    mockFs.writeJSON.mockResolvedValue(undefined);
+    mockFs.readJSON.mockRejectedValue(new Error('ENOENT'));
   });
 
   it('should create shadow clone directory', async () => {
@@ -113,6 +117,41 @@ describe('spawn', () => {
 
     expect(mockGitUtils.addWorktree).toHaveBeenCalledWith(branchName, targetPath, 'develop');
     expect(mockGitUtils.addWorktreeExisting).not.toHaveBeenCalled();
+  });
+
+  it('should use explicit baseBranch when provided', async () => {
+    mockGitUtils.getCurrentBranch.mockResolvedValue('main');
+    mockGitUtils.branchExists.mockResolvedValue(false);
+
+    await spawn(branchName, { root: rootDir, baseBranch: 'staging' });
+
+    expect(mockGitUtils.addWorktree).toHaveBeenCalledWith(branchName, targetPath, 'staging');
+  });
+
+  it('should write .lumi-metadata.json with baseBranch', async () => {
+    mockGitUtils.getCurrentBranch.mockResolvedValue('main');
+    mockGitUtils.branchExists.mockResolvedValue(false);
+
+    await spawn(branchName, { root: rootDir, baseBranch: 'develop' });
+
+    expect(mockFs.writeJSON).toHaveBeenCalledWith(
+      path.join(shadowDir, '.lumi-metadata.json'),
+      { [branchName]: { baseBranch: 'develop' } },
+      { spaces: 2 },
+    );
+  });
+
+  it('should write .lumi-metadata.json with current branch when no baseBranch provided', async () => {
+    mockGitUtils.getCurrentBranch.mockResolvedValue('main');
+    mockGitUtils.branchExists.mockResolvedValue(false);
+
+    await spawn(branchName, { root: rootDir });
+
+    expect(mockFs.writeJSON).toHaveBeenCalledWith(
+      path.join(shadowDir, '.lumi-metadata.json'),
+      { [branchName]: { baseBranch: 'main' } },
+      { spaces: 2 },
+    );
   });
 
   it('should attach to existing branch when branch already exists', async () => {

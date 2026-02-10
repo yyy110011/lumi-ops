@@ -70,18 +70,25 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider('lumi-ops.creator', creatorProvider)
   );
 
-  // -- Polling for live updates --
-  const pollInterval = setInterval(() => {
+  // -- Polling for live updates + branch change detection --
+  let lastKnownBranch: string | undefined;
+  const pollInterval = setInterval(async () => {
     shadowTreeProvider.refresh();
-  }, 5000);
 
-  // -- Instant refresh on branch switch (watch .git/HEAD) --
-  if (rootPath) {
-    const gitHeadPattern = new vscode.RelativePattern(rootPath, '.git/HEAD');
-    const gitHeadWatcher = vscode.workspace.createFileSystemWatcher(gitHeadPattern);
-    gitHeadWatcher.onDidChange(() => shadowTreeProvider.refresh());
-    context.subscriptions.push(gitHeadWatcher);
-  }
+    // Detect branch changes and refresh dropdown data
+    if (rootPath) {
+      try {
+        const git = new GitUtils(rootPath);
+        const current = await git.getCurrentBranch();
+        if (lastKnownBranch !== undefined && current !== lastKnownBranch) {
+          vscode.commands.executeCommand('lumi-ops.getBranches');
+        }
+        lastKnownBranch = current;
+      } catch {
+        // ignore git errors
+      }
+    }
+  }, 5000);
 
   // Clean up on deactivate
   context.subscriptions.push({
@@ -97,7 +104,7 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('lumi-ops.spawn', async (args?: { branch: string, description: string }) => {
+    vscode.commands.registerCommand('lumi-ops.spawn', async (args?: { branch: string, description: string, baseBranch?: string }) => {
       if (!rootPath) {
         vscode.window.showErrorMessage('No workspace folder open.');
         return;
@@ -105,6 +112,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
       let branchName = args?.branch;
       let description = args?.description;
+      let baseBranch = args?.baseBranch;
 
       if (!branchName) {
         branchName = await vscode.window.showInputBox({
@@ -128,8 +136,9 @@ export async function activate(context: vscode.ExtensionContext) {
             title: `Spawning shadow clone: ${branchName}`,
             cancellable: false
           }, async () => {
-            // If branch doesn't exist locally, try checking it out from remote
             const git = new GitUtils(rootPath);
+
+            // If the target branch doesn't exist locally, try checking it out from remote
             const localExists = await git.branchExists(branchName);
             if (!localExists) {
               const remoteBranches = await git.listRemoteBranches();
@@ -139,11 +148,34 @@ export async function activate(context: vscode.ExtensionContext) {
                 return shortName === branchName;
               });
               if (matchingRemote) {
-                // Checkout creates a local tracking branch from the remote
                 await git.checkoutBranch(branchName);
               }
             }
-            await spawn(branchName, { root: rootPath, description });
+
+            // If baseBranch is a remote-only branch, ensure it exists locally first
+            if (baseBranch) {
+              const baseExists = await git.branchExists(baseBranch);
+              if (!baseExists) {
+                const remoteBranches = await git.listRemoteBranches();
+                const matchingRemote = remoteBranches.find(rb => {
+                  const slashIdx = rb.indexOf('/');
+                  const shortName = slashIdx >= 0 ? rb.substring(slashIdx + 1) : rb;
+                  return shortName === baseBranch;
+                });
+                if (matchingRemote) {
+                  await git.checkoutBranch(baseBranch);
+                  // Switch back so we don't stay on the base branch
+                  const currentBranch = await git.getCurrentBranch();
+                  if (currentBranch === baseBranch) {
+                    const allBranches = await git.listBranches();
+                    const returnTo = allBranches.find(b => b !== baseBranch) || 'main';
+                    await git.checkoutBranch(returnTo);
+                  }
+                }
+              }
+            }
+
+            await spawn(branchName, { root: rootPath, description, baseBranch });
 
           });
 
@@ -252,41 +284,28 @@ export async function activate(context: vscode.ExtensionContext) {
         const git = new GitUtils(rootPath);
         const currentBranch = await git.getCurrentBranch();
 
-        // Parse worktree branches from porcelain output
-        const worktreeEntries = await git.listWorktrees();
-        const worktreeBranches = new Set(
-          worktreeEntries
-            .map(entry => {
-              const match = entry.match(/branch refs\/heads\/(.+)/);
-              return match ? match[1] : null;
-            })
-            .filter(Boolean) as string[]
-        );
-
-        // Get local branches (exclude current and worktree branches)
-        const localBranches = (await git.listBranches()).filter(
-          b => b !== currentBranch && !worktreeBranches.has(b)
-        );
-        const localSet = new Set(localBranches);
+        // ALL local branches (excluding current — it's added separately in the webview)
+        const allLocal = await git.listBranches();
+        const localBranches = allLocal.filter(b => b !== currentBranch);
+        const localSet = new Set(allLocal);
 
         // Fetch remote refs (non-fatal if offline)
         try { await git.fetchRemote(); } catch (_) { /* offline — skip */ }
 
-        // Get remote branches, strip remote prefix, exclude those already local/worktree/current
+        // Remote branches not already local
         const remoteBranches = (await git.listRemoteBranches())
           .map(b => {
             const slashIdx = b.indexOf('/');
             return slashIdx >= 0 ? b.substring(slashIdx + 1) : b;
           })
-          .filter(b => b !== currentBranch && !localSet.has(b) && !worktreeBranches.has(b));
-        // Deduplicate (multiple remotes may track same branch)
+          .filter(b => !localSet.has(b));
         const uniqueRemote = [...new Set(remoteBranches)];
 
         const branches = [
           ...localBranches.map(name => ({ name, isRemote: false })),
           ...uniqueRemote.map(name => ({ name, isRemote: true })),
         ];
-        creatorProvider.updateBranches(branches);
+        creatorProvider.updateBranches(branches, currentBranch);
       } catch (e) {
         // Silently ignore — branches just won't populate
       }

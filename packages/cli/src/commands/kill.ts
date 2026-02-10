@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as fs from 'fs-extra';
 import { GitUtils } from '../utils/git';
 import chalk from 'chalk';
 
@@ -20,6 +21,19 @@ export async function kill(branchName: string, options: { root: string; keepBran
       console.log(chalk.gray(`✓ Deleted branch: ${branchName}`));
     } else {
       console.log(chalk.gray(`✓ Branch "${branchName}" preserved.`));
+    }
+
+    // 3. Remove entry from centralized metadata
+    const metadataPath = path.join(rootDir, '.shadow-clones', '.lumi-metadata.json');
+    try {
+      const metadata = await fs.readJSON(metadataPath);
+      if (metadata[branchName]) {
+        delete metadata[branchName];
+        await fs.writeJSON(metadataPath, metadata, { spaces: 2 });
+        console.log(chalk.gray('✓ Cleaned up metadata.'));
+      }
+    } catch {
+      // No metadata file — nothing to clean
     }
 
     console.log(chalk.green(`\n✅ Shadow clone ${branchName} successfully killed.`));

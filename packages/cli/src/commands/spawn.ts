@@ -3,7 +3,7 @@ import * as fs from 'fs-extra';
 import { GitUtils } from '../utils/git';
 import chalk from 'chalk';
 
-export async function spawn(branchName: string, options: { root: string; description?: string }) {
+export async function spawn(branchName: string, options: { root: string; description?: string; baseBranch?: string }) {
   const rootDir = path.resolve(options.root);
   const git = new GitUtils(rootDir);
   const shadowDir = path.join(rootDir, '.shadow-clones');
@@ -43,16 +43,25 @@ export async function spawn(branchName: string, options: { root: string; descrip
       // Silently ignore gitignore errors
     }
 
-    // 3. Add worktree — if branch exists, attach to it; otherwise create new from current branch
+    // 3. Add worktree — if branch exists, attach to it; otherwise create new from base branch
     const currentBranch = await git.getCurrentBranch();
+    const resolvedBase = options.baseBranch || currentBranch;
     const exists = await git.branchExists(branchName);
 
     if (exists) {
       console.log(chalk.gray(`✓ Branch "${branchName}" exists — attaching worktree to existing branch.`));
       await git.addWorktreeExisting(targetPath, branchName);
     } else {
-      await git.addWorktree(branchName, targetPath, currentBranch);
+      await git.addWorktree(branchName, targetPath, resolvedBase);
     }
+
+    // 3b. Persist base branch metadata (centralized)
+    const metadataPath = path.join(shadowDir, '.lumi-metadata.json');
+    let metadata: Record<string, { baseBranch: string }> = {};
+    try { metadata = await fs.readJSON(metadataPath); } catch {}
+    metadata[branchName] = { baseBranch: resolvedBase };
+    await fs.writeJSON(metadataPath, metadata, { spaces: 2 });
+    console.log(chalk.gray(`✓ Recorded base branch: ${resolvedBase}`));
 
     // 4. Copy .env from root to worktree (if exists)
     const rootEnv = path.join(rootDir, '.env');
