@@ -66,4 +66,22 @@ export class GitUtils {
     await this.git.commit(message);
   }
 
+  async listRemoteBranches(): Promise<string[]> {
+    const output = await this.git.raw(['branch', '-r', '--format=%(refname:short)']);
+    return output
+      .split('\n')
+      .map(b => b.trim())
+      .filter(b => b && !b.endsWith('/HEAD'));
+  }
+
+  async fetchRemote(remote?: string): Promise<void> {
+    const args = ['fetch'];
+    if (remote) args.push(remote);
+    await this.git.raw(args);
+  }
+
+  async checkoutBranch(branchName: string): Promise<void> {
+    await this.git.raw(['checkout', branchName]);
+  }
+
 }

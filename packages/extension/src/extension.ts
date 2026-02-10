@@ -128,6 +128,21 @@ export async function activate(context: vscode.ExtensionContext) {
             title: `Spawning shadow clone: ${branchName}`,
             cancellable: false
           }, async () => {
+            // If branch doesn't exist locally, try checking it out from remote
+            const git = new GitUtils(rootPath);
+            const localExists = await git.branchExists(branchName);
+            if (!localExists) {
+              const remoteBranches = await git.listRemoteBranches();
+              const matchingRemote = remoteBranches.find(rb => {
+                const slashIdx = rb.indexOf('/');
+                const shortName = slashIdx >= 0 ? rb.substring(slashIdx + 1) : rb;
+                return shortName === branchName;
+              });
+              if (matchingRemote) {
+                // Checkout creates a local tracking branch from the remote
+                await git.checkoutBranch(branchName);
+              }
+            }
             await spawn(branchName, { root: rootPath, description });
 
           });
@@ -248,9 +263,29 @@ export async function activate(context: vscode.ExtensionContext) {
             .filter(Boolean) as string[]
         );
 
-        const branches = (await git.listBranches()).filter(
+        // Get local branches (exclude current and worktree branches)
+        const localBranches = (await git.listBranches()).filter(
           b => b !== currentBranch && !worktreeBranches.has(b)
         );
+        const localSet = new Set(localBranches);
+
+        // Fetch remote refs (non-fatal if offline)
+        try { await git.fetchRemote(); } catch (_) { /* offline — skip */ }
+
+        // Get remote branches, strip remote prefix, exclude those already local/worktree/current
+        const remoteBranches = (await git.listRemoteBranches())
+          .map(b => {
+            const slashIdx = b.indexOf('/');
+            return slashIdx >= 0 ? b.substring(slashIdx + 1) : b;
+          })
+          .filter(b => b !== currentBranch && !localSet.has(b) && !worktreeBranches.has(b));
+        // Deduplicate (multiple remotes may track same branch)
+        const uniqueRemote = [...new Set(remoteBranches)];
+
+        const branches = [
+          ...localBranches.map(name => ({ name, isRemote: false })),
+          ...uniqueRemote.map(name => ({ name, isRemote: true })),
+        ];
         creatorProvider.updateBranches(branches);
       } catch (e) {
         // Silently ignore — branches just won't populate

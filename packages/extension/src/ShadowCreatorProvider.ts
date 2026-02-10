@@ -36,7 +36,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  public updateBranches(branches: string[]) {
+  public updateBranches(branches: { name: string; isRemote: boolean }[]) {
     if (this._view) {
       this._view.webview.postMessage({ command: 'setBranches', branches });
     }
@@ -139,6 +139,22 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         .branch-dropdown-item:hover {
           background: var(--vscode-list-hoverBackground);
         }
+        .branch-dropdown-item.remote {
+          color: var(--vscode-descriptionForeground);
+        }
+        .branch-dropdown-item.remote .remote-icon {
+          margin-right: 4px;
+          font-size: 10px;
+        }
+        .branch-dropdown-separator {
+          border-top: 1px solid var(--vscode-input-border);
+          margin: 4px 0;
+          padding: 2px 10px 0;
+          font-size: 10px;
+          color: var(--vscode-descriptionForeground);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
         .branch-dropdown-empty {
           padding: 8px 10px;
           font-size: 12px;
@@ -211,21 +227,41 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         function showDropdown() {
           dropdown.innerHTML = '';
           const filter = branchInput.value.toLowerCase();
-          const filtered = branches.filter(b => b.toLowerCase().includes(filter));
+          const localFiltered = branches.filter(b => !b.isRemote && b.name.toLowerCase().includes(filter));
+          const remoteFiltered = branches.filter(b => b.isRemote && b.name.toLowerCase().includes(filter));
 
-          if (filtered.length === 0) {
+          if (localFiltered.length === 0 && remoteFiltered.length === 0) {
             dropdown.innerHTML = '<div class="branch-dropdown-empty">No matching branches</div>';
           } else {
-            filtered.forEach(b => {
+            localFiltered.forEach(b => {
               const item = document.createElement('div');
               item.className = 'branch-dropdown-item';
-              item.textContent = b;
+              item.textContent = b.name;
               item.addEventListener('click', () => {
-                branchInput.value = b;
+                branchInput.value = b.name;
                 hideDropdown();
               });
               dropdown.appendChild(item);
             });
+
+            if (remoteFiltered.length > 0) {
+              if (localFiltered.length > 0) {
+                const sep = document.createElement('div');
+                sep.className = 'branch-dropdown-separator';
+                sep.textContent = 'Remote';
+                dropdown.appendChild(sep);
+              }
+              remoteFiltered.forEach(b => {
+                const item = document.createElement('div');
+                item.className = 'branch-dropdown-item remote';
+                item.innerHTML = '<span class="remote-icon">☁</span>' + b.name;
+                item.addEventListener('click', () => {
+                  branchInput.value = b.name;
+                  hideDropdown();
+                });
+                dropdown.appendChild(item);
+              });
+            }
           }
           dropdown.classList.add('show');
           overlay.classList.add('show');
