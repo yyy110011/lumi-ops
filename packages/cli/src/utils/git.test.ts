@@ -173,4 +173,122 @@ describe('GitUtils', () => {
       expect(mockGit.commit).toHaveBeenCalledWith('feat: test commit');
     });
   });
+
+  describe('listRemoteBranches', () => {
+    it('should return trimmed remote branch names', async () => {
+      mockGit.raw.mockResolvedValue('origin/main\norigin/feat/remote-a\norigin/feat/remote-b\n');
+      const branches = await gitUtils.listRemoteBranches();
+      expect(branches).toEqual(['origin/main', 'origin/feat/remote-a', 'origin/feat/remote-b']);
+      expect(mockGit.raw).toHaveBeenCalledWith(['branch', '-r', '--format=%(refname:short)']);
+    });
+
+    it('should filter out HEAD pointers', async () => {
+      mockGit.raw.mockResolvedValue('origin/HEAD\norigin/main\norigin/feat/a\n');
+      const branches = await gitUtils.listRemoteBranches();
+      expect(branches).toEqual(['origin/main', 'origin/feat/a']);
+    });
+
+    it('should filter empty strings', async () => {
+      mockGit.raw.mockResolvedValue('origin/main\n\n\n');
+      const branches = await gitUtils.listRemoteBranches();
+      expect(branches).toEqual(['origin/main']);
+    });
+  });
+
+  describe('fetchRemote', () => {
+    it('should call git fetch without remote name', async () => {
+      mockGit.raw.mockResolvedValue('');
+      await gitUtils.fetchRemote();
+      expect(mockGit.raw).toHaveBeenCalledWith(['fetch']);
+    });
+
+    it('should call git fetch with specific remote name', async () => {
+      mockGit.raw.mockResolvedValue('');
+      await gitUtils.fetchRemote('upstream');
+      expect(mockGit.raw).toHaveBeenCalledWith(['fetch', 'upstream']);
+    });
+  });
+
+  describe('checkoutBranch', () => {
+    it('should call git checkout with branch name', async () => {
+      mockGit.raw.mockResolvedValue('');
+      await gitUtils.checkoutBranch('feat/my-branch');
+      expect(mockGit.raw).toHaveBeenCalledWith(['checkout', 'feat/my-branch']);
+    });
+  });
+
+  describe('branch list merging (local + remote without duplicates)', () => {
+    it('should produce local branches first, then remote-only branches, with no duplicates', async () => {
+      // Simulate: local has [main, feat/local-only, feat/both]
+      // Remote has [origin/main, origin/feat/both, origin/feat/remote-only]
+      // Current branch is 'main', worktree branches = []
+      // Expected result: local = [feat/local-only, feat/both], remote-only = [feat/remote-only]
+
+      const currentBranch = 'main';
+      const worktreeBranches = new Set<string>();
+
+      // Setup local branches
+      mockGit.raw.mockResolvedValueOnce('main\nfeat/local-only\nfeat/both\n');
+      const localBranches = (await gitUtils.listBranches()).filter(
+        b => b !== currentBranch && !worktreeBranches.has(b)
+      );
+      const localSet = new Set(localBranches);
+
+      // Setup remote branches
+      mockGit.raw.mockResolvedValueOnce('origin/main\norigin/feat/both\norigin/feat/remote-only\norigin/HEAD\n');
+      const remoteBranchesRaw = await gitUtils.listRemoteBranches();
+      const remoteBranches = remoteBranchesRaw
+        .map(b => {
+          const slashIdx = b.indexOf('/');
+          return slashIdx >= 0 ? b.substring(slashIdx + 1) : b;
+        })
+        .filter(b => b !== currentBranch && !localSet.has(b) && !worktreeBranches.has(b));
+      const uniqueRemote = [...new Set(remoteBranches)];
+
+      const result = [
+        ...localBranches.map(name => ({ name, isRemote: false })),
+        ...uniqueRemote.map(name => ({ name, isRemote: true })),
+      ];
+
+      // Verify: local branches (excluding current)
+      expect(result.filter(b => !b.isRemote).map(b => b.name)).toEqual(['feat/local-only', 'feat/both']);
+      // Verify: remote-only branches (not in local, not current)
+      expect(result.filter(b => b.isRemote).map(b => b.name)).toEqual(['feat/remote-only']);
+      // Verify: no duplicates — 'feat/both' should NOT appear in remote list
+      const allNames = result.map(b => b.name);
+      expect(allNames).toEqual(['feat/local-only', 'feat/both', 'feat/remote-only']);
+      // Verify: total count is correct
+      expect(result).toHaveLength(3);
+    });
+
+    it('should exclude worktree branches from both local and remote', async () => {
+      const currentBranch = 'main';
+      const worktreeBranches = new Set(['feat/in-worktree']);
+
+      mockGit.raw.mockResolvedValueOnce('main\nfeat/in-worktree\nfeat/free\n');
+      const localBranches = (await gitUtils.listBranches()).filter(
+        b => b !== currentBranch && !worktreeBranches.has(b)
+      );
+      const localSet = new Set(localBranches);
+
+      mockGit.raw.mockResolvedValueOnce('origin/feat/in-worktree\norigin/feat/remote-free\n');
+      const remoteBranchesRaw = await gitUtils.listRemoteBranches();
+      const remoteBranches = remoteBranchesRaw
+        .map(b => {
+          const slashIdx = b.indexOf('/');
+          return slashIdx >= 0 ? b.substring(slashIdx + 1) : b;
+        })
+        .filter(b => b !== currentBranch && !localSet.has(b) && !worktreeBranches.has(b));
+      const uniqueRemote = [...new Set(remoteBranches)];
+
+      const result = [
+        ...localBranches.map(name => ({ name, isRemote: false })),
+        ...uniqueRemote.map(name => ({ name, isRemote: true })),
+      ];
+
+      // feat/in-worktree should be excluded from both lists
+      expect(result.map(b => b.name)).toEqual(['feat/free', 'feat/remote-free']);
+      expect(result.find(b => b.name === 'feat/in-worktree')).toBeUndefined();
+    });
+  });
 });
