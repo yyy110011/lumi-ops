@@ -70,6 +70,23 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider('lumi-ops.creator', creatorProvider)
   );
 
+  // -- Polling for live updates --
+  const pollInterval = setInterval(() => {
+    shadowTreeProvider.refresh();
+  }, 5000);
+
+  // -- Instant refresh on branch switch (watch .git/HEAD) --
+  if (rootPath) {
+    const gitHeadPattern = new vscode.RelativePattern(rootPath, '.git/HEAD');
+    const gitHeadWatcher = vscode.workspace.createFileSystemWatcher(gitHeadPattern);
+    gitHeadWatcher.onDidChange(() => shadowTreeProvider.refresh());
+    context.subscriptions.push(gitHeadWatcher);
+  }
+
+  // Clean up on deactivate
+  context.subscriptions.push({
+    dispose: () => clearInterval(pollInterval)
+  });
 
   // -- Commands --
 
