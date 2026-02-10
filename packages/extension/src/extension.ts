@@ -5,7 +5,7 @@ import { execSync } from 'child_process';
 import { ShadowTreeProvider, ShadowItem, LumiStatus } from './ShadowTreeProvider';
 import { ShadowCreatorProvider } from './ShadowCreatorProvider';
 import { StatusWatcher } from './StatusWatcher';
-import { spawn, kill, merge } from '@lumi-ops/cli';
+import { spawn, kill, merge, startAgentInWorktree } from '@lumi-ops/cli';
 
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -156,8 +156,14 @@ export async function activate(context: vscode.ExtensionContext) {
               title: `Killing shadow clone: ${branchName}`,
               cancellable: false
             }, async () => {
-              await kill(branchName, { root: rootPath! });
+              // Kill tmux session first if it exists
+              try {
+                execSync(`tmux kill-session -t "lumi-${branchName}"`, { stdio: 'ignore' });
+              } catch (e) {
+                // Session may not exist, that's fine
+              }
 
+              await kill(branchName, { root: rootPath! });
             });
             
             vscode.window.showInformationMessage(`Shadow clone ${branchName} killed.`);
@@ -181,6 +187,11 @@ export async function activate(context: vscode.ExtensionContext) {
           title: `Merging shadow clone: ${branchName}`,
           cancellable: false
         }, async () => {
+          // Kill tmux session if active
+          try {
+            execSync(`tmux kill-session -t "lumi-${branchName}"`, { stdio: 'ignore' });
+          } catch (e) { /* no session, fine */ }
+
           await merge(branchName, { root: rootPath! });
         });
 
@@ -199,8 +210,8 @@ export async function activate(context: vscode.ExtensionContext) {
             await kill(branchName, { root: rootPath! });
           });
           vscode.window.showInformationMessage(`Shadow clone ${branchName} deleted.`);
-          shadowTreeProvider.refresh();
         }
+        shadowTreeProvider.refresh();
 
       } catch (error: any) {
         vscode.window.showErrorMessage(`Merge failed: ${error.message}`);
@@ -213,6 +224,43 @@ export async function activate(context: vscode.ExtensionContext) {
       if (clone && clone.path) {
         const uri = vscode.Uri.file(clone.path);
         vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: true });
+      }
+    })
+  );
+
+  // -- Start Agent on idle clone --
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.startAgent', async (item: ShadowItem) => {
+      if (!item?.clone?.branch || !item?.clone?.path) {
+        vscode.window.showWarningMessage('No clone selected');
+        return;
+      }
+
+      // Check if already running
+      if (item.status?.status === 'coding' || item.status?.status === 'testing') {
+        vscode.window.showWarningMessage('Agent is already running on this clone');
+        return;
+      }
+
+      const driver = 'gemini -y';
+
+      try {
+        await vscode.window.withProgress({
+          location: vscode.ProgressLocation.Notification,
+          title: `Starting agent on ${item.clone.branch}...`,
+          cancellable: false
+        }, async () => {
+          await startAgentInWorktree({
+            worktreePath: item.clone.path,
+            branchName: item.clone.branch,
+            driver
+          });
+        });
+
+        vscode.window.showInformationMessage(`Agent started on ${item.clone.branch}`);
+        shadowTreeProvider.refresh();
+      } catch (error: any) {
+        vscode.window.showErrorMessage(`Failed to start agent: ${error.message}`);
       }
     })
   );
@@ -249,10 +297,15 @@ export async function activate(context: vscode.ExtensionContext) {
       );
 
       if (confirm === 'Kill') {
+        // Try to kill tmux session (may already be dead)
         try {
-          execSync(`tmux kill-session -t ${item.status.session}`);
+          execSync(`tmux kill-session -t ${item.status.session}`, { stdio: 'ignore' });
+        } catch (e) {
+          // Session already dead or tmux not running — that's fine
+        }
 
-          // Update status file
+        // Always update status file
+        try {
           const statusPath = path.join(item.clone.path, '.lumi-status.json');
           const newStatus: LumiStatus = {
             ...item.status,
@@ -260,12 +313,12 @@ export async function activate(context: vscode.ExtensionContext) {
             message: 'Session terminated'
           };
           fs.writeFileSync(statusPath, JSON.stringify(newStatus, null, 2));
-
-          shadowTreeProvider.refresh();
-          vscode.window.showInformationMessage(`Killed session: ${item.status.session}`);
         } catch (e) {
-          vscode.window.showErrorMessage(`Failed to kill session: ${e}`);
+          // Ignore file write errors
         }
+
+        shadowTreeProvider.refresh();
+        vscode.window.showInformationMessage(`Killed session: ${item.status.session}`);
       }
     })
   );

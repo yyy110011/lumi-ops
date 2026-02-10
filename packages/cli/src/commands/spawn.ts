@@ -4,6 +4,7 @@ import { execSync, spawn as spawnProcess } from 'child_process';
 import { GitUtils } from '../utils/git';
 import chalk from 'chalk';
 import { quickGC } from './gc';
+import { startAgentInWorktree } from './agentRunner';
 
 export interface SpawnOptions {
   root: string;
@@ -98,6 +99,10 @@ ${description}
    - Example: \`feat: add OAuth login with Google provider\`
    - Example: \`fix: resolve race condition in data fetching\`
    - Include a brief summary of all changes made.
+5. **IMPORTANT**: After committing, update the status file to signal completion:
+   \`\`\`bash
+   echo '{"status":"done","message":"Task completed","session":"lumi-${branchName}"}' > .lumi-status.json
+   \`\`\`
 `;
     await fs.writeFile(contextFile, contextContent);
     console.log(chalk.gray('✓ Generated MISSION.md.'));
@@ -111,61 +116,17 @@ ${description}
         process.exit(1);
       }
 
-      // Check if tmux is installed
       try {
-        execSync('which tmux', { stdio: 'ignore' });
-      } catch {
-        console.error(chalk.red('Error: tmux is not installed. Please install tmux first.'));
-        process.exit(1);
-      }
-
-      const sessionName = `lumi-${branchName}`;
-
-      // Check for existing session
-      try {
-        execSync(`tmux has-session -t "${sessionName}" 2>/dev/null`, { stdio: 'ignore' });
-        console.error(chalk.red(`Error: tmux session "${sessionName}" already exists.`));
-        console.log(chalk.gray(`   Attach with: tmux attach -t ${sessionName}`));
-        console.log(chalk.gray(`   Or kill it:  tmux kill-session -t ${sessionName}`));
-        process.exit(1);
-      } catch {
-        // Session doesn't exist, which is what we want
-      }
-      // Write a runner script for reliable execution with logging
-      const runnerScript = path.join(targetPath, '.lumi-runner.sh');
-      const logFile = path.join(targetPath, 'agent.log');
-      const scriptContent = `#!/bin/bash
-cd "${targetPath}"
-(${options.driver}) >> "${logFile}" 2>&1
-`;
-      await fs.writeFile(runnerScript, scriptContent, { mode: 0o755 });
-      
-      // Use spawn with detached mode to ensure tmux session persists
-      try {
-        const tmuxProcess = spawnProcess('tmux', [
-          'new-session', '-d', '-s', sessionName, runnerScript
-        ], {
-          detached: true,
-          stdio: 'ignore',
-          shell: true
-        });
-        tmuxProcess.unref();
-
-        // Write status file
-        const statusFile = path.join(targetPath, '.lumi-status.json');
-        const status = {
-          status: 'coding',
-          message: 'Agent started',
-          session: sessionName,
-          startedAt: new Date().toISOString(),
+        const sessionName = await startAgentInWorktree({
+          worktreePath: targetPath,
+          branchName,
           driver: options.driver
-        };
-        await fs.writeFile(statusFile, JSON.stringify(status, null, 2));
+        });
 
         console.log(chalk.green(`\n✨ Background agent started in tmux session: ${sessionName}`));
         console.log(chalk.gray(`   Attach with: tmux attach -t ${sessionName}`));
       } catch (error: any) {
-        console.error(chalk.red(`Failed to start tmux session: ${error.message}`));
+        console.error(chalk.red(`Failed to start agent: ${error.message}`));
         process.exit(1);
       }
     } else {

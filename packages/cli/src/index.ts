@@ -4,6 +4,7 @@ import { spawn } from './commands/spawn';
 import { kill } from './commands/kill';
 import { list } from './commands/list';
 import { gc } from './commands/gc';
+import { startAgent } from './commands/startAgent';
 import * as path from 'path';
 
 // Export for library usage
@@ -12,6 +13,8 @@ export * from './commands/kill';
 export * from './commands/list';
 export * from './commands/merge';
 export * from './commands/gc';
+export * from './commands/startAgent';
+export * from './commands/agentRunner';
 export * from './utils/git';
 
 
@@ -56,5 +59,12 @@ program
   .option('-v, --verbose', 'Show detailed output')
   .action(async (options) => { await gc(options); });
 
-program.parse();
+program
+  .command('start-agent')
+  .description('Start a background agent on an existing shadow clone')
+  .argument('<branchName>', 'Name of the feature branch')
+  .option('-r, --root <path>', 'Root directory of the project', process.cwd())
+  .option('--driver <cmd>', 'Driver command for agent execution', 'gemini -y')
+  .action(startAgent);
 
+program.parse();

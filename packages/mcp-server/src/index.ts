@@ -15,7 +15,7 @@ const server = new McpServer({
 // Tool: spawn_agent
 server.tool(
   'spawn_agent',
-  'Spawn a new AI agent in an isolated Git worktree. Use background mode for autonomous agents, interactive for human-assisted work.',
+  'Spawn a new AI agent in an isolated Git worktree. Only callable from the ROOT workspace — background agents must NOT spawn other agents. Use background mode for autonomous agents, interactive for human-assisted work.',
   {
     branch: z.string().describe('Branch name for the worktree (e.g., "feature-auth-system")'),
     task: z.string().describe('Task description for the agent (.cursorrules content)'),

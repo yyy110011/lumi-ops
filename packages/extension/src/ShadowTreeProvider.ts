@@ -211,7 +211,11 @@ export class ShadowItem extends vscode.TreeItem {
 
   private getContextValue(): string {
     if (this.status?.session) {
-      return 'activeAgent';  // Has context menu for attach
+      // Done agents show play (restart) not stop
+      if (this.status.status === 'done') {
+        return 'doneAgent';
+      }
+      return 'activeAgent';  // Has context menu for attach/stop
     }
     return 'shadowClone';
   }

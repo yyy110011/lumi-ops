@@ -64,7 +64,8 @@
       },
       {
         "command": "lumi-ops.open",
-        "title": "Lumi-Ops: Open Clone"
+        "title": "Lumi-Ops: Open Clone",
+        "icon": "$(window)"
       },
       {
         "command": "lumi-ops.attach",
@@ -90,6 +91,11 @@
         "command": "lumi-ops.jumpIn",
         "title": "Jump In (Open + Attach)",
         "icon": "$(debug-start)"
+      },
+      {
+        "command": "lumi-ops.startAgent",
+        "title": "Start Background Agent",
+        "icon": "$(play)"
       }
     ],
     "menus": {
@@ -107,44 +113,49 @@
       ],
       "view/item/context": [
         {
-          "command": "lumi-ops.attach",
-          "when": "view == lumi-ops.activeClones && viewItem == activeAgent",
-          "group": "inline"
+          "command": "lumi-ops.open",
+          "when": "view == lumi-ops.activeClones && viewItem != currentBranch",
+          "group": "inline@1"
         },
         {
-          "command": "lumi-ops.kill",
+          "command": "lumi-ops.startAgent",
           "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
-          "group": "inline"
+          "group": "inline@2"
+        },
+        {
+          "command": "lumi-ops.startAgent",
+          "when": "view == lumi-ops.activeClones && viewItem == doneAgent",
+          "group": "inline@2"
         },
         {
           "command": "lumi-ops.killSession",
           "when": "view == lumi-ops.activeClones && viewItem == activeAgent",
-          "group": "modification@0"
-        },
-        {
-          "command": "lumi-ops.merge",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
-          "group": "modification@1"
+          "group": "inline@2"
         },
         {
           "command": "lumi-ops.kill",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
-          "group": "modification@2"
+          "when": "view == lumi-ops.activeClones && viewItem != currentBranch",
+          "group": "inline@3"
+        },
+        {
+          "command": "lumi-ops.merge",
+          "when": "view == lumi-ops.activeClones && viewItem != currentBranch",
+          "group": "actions@1"
+        },
+        {
+          "command": "lumi-ops.attach",
+          "when": "view == lumi-ops.activeClones && (viewItem == activeAgent || viewItem == doneAgent)",
+          "group": "actions@2"
         },
         {
           "command": "lumi-ops.showLogs",
-          "when": "view == lumi-ops.activeClones",
-          "group": "navigation@0"
+          "when": "view == lumi-ops.activeClones && viewItem != currentBranch",
+          "group": "logs@1"
         },
         {
           "command": "lumi-ops.watchLogs",
-          "when": "view == lumi-ops.activeClones && viewItem == activeAgent",
-          "group": "navigation@1"
-        },
-        {
-          "command": "lumi-ops.jumpIn",
-          "when": "view == lumi-ops.activeClones && viewItem == activeAgent",
-          "group": "inline"
+          "when": "view == lumi-ops.activeClones && (viewItem == activeAgent || viewItem == doneAgent)",
+          "group": "logs@2"
         }
       ]
     }

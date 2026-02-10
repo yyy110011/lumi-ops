@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "rimraf dist && tsc",
+    "postbuild": "chmod +x dist/index.js",
     "dev": "tsc -w",
     "test": "vitest run --exclude src/__tests__/e2e.test.ts",
     "test:e2e": "vitest run src/__tests__/e2e.test.ts",
