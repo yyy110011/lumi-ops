@@ -101,7 +101,7 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('lumi-ops.spawn', async (args?: { branch: string, description: string }) => {
+    vscode.commands.registerCommand('lumi-ops.spawn', async (args?: { branch: string, description: string, templates?: { name: string; content: string }[] }) => {
       if (!rootPath) {
         vscode.window.showErrorMessage('No workspace folder open.');
         return;
@@ -147,7 +147,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 await git.checkoutBranch(branchName);
               }
             }
-            await spawn(branchName, { root: rootPath, description });
+            await spawn(branchName, { root: rootPath, description, templates: args?.templates });
 
           });
 

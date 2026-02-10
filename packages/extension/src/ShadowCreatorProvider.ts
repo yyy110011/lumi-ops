@@ -26,7 +26,8 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         case 'spawn':
           vscode.commands.executeCommand('lumi-ops.spawn', { 
             branch: data.branch, 
-            description: data.description 
+            description: data.description,
+            templates: data.templates
           });
           break;
         case 'getBranches':
@@ -221,8 +222,8 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
             <div class="branch-dropdown" id="promptDropdown" style="right:0; left:auto; min-width:200px;"></div>
           </div>
         </div>
-        <div id="promptSource" style="display:none; font-size:11px; color:var(--vscode-descriptionForeground); margin-bottom:4px;">📎 Loaded from: <span id="promptSourceName"></span></div>
         <textarea id="description" rows="5" placeholder="Describe the objective for the AI Agent..."></textarea>
+        <div id="templateTags" style="margin-top:6px; display:flex; flex-wrap:wrap; gap:4px;"></div>
         <button id="saveAsTemplateBtn" type="button" style="margin-top:6px; padding:4px 8px; font-size:11px; background:var(--vscode-button-secondaryBackground, var(--vscode-button-background)); color:var(--vscode-button-secondaryForeground, var(--vscode-button-foreground)); border:1px solid var(--vscode-input-border); border-radius:2px; cursor:pointer;">💾 Save as Template</button>
       </div>
 
@@ -232,6 +233,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         const vscode = acquireVsCodeApi();
         let branches = [];
         let prompts = [];
+        let selectedTemplates = [];
 
         const branchInput = document.getElementById('branch');
         const browseBtn = document.getElementById('browseBtn');
@@ -251,15 +253,18 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           } else if (msg.command === 'resetForm') {
             branchInput.value = '';
             descriptionEl.value = '';
+            selectedTemplates = [];
+            renderTemplateTags();
             spawnBtn.textContent = 'Create Clone Only';
-            document.getElementById('promptSource').style.display = 'none';
             // Re-fetch branches after spawn/kill
             vscode.postMessage({ command: 'getBranches' });
           } else if (msg.command === 'loadPrompt') {
-            descriptionEl.value = msg.content;
-            spawnBtn.textContent = 'Spawn Agent';
-            document.getElementById('promptSourceName').textContent = msg.name;
-            document.getElementById('promptSource').style.display = 'block';
+            // Add template to selected list (avoid duplicates)
+            if (!selectedTemplates.find(t => t.name === msg.name)) {
+              selectedTemplates.push({ name: msg.name, content: msg.content });
+              renderTemplateTags();
+              updateSpawnBtnText();
+            }
           }
         });
 
@@ -335,10 +340,32 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         const spawnBtn = document.getElementById('spawnBtn');
         const descriptionEl = document.getElementById('description');
 
-        // Dynamic button text based on description
-        descriptionEl.addEventListener('input', () => {
-          spawnBtn.textContent = descriptionEl.value.trim() ? 'Spawn Agent' : 'Create Clone Only';
-        });
+        // Dynamic button text based on description or templates
+        function updateSpawnBtnText() {
+          spawnBtn.textContent = (descriptionEl.value.trim() || selectedTemplates.length > 0) ? 'Spawn Agent' : 'Create Clone Only';
+        }
+        descriptionEl.addEventListener('input', updateSpawnBtnText);
+
+        // -- Template tags --
+        const templateTagsEl = document.getElementById('templateTags');
+        function renderTemplateTags() {
+          templateTagsEl.innerHTML = '';
+          selectedTemplates.forEach((t, idx) => {
+            const tag = document.createElement('span');
+            tag.style.cssText = 'display:inline-flex; align-items:center; gap:4px; padding:2px 8px; font-size:11px; background:var(--vscode-badge-background); color:var(--vscode-badge-foreground); border-radius:10px;';
+            tag.innerHTML = '📋 ' + t.name;
+            const removeBtn = document.createElement('span');
+            removeBtn.textContent = '✕';
+            removeBtn.style.cssText = 'cursor:pointer; font-size:10px; opacity:0.7;';
+            removeBtn.addEventListener('click', () => {
+              selectedTemplates.splice(idx, 1);
+              renderTemplateTags();
+              updateSpawnBtnText();
+            });
+            tag.appendChild(removeBtn);
+            templateTagsEl.appendChild(tag);
+          });
+        }
 
         // -- Prompt dropdown --
         const promptBrowseBtn = document.getElementById('promptBrowseBtn');
@@ -402,7 +429,8 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
             vscode.postMessage({
               command: 'spawn',
               branch: branch,
-              description: description
+              description: description,
+              templates: selectedTemplates.length > 0 ? selectedTemplates : undefined
             });
           }
         });

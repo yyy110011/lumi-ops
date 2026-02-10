@@ -3,7 +3,7 @@ import * as fs from 'fs-extra';
 import { GitUtils } from '../utils/git';
 import chalk from 'chalk';
 
-export async function spawn(branchName: string, options: { root: string; description?: string }) {
+export async function spawn(branchName: string, options: { root: string; description?: string; templates?: { name: string; content: string }[] }) {
   const rootDir = path.resolve(options.root);
   const git = new GitUtils(rootDir);
   const shadowDir = path.join(rootDir, '.shadow-clones');
@@ -65,10 +65,28 @@ export async function spawn(branchName: string, options: { root: string; descrip
     // 5. Create MISSION.md (AI Agent Context - only when description is provided)
     if (options.description) {
       const contextFile = path.join(targetPath, 'MISSION.md');
+      const templates = options.templates || [];
+
+      // Build objective section — numbered sub-sections when templates are attached
+      let objectiveSection: string;
+      if (templates.length > 0) {
+        let counter = 1;
+        const parts: string[] = [];
+        parts.push(`### ${counter}. Task Description\n${options.description}`);
+        counter++;
+        for (const t of templates) {
+          parts.push(`### ${counter}. ${t.name}\n${t.content}`);
+          counter++;
+        }
+        objectiveSection = parts.join('\n\n');
+      } else {
+        objectiveSection = options.description;
+      }
+
       const contextContent = `# 🤖 Agent Mission: ${branchName}
 
 ## 🎯 Objective
-${options.description}
+${objectiveSection}
 
 ## 📂 Environment
 - You are working in an isolated Git Worktree.
