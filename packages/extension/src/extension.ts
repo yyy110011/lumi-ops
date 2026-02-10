@@ -379,6 +379,34 @@ export async function activate(context: vscode.ExtensionContext) {
       }
     })
   );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.getPrompts', async () => {
+      try {
+        const items = await promptLibraryProvider.getChildren();
+        const prompts = items.map(item => ({
+          name: item.fileName,
+          preview: item.firstLine.length > 50 ? item.firstLine.substring(0, 50) + '…' : item.firstLine
+        }));
+        creatorProvider.updatePrompts(prompts);
+      } catch {
+        creatorProvider.updatePrompts([]);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.selectPrompt', async (fileName: string) => {
+      if (!fileName) return;
+      try {
+        const content = await promptLibraryProvider.getPromptContent(fileName);
+        const name = fileName.replace(/\.md$/, '');
+        creatorProvider.loadPrompt(name, content);
+      } catch (error: any) {
+        vscode.window.showErrorMessage(`Failed to load prompt: ${error.message}`);
+      }
+    })
+  );
 }
 
 export function deactivate() {}

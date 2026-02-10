@@ -35,6 +35,12 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         case 'saveAsPrompt':
           vscode.commands.executeCommand('lumi-ops.saveAsPrompt', data.content);
           break;
+        case 'getPrompts':
+          vscode.commands.executeCommand('lumi-ops.getPrompts');
+          break;
+        case 'selectPrompt':
+          vscode.commands.executeCommand('lumi-ops.selectPrompt', data.fileName);
+          break;
       }
     });
   }
@@ -55,6 +61,12 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
     if (this._view) {
       this._view.show?.(true);
       this._view.webview.postMessage({ command: 'loadPrompt', name, content });
+    }
+  }
+
+  public updatePrompts(prompts: { name: string; preview: string }[]) {
+    if (this._view) {
+      this._view.webview.postMessage({ command: 'setPrompts', prompts });
     }
   }
 
@@ -202,7 +214,13 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
       </div>
       
       <div class="form-group">
-        <label for="description">Task Description</label>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+          <label for="description" style="margin-bottom:0;">Task Description</label>
+          <div style="position:relative;">
+            <button class="branch-browse-btn" id="promptBrowseBtn" title="Select prompt template" style="padding:3px 6px; font-size:11px;">📋 Template ▾</button>
+            <div class="branch-dropdown" id="promptDropdown" style="right:0; left:auto; min-width:200px;"></div>
+          </div>
+        </div>
         <div id="promptSource" style="display:none; font-size:11px; color:var(--vscode-descriptionForeground); margin-bottom:4px;">📎 Loaded from: <span id="promptSourceName"></span></div>
         <textarea id="description" rows="5" placeholder="Describe the objective for the AI Agent..."></textarea>
         <button id="saveAsTemplateBtn" type="button" style="margin-top:6px; padding:4px 8px; font-size:11px; background:var(--vscode-button-secondaryBackground, var(--vscode-button-background)); color:var(--vscode-button-secondaryForeground, var(--vscode-button-foreground)); border:1px solid var(--vscode-input-border); border-radius:2px; cursor:pointer;">💾 Save as Template</button>
@@ -213,6 +231,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
       <script>
         const vscode = acquireVsCodeApi();
         let branches = [];
+        let prompts = [];
 
         const branchInput = document.getElementById('branch');
         const browseBtn = document.getElementById('browseBtn');
@@ -227,6 +246,8 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           const msg = event.data;
           if (msg.command === 'setBranches') {
             branches = msg.branches || [];
+          } else if (msg.command === 'setPrompts') {
+            prompts = msg.prompts || [];
           } else if (msg.command === 'resetForm') {
             branchInput.value = '';
             descriptionEl.value = '';
@@ -299,7 +320,10 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           }
         });
 
-        overlay.addEventListener('click', hideDropdown);
+        overlay.addEventListener('click', () => {
+          hideDropdown();
+          hidePromptDropdown();
+        });
 
         // Filter dropdown as user types (if dropdown is open)
         branchInput.addEventListener('input', () => {
@@ -314,6 +338,53 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         // Dynamic button text based on description
         descriptionEl.addEventListener('input', () => {
           spawnBtn.textContent = descriptionEl.value.trim() ? 'Spawn Agent' : 'Create Clone Only';
+        });
+
+        // -- Prompt dropdown --
+        const promptBrowseBtn = document.getElementById('promptBrowseBtn');
+        const promptDropdown = document.getElementById('promptDropdown');
+
+        function showPromptDropdown() {
+          // Request fresh prompt list
+          vscode.postMessage({ command: 'getPrompts' });
+          // Render after a short delay to allow setPrompts message
+          setTimeout(() => renderPromptDropdown(), 100);
+        }
+
+        function renderPromptDropdown() {
+          promptDropdown.innerHTML = '';
+          if (prompts.length === 0) {
+            promptDropdown.innerHTML = '<div class="branch-dropdown-empty">No templates saved</div>';
+          } else {
+            prompts.forEach(p => {
+              const item = document.createElement('div');
+              item.className = 'branch-dropdown-item';
+              item.innerHTML = '<strong>' + p.name.replace(/\.md$/, '') + '</strong>' +
+                (p.preview ? '<br><span style="font-size:10px;color:var(--vscode-descriptionForeground);">' + p.preview + '</span>' : '');
+              item.addEventListener('click', () => {
+                vscode.postMessage({ command: 'selectPrompt', fileName: p.name });
+                hidePromptDropdown();
+              });
+              promptDropdown.appendChild(item);
+            });
+          }
+          promptDropdown.classList.add('show');
+          overlay.classList.add('show');
+        }
+
+        function hidePromptDropdown() {
+          promptDropdown.classList.remove('show');
+        }
+
+        promptBrowseBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          hideDropdown();
+          if (promptDropdown.classList.contains('show')) {
+            hidePromptDropdown();
+            overlay.classList.remove('show');
+          } else {
+            showPromptDropdown();
+          }
         });
 
         document.getElementById('saveAsTemplateBtn').addEventListener('click', () => {
