@@ -71,7 +71,7 @@ export class GitUtils {
     return output
       .split('\n')
       .map(b => b.trim())
-      .filter(b => b && !b.endsWith('/HEAD'));
+      .filter(b => b && b.includes('/') && !b.endsWith('/HEAD'));
   }
 
   async fetchRemote(remote?: string): Promise<void> {
