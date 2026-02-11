@@ -64,7 +64,16 @@
       },
       {
         "command": "lumi-ops.open",
-        "title": "Lumi-Ops: Open Clone"
+        "title": "Open Clone",
+        "icon": "$(window)"
+      },
+      {
+        "command": "lumi-ops.setReviewStatus",
+        "title": "Set Status"
+      },
+      {
+        "command": "lumi-ops.cycleReviewStatus",
+        "title": "Cycle Status"
       }
     ],
     "menus": {
@@ -82,9 +91,14 @@
       ],
       "view/item/context": [
         {
+          "command": "lumi-ops.open",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "group": "inline@1"
+        },
+        {
           "command": "lumi-ops.kill",
           "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
-          "group": "inline"
+          "group": "inline@2"
         },
         {
           "command": "lumi-ops.merge",
@@ -92,9 +106,14 @@
           "group": "modification@1"
         },
         {
-          "command": "lumi-ops.kill",
+          "command": "lumi-ops.setReviewStatus",
           "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "modification@2"
+        },
+        {
+          "command": "lumi-ops.kill",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "group": "modification@3"
         }
       ]
     }

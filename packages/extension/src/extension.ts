@@ -5,6 +5,7 @@ import { ShadowCreatorProvider } from './ShadowCreatorProvider';
 
 
 import { spawn, kill, merge, GitUtils } from '@lumi-ops/cli';
+import type { ReviewStatus } from '@lumi-ops/cli';
 
 
 
@@ -62,7 +63,7 @@ export async function activate(context: vscode.ExtensionContext) {
     ? vscode.workspace.workspaceFolders[0].uri.fsPath
     : undefined;
 
-  const shadowTreeProvider = new ShadowTreeProvider(rootPath);
+  const shadowTreeProvider = new ShadowTreeProvider(rootPath, context.extensionPath);
   vscode.window.registerTreeDataProvider('lumi-ops.activeClones', shadowTreeProvider);
 
   const creatorProvider = new ShadowCreatorProvider(context.extensionUri);
@@ -273,6 +274,37 @@ export async function activate(context: vscode.ExtensionContext) {
       if (clone && clone.path) {
         const uri = vscode.Uri.file(clone.path);
         vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: true });
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.cycleReviewStatus', async (item: any) => {
+      const branchName = item?.clone?.branch;
+      const currentStatus = item?.clone?.reviewStatus;
+      if (!branchName) return;
+      await shadowTreeProvider.cycleReviewStatus(branchName, currentStatus);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.setReviewStatus', async (item: any) => {
+      const branchName = item?.clone?.branch;
+      if (!branchName) return;
+
+      const picks: Array<vscode.QuickPickItem & { status: ReviewStatus }> = [
+        { label: '$(circle-large-outline) Todo',       status: 'todo',       description: 'Not started' },
+        { label: '$(circle-large-filled) In Progress',  status: 'inProgress', description: 'Currently working on it' },
+        { label: '$(circle-large-filled) Done',         status: 'done',       description: 'Completed' },
+        { label: '$(circle-large-filled) Won\'t Do',    status: 'wontDo',     description: 'Cancelled or skipped' },
+      ];
+
+      const picked = await vscode.window.showQuickPick(picks, {
+        placeHolder: `Set status for ${branchName}`,
+      });
+
+      if (picked) {
+        await shadowTreeProvider.setReviewStatus(branchName, picked.status);
       }
     })
   );

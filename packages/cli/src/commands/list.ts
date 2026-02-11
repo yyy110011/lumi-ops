@@ -1,6 +1,7 @@
 import * as path from 'path';
 import { GitUtils } from '../utils/git';
 import { SHADOW_CLONES_DIR } from '../constants';
+import type { ReviewStatus } from '../constants';
 import chalk from 'chalk';
 
 export interface ShadowClone {
@@ -8,6 +9,7 @@ export interface ShadowClone {
   path: string;
   isShadow: boolean;
   baseBranch?: string;
+  reviewStatus?: ReviewStatus;
 }
 
 export async function list(options: { root: string; json?: boolean }) {

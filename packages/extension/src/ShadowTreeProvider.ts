@@ -2,15 +2,40 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { list, ShadowClone, GitUtils, SHADOW_CLONES_DIR, METADATA_FILE } from '@lumi-ops/cli';
+import type { ReviewStatus } from '@lumi-ops/cli';
 
+const STATUS_SVG: Record<ReviewStatus, string> = {
+  todo:       'status-todo.svg',
+  inProgress: 'status-in-progress.svg',
+  done:       'status-done.svg',
+  wontDo:     'status-wont-do.svg',
+};
+
+const STATUS_LABELS: Record<ReviewStatus, string> = {
+  todo: 'Todo',
+  inProgress: 'In Progress',
+  done: 'Done',
+  wontDo: "Won't Do",
+};
+
+const STATUS_ORDER: ReviewStatus[] = ['todo', 'inProgress', 'done', 'wontDo'];
 
 export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
   private _onDidChangeTreeData: vscode.EventEmitter<ShadowItem | undefined | void> = new vscode.EventEmitter<ShadowItem | undefined | void>();
   readonly onDidChangeTreeData: vscode.Event<ShadowItem | undefined | void> = this._onDidChangeTreeData.event;
 
-  constructor(private workspaceRoot: string | undefined) {}
+  /** In-memory status cache for rapid clicks */
+  private statusCache: Map<string, ReviewStatus> = new Map();
+  /** Live item references — mutated in place for instant partial updates */
+  private itemCache: Map<string, ShadowItem> = new Map();
+  /** Debounce timer for coalescing rapid disk writes */
+  private diskWriteTimer: ReturnType<typeof setTimeout> | null = null;
 
+  constructor(private workspaceRoot: string | undefined, private extensionPath: string) {}
+
+  /** Full refresh: clears item cache, re-fetches from git */
   refresh(): void {
+    this.itemCache.clear();
     this._onDidChangeTreeData.fire();
   }
 
@@ -37,19 +62,28 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
             currentWorktree.branch,
             vscode.TreeItemCollapsibleState.None,
             currentWorktree,
-            'currentBranch'  // Protected - no kill/merge menu
+            'currentBranch'
           ));
         }
 
         // 2. Show only shadow clones below
         const shadowClones = clones.filter(c => c.isShadow);
         for (const clone of shadowClones) {
-          items.push(new ShadowItem(
+          // Apply in-memory cache (overrides disk metadata)
+          const cached = this.statusCache.get(clone.branch);
+          if (cached !== undefined) {
+            clone.reviewStatus = cached;
+          }
+          const item = new ShadowItem(
             clone.branch,
             vscode.TreeItemCollapsibleState.None,
             clone,
-            'shadowClone'
-          ));
+            'shadowClone',
+            this.extensionPath
+          );
+          // Store live reference for partial updates
+          this.itemCache.set(clone.branch, item);
+          items.push(item);
         }
 
         return items;
@@ -70,7 +104,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
 
         // Load centralized metadata once
         const metadataPath = path.join(this.workspaceRoot, SHADOW_CLONES_DIR, METADATA_FILE);
-        let metadata: Record<string, { baseBranch: string }> = {};
+        let metadata: Record<string, { baseBranch?: string; reviewStatus?: ReviewStatus }> = {};
         try {
           const raw = fs.readFileSync(metadataPath, 'utf-8');
           metadata = JSON.parse(raw);
@@ -88,17 +122,14 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
           if (worktreePath && branch) {
             const branchName = branch.replace('refs/heads/', '');
             const isShadow = worktreePath.includes(SHADOW_CLONES_DIR);
-            let baseBranch: string | undefined;
+            const meta = metadata[branchName];
             
-            if (isShadow) {
-              // Look up from centralized metadata
-              baseBranch = metadata[branchName]?.baseBranch;
-            }
             worktrees.push({
               branch: branchName,
               path: worktreePath,
               isShadow,
-              baseBranch
+              baseBranch: meta?.baseBranch,
+              reviewStatus: meta?.reviewStatus,
             });
           }
         }
@@ -108,6 +139,68 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
         return [];
     }
   }
+
+  /**
+   * Update a clone's review status — instant partial update, no tree rebuild.
+   */
+  setReviewStatus(branchName: string, status: ReviewStatus): void {
+    if (!this.workspaceRoot) return;
+
+    // Update cache
+    this.statusCache.set(branchName, status);
+
+    // Mutate existing item in place + partial fire (NO getChildren, NO loading bar)
+    const item = this.itemCache.get(branchName);
+    if (item) {
+      item.updateStatus(status, this.extensionPath!);
+      this._onDidChangeTreeData.fire(item);
+    }
+
+    // Debounce disk write (300ms)
+    if (this.diskWriteTimer) {
+      clearTimeout(this.diskWriteTimer);
+    }
+    this.diskWriteTimer = setTimeout(() => {
+      this.flushStatusToDisk();
+    }, 300);
+  }
+
+  /**
+   * Flush all cached statuses to disk (called after debounce settles).
+   */
+  private flushStatusToDisk(): void {
+    if (!this.workspaceRoot) return;
+    const metadataPath = path.join(this.workspaceRoot, SHADOW_CLONES_DIR, METADATA_FILE);
+    try {
+      let metadata: Record<string, any> = {};
+      try {
+        const raw = fs.readFileSync(metadataPath, 'utf-8');
+        metadata = JSON.parse(raw);
+      } catch {
+        // File doesn't exist yet
+      }
+      for (const [branch, status] of this.statusCache) {
+        if (!metadata[branch]) {
+          metadata[branch] = {};
+        }
+        metadata[branch].reviewStatus = status;
+      }
+      fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+    } catch {
+      // Disk write failed — cache still has the correct state
+    }
+  }
+
+  /**
+   * Cycle to the next review status — fully synchronous, no async, no loading.
+   */
+  cycleReviewStatus(branchName: string, currentStatus?: ReviewStatus): void {
+    const cached = this.statusCache.get(branchName);
+    const current = cached ?? currentStatus ?? 'todo';
+    const idx = STATUS_ORDER.indexOf(current);
+    const next = STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
+    this.setReviewStatus(branchName, next);
+  }
 }
 
 class ShadowItem extends vscode.TreeItem {
@@ -115,9 +208,12 @@ class ShadowItem extends vscode.TreeItem {
     public readonly label: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
     public readonly clone: ShadowClone,
-    public readonly role: 'currentBranch' | 'shadowClone'
+    public readonly role: 'currentBranch' | 'shadowClone',
+    private extensionPath?: string
   ) {
     super(label, collapsibleState);
+    // Stable ID so VS Code tracks this item across updates
+    this.id = `shadow-${clone.branch}`;
     this.contextValue = role;
 
     if (role === 'currentBranch') {
@@ -125,14 +221,33 @@ class ShadowItem extends vscode.TreeItem {
       this.description = '🏠 Current Branch';
       this.iconPath = new vscode.ThemeIcon('home');
     } else {
-      this.tooltip = `${this.clone.path}`;
+      const status: ReviewStatus = this.clone.reviewStatus || 'todo';
+      this.applyStatus(status);
       this.description = this.clone.baseBranch ? `← ${this.clone.baseBranch}` : 'Shadow Clone';
-      this.iconPath = new vscode.ThemeIcon('git-branch');
+      // Click the row → cycle to next status
       this.command = {
-        command: 'lumi-ops.open',
-        title: 'Open Clone',
-        arguments: [this.clone]
+        command: 'lumi-ops.cycleReviewStatus',
+        title: 'Cycle Status',
+        arguments: [this]
       };
     }
+  }
+
+  /** Apply status visuals (icon + tooltip). Can be called to mutate in place. */
+  private applyStatus(status: ReviewStatus): void {
+    this.tooltip = `[${STATUS_LABELS[status]}] ${this.clone.path}`;
+    if (status === 'inProgress') {
+      // Animated spinning icon in blue
+      this.iconPath = new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('notificationsInfoIcon.foreground'));
+    } else {
+      const svgFile = STATUS_SVG[status];
+      this.iconPath = vscode.Uri.file(path.join(this.extensionPath!, 'media', svgFile));
+    }
+  }
+
+  /** Public method for in-place mutation from the provider. */
+  updateStatus(status: ReviewStatus, extensionPath: string): void {
+    this.extensionPath = extensionPath;
+    this.applyStatus(status);
   }
 }
