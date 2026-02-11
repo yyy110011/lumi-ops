@@ -84,4 +84,12 @@ export class GitUtils {
     await this.git.raw(['checkout', branchName]);
   }
 
+  /**
+   * Fetch a remote branch and create a local tracking branch without checkout.
+   * Equivalent to: git fetch origin <branchName>:refs/heads/<branchName>
+   */
+  async fetchBranch(branchName: string, remote: string = 'origin'): Promise<void> {
+    await this.git.raw(['fetch', remote, `${branchName}:refs/heads/${branchName}`]);
+  }
+
 }

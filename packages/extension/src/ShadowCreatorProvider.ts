@@ -37,9 +37,9 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  public updateBranches(branches: { name: string; isRemote: boolean }[], currentBranch: string) {
+  public updateBranches(branches: { name: string; isRemote: boolean }[], currentBranch: string, worktreeBranches: string[] = []) {
     if (this._view) {
-      this._view.webview.postMessage({ command: 'setBranches', branches, currentBranch });
+      this._view.webview.postMessage({ command: 'setBranches', branches, currentBranch, worktreeBranches });
     }
   }
 
@@ -247,6 +247,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         let branches = [];
         let currentBranch = '';
         let selectedBaseBranch = '';
+        let worktreeBranches = [];
 
         const branchInput = document.getElementById('branch');
         const browseBtn = document.getElementById('browseBtn');
@@ -284,6 +285,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           const msg = event.data;
           if (msg.command === 'setBranches') {
             branches = msg.branches || [];
+            worktreeBranches = msg.worktreeBranches || [];
             const newCurrent = msg.currentBranch || '';
             // If current branch changed, reset base to new current
             if (newCurrent !== currentBranch || !selectedBaseBranch) {
@@ -324,8 +326,11 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         function showDropdown() {
           dropdown.innerHTML = '';
           const filter = branchInput.value.toLowerCase();
-          const localFiltered = branches.filter(b => !b.isRemote && b.name.toLowerCase().includes(filter));
-          const remoteFiltered = branches.filter(b => b.isRemote && b.name.toLowerCase().includes(filter));
+          const worktreeSet = new Set(worktreeBranches);
+          // Filter out worktree-occupied branches from Branch Name dropdown
+          const available = branches.filter(b => !worktreeSet.has(b.name));
+          const localFiltered = available.filter(b => !b.isRemote && b.name.toLowerCase().includes(filter));
+          const remoteFiltered = available.filter(b => b.isRemote && b.name.toLowerCase().includes(filter));
 
           if (localFiltered.length === 0 && remoteFiltered.length === 0) {
             dropdown.innerHTML = '<div class="branch-dropdown-empty">No matching branches</div>';

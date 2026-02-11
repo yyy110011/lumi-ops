@@ -5,7 +5,6 @@ import { ShadowCreatorProvider } from './ShadowCreatorProvider';
 
 
 import { spawn, kill, merge, GitUtils } from '@lumi-ops/cli';
-import type { ReviewStatus } from '@lumi-ops/cli';
 
 
 
@@ -139,7 +138,7 @@ export async function activate(context: vscode.ExtensionContext) {
           }, async () => {
             const git = new GitUtils(rootPath);
 
-            // If the target branch doesn't exist locally, try checking it out from remote
+            // If the target branch doesn't exist locally, fetch it from remote (no checkout)
             const localExists = await git.branchExists(branchName);
             if (!localExists) {
               const remoteBranches = await git.listRemoteBranches();
@@ -149,11 +148,11 @@ export async function activate(context: vscode.ExtensionContext) {
                 return shortName === branchName;
               });
               if (matchingRemote) {
-                await git.checkoutBranch(branchName);
+                await git.fetchBranch(branchName);
               }
             }
 
-            // If baseBranch is a remote-only branch, ensure it exists locally first
+            // If baseBranch is a remote-only branch, fetch it locally (no checkout needed)
             if (baseBranch) {
               const baseExists = await git.branchExists(baseBranch);
               if (!baseExists) {
@@ -164,14 +163,7 @@ export async function activate(context: vscode.ExtensionContext) {
                   return shortName === baseBranch;
                 });
                 if (matchingRemote) {
-                  await git.checkoutBranch(baseBranch);
-                  // Switch back so we don't stay on the base branch
-                  const currentBranch = await git.getCurrentBranch();
-                  if (currentBranch === baseBranch) {
-                    const allBranches = await git.listBranches();
-                    const returnTo = allBranches.find(b => b !== baseBranch) || 'main';
-                    await git.checkoutBranch(returnTo);
-                  }
+                  await git.fetchBranch(baseBranch);
                 }
               }
             }
@@ -288,27 +280,7 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand('lumi-ops.setReviewStatus', async (item: any) => {
-      const branchName = item?.clone?.branch;
-      if (!branchName) return;
 
-      const picks: Array<vscode.QuickPickItem & { status: ReviewStatus }> = [
-        { label: '$(circle-large-outline) Todo',       status: 'todo',       description: 'Not started' },
-        { label: '$(circle-large-filled) In Progress',  status: 'inProgress', description: 'Currently working on it' },
-        { label: '$(circle-large-filled) Done',         status: 'done',       description: 'Completed' },
-        { label: '$(circle-large-filled) Won\'t Do',    status: 'wontDo',     description: 'Cancelled or skipped' },
-      ];
-
-      const picked = await vscode.window.showQuickPick(picks, {
-        placeHolder: `Set status for ${branchName}`,
-      });
-
-      if (picked) {
-        await shadowTreeProvider.setReviewStatus(branchName, picked.status);
-      }
-    })
-  );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('lumi-ops.getBranches', async () => {
@@ -316,6 +288,15 @@ export async function activate(context: vscode.ExtensionContext) {
       try {
         const git = new GitUtils(rootPath);
         const currentBranch = await git.getCurrentBranch();
+
+        // Collect worktree-occupied branches so UI can filter them from Branch Name dropdown
+        const worktreeEntries = await git.listWorktrees();
+        const worktreeBranches = worktreeEntries
+          .map(entry => {
+            const match = entry.match(/branch refs\/heads\/(.+)/);
+            return match ? match[1] : null;
+          })
+          .filter(Boolean) as string[];
 
         // ALL local branches (excluding current — it's added separately in the webview)
         const allLocal = await git.listBranches();
@@ -338,7 +319,7 @@ export async function activate(context: vscode.ExtensionContext) {
           ...localBranches.map(name => ({ name, isRemote: false })),
           ...uniqueRemote.map(name => ({ name, isRemote: true })),
         ];
-        creatorProvider.updateBranches(branches, currentBranch);
+        creatorProvider.updateBranches(branches, currentBranch, worktreeBranches);
       } catch (e) {
         // Silently ignore — branches just won't populate
       }
