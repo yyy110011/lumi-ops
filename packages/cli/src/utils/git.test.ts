@@ -193,6 +193,14 @@ describe('GitUtils', () => {
       const branches = await gitUtils.listRemoteBranches();
       expect(branches).toEqual(['origin/main']);
     });
+
+    it('should filter out bare remote names without slash', async () => {
+      // Some git versions return bare remote names (e.g. 'origin') for HEAD symrefs
+      mockGit.raw.mockResolvedValue('origin\norigin/main\norigin/feat/a\n');
+      const branches = await gitUtils.listRemoteBranches();
+      expect(branches).toEqual(['origin/main', 'origin/feat/a']);
+      expect(branches).not.toContain('origin');
+    });
   });
 
   describe('fetchRemote', () => {
