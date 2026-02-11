@@ -148,7 +148,8 @@ export async function activate(context: vscode.ExtensionContext) {
                 return shortName === branchName;
               });
               if (matchingRemote) {
-                await git.fetchBranch(branchName);
+                const remoteName = matchingRemote.substring(0, matchingRemote.indexOf('/'));
+                await git.fetchBranch(branchName, remoteName);
               }
             }
 
@@ -163,7 +164,8 @@ export async function activate(context: vscode.ExtensionContext) {
                   return shortName === baseBranch;
                 });
                 if (matchingRemote) {
-                  await git.fetchBranch(baseBranch);
+                  const remoteName = matchingRemote.substring(0, matchingRemote.indexOf('/'));
+                  await git.fetchBranch(baseBranch, remoteName);
                 }
               }
             }
