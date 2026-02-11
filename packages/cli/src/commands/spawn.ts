@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { GitUtils } from '../utils/git';
-import { SHADOW_CLONES_DIR } from '../constants';
+import { SHADOW_CLONES_DIR, METADATA_FILE } from '../constants';
 import chalk from 'chalk';
 
 export async function spawn(branchName: string, options: { root: string; description?: string; baseBranch?: string }) {
@@ -57,7 +57,7 @@ export async function spawn(branchName: string, options: { root: string; descrip
     }
 
     // 3b. Persist base branch metadata (centralized)
-    const metadataPath = path.join(shadowDir, '.lumi-metadata.json');
+    const metadataPath = path.join(shadowDir, METADATA_FILE);
     let metadata: Record<string, { baseBranch: string }> = {};
     try { metadata = await fs.readJSON(metadataPath); } catch {}
     metadata[branchName] = { baseBranch: resolvedBase };

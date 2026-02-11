@@ -44,7 +44,7 @@ vi.mock('chalk', () => ({
 const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
 
 import { spawn } from './spawn';
-import { SHADOW_CLONES_DIR } from '../constants';
+import { SHADOW_CLONES_DIR, METADATA_FILE } from '../constants';
 
 describe('spawn', () => {
   const rootDir = '/fake/root';
@@ -136,7 +136,7 @@ describe('spawn', () => {
     await spawn(branchName, { root: rootDir, baseBranch: 'develop' });
 
     expect(mockFs.writeJSON).toHaveBeenCalledWith(
-      path.join(shadowDir, '.lumi-metadata.json'),
+      path.join(shadowDir, METADATA_FILE),
       { [branchName]: { baseBranch: 'develop' } },
       { spaces: 2 },
     );
@@ -149,7 +149,7 @@ describe('spawn', () => {
     await spawn(branchName, { root: rootDir });
 
     expect(mockFs.writeJSON).toHaveBeenCalledWith(
-      path.join(shadowDir, '.lumi-metadata.json'),
+      path.join(shadowDir, METADATA_FILE),
       { [branchName]: { baseBranch: 'main' } },
       { spaces: 2 },
     );
