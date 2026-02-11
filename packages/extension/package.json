@@ -68,10 +68,6 @@
         "icon": "$(window)"
       },
       {
-        "command": "lumi-ops.setReviewStatus",
-        "title": "Set Status"
-      },
-      {
         "command": "lumi-ops.cycleReviewStatus",
         "title": "Cycle Status"
       }
@@ -104,11 +100,6 @@
           "command": "lumi-ops.merge",
           "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "modification@1"
-        },
-        {
-          "command": "lumi-ops.setReviewStatus",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
-          "group": "modification@2"
         },
         {
           "command": "lumi-ops.kill",

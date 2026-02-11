@@ -30,6 +30,8 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
   private itemCache: Map<string, ShadowItem> = new Map();
   /** Debounce timer for coalescing rapid disk writes */
   private diskWriteTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Track which branch is currently focused (selected) for focus-then-click guard */
+  private lastFocusedBranch: string | null = null;
 
   constructor(private workspaceRoot: string | undefined, private extensionPath: string) {}
 
@@ -192,9 +194,16 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
   }
 
   /**
-   * Cycle to the next review status — fully synchronous, no async, no loading.
+   * Cycle to the next review status with focus guard.
+   * First click on a branch just focuses it; subsequent clicks cycle the status.
    */
   cycleReviewStatus(branchName: string, currentStatus?: ReviewStatus): void {
+    if (this.lastFocusedBranch !== branchName) {
+      // First click — just focus, don't cycle
+      this.lastFocusedBranch = branchName;
+      return;
+    }
+    // Already focused — cycle status
     const cached = this.statusCache.get(branchName);
     const current = cached ?? currentStatus ?? 'todo';
     const idx = STATUS_ORDER.indexOf(current);
@@ -224,7 +233,7 @@ class ShadowItem extends vscode.TreeItem {
       const status: ReviewStatus = this.clone.reviewStatus || 'todo';
       this.applyStatus(status);
       this.description = this.clone.baseBranch ? `← ${this.clone.baseBranch}` : 'Shadow Clone';
-      // Click the row → cycle to next status
+      // Click the row → focus-then-cycle status
       this.command = {
         command: 'lumi-ops.cycleReviewStatus',
         title: 'Cycle Status',

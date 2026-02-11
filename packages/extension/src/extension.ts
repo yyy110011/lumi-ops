@@ -270,9 +270,10 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('lumi-ops.open', (clone: any) => {
-      if (clone && clone.path) {
-        const uri = vscode.Uri.file(clone.path);
+    vscode.commands.registerCommand('lumi-ops.open', (item: any) => {
+      const clonePath = item?.clone?.path;
+      if (clonePath) {
+        const uri = vscode.Uri.file(clonePath);
         vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: true });
       }
     })
