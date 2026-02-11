@@ -11,6 +11,7 @@ export * from './commands/kill';
 export * from './commands/list';
 export * from './commands/merge';
 export * from './utils/git';
+export * from './constants';
 
 
 

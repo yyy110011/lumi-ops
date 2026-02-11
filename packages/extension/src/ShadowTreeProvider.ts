@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { list, ShadowClone, GitUtils } from '@lumi-ops/cli';
+import { list, ShadowClone, GitUtils, SHADOW_CLONES_DIR } from '@lumi-ops/cli';
 
 
 export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
@@ -69,7 +69,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
         const git = new GitUtils(this.workspaceRoot);
 
         // Load centralized metadata once
-        const metadataPath = path.join(this.workspaceRoot, '.shadow-clones', '.lumi-metadata.json');
+        const metadataPath = path.join(this.workspaceRoot, SHADOW_CLONES_DIR, '.lumi-metadata.json');
         let metadata: Record<string, { baseBranch: string }> = {};
         try {
           const raw = fs.readFileSync(metadataPath, 'utf-8');
@@ -87,7 +87,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
 
           if (worktreePath && branch) {
             const branchName = branch.replace('refs/heads/', '');
-            const isShadow = worktreePath.includes('.shadow-clones');
+            const isShadow = worktreePath.includes(SHADOW_CLONES_DIR);
             let baseBranch: string | undefined;
             
             if (isShadow) {

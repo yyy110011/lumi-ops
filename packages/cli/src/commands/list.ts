@@ -1,5 +1,6 @@
 import * as path from 'path';
 import { GitUtils } from '../utils/git';
+import { SHADOW_CLONES_DIR } from '../constants';
 import chalk from 'chalk';
 
 export interface ShadowClone {
@@ -23,7 +24,7 @@ export async function list(options: { root: string; json?: boolean }) {
       const branch = lines.find(l => l.startsWith('branch'))?.split(' ').pop();
 
       if (worktreePath && branch) {
-        const isShadow = worktreePath.includes('.shadow-clones');
+        const isShadow = worktreePath.includes(SHADOW_CLONES_DIR);
         shadowClones.push({
           branch: branch.replace('refs/heads/', ''),
           path: worktreePath,

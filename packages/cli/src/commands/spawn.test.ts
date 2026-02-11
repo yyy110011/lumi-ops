@@ -44,11 +44,12 @@ vi.mock('chalk', () => ({
 const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
 
 import { spawn } from './spawn';
+import { SHADOW_CLONES_DIR } from '../constants';
 
 describe('spawn', () => {
   const rootDir = '/fake/root';
   const branchName = 'feat/my-feature';
-  const shadowDir = path.join(rootDir, '.shadow-clones');
+  const shadowDir = path.join(rootDir, SHADOW_CLONES_DIR);
   const targetPath = path.join(shadowDir, branchName);
 
   beforeEach(() => {

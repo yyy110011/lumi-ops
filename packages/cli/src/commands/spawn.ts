@@ -1,12 +1,13 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { GitUtils } from '../utils/git';
+import { SHADOW_CLONES_DIR } from '../constants';
 import chalk from 'chalk';
 
 export async function spawn(branchName: string, options: { root: string; description?: string; baseBranch?: string }) {
   const rootDir = path.resolve(options.root);
   const git = new GitUtils(rootDir);
-  const shadowDir = path.join(rootDir, '.shadow-clones');
+  const shadowDir = path.join(rootDir, SHADOW_CLONES_DIR);
   const targetPath = path.join(shadowDir, branchName);
 
   try {
@@ -22,7 +23,7 @@ export async function spawn(branchName: string, options: { root: string; descrip
 
     // 2. Add .shadow-clones to .gitignore (if not already present)
     const gitignorePath = path.join(rootDir, '.gitignore');
-    const shadowClonesEntry = '.shadow-clones';
+    const shadowClonesEntry = SHADOW_CLONES_DIR;
     
     try {
       let gitignoreContent = '';
@@ -37,7 +38,7 @@ export async function spawn(branchName: string, options: { root: string; descrip
         // Append to .gitignore
         const newLine = gitignoreContent.endsWith('\n') || gitignoreContent === '' ? '' : '\n';
         await fs.appendFile(gitignorePath, `${newLine}${shadowClonesEntry}\n`);
-        console.log(chalk.gray('✓ Added .shadow-clones to .gitignore.'));
+        console.log(chalk.gray(`✓ Added ${SHADOW_CLONES_DIR} to .gitignore.`));
       }
     } catch (e) {
       // Silently ignore gitignore errors
