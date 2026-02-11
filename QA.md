@@ -26,3 +26,21 @@
 - [ ] 16. 建兩個 clone（A 和 B），打開 Branch Name dropdown → A 和 B 不在列表中
 - [ ] 17. Kill 掉 clone A，重新打開 dropdown → A 重新出現
 - [ ] 18. 打開 Base Branch dropdown → A 和 B 都在列表中（不過濾 worktree）
+
+## Focus Guard（單一 Clone 邊界情況）
+
+- [ ] 19. 只有一個 shadow clone 時，第一次點擊 → 只 focus，不 cycle
+- [ ] 20. 只有一個 clone，等 5 秒（polling refresh），再點 → 仍然只 focus 不 cycle
+- [ ] 21. 連續 cycle 幾次（todo→inProgress→done），等 5 秒 refresh → 狀態保持不被重置
+- [ ] 22. Cycle 途中等 refresh 後再點 → 需要多一次 focus click 才能繼續 cycle（預期行為）
+
+## Polling & 即時更新
+
+- [ ] 23. 在 terminal 用 CLI `lumi spawn` 建新 clone → 5 秒內自動出現在 tree 中
+- [ ] 24. 在 terminal 用 CLI `lumi kill` 刪 clone → 5 秒內自動從 tree 消失
+- [ ] 25. 快速 cycle status 多次 → 無 loading bar 閃動，icon 即時切換
+
+## 錯誤處理
+
+- [ ] 26. 斷網狀態下打開 Branch Name dropdown → 只顯示 local branch，不 crash
+- [ ] 27. 輸入已被 worktree 佔用的 branch name（手動打字，不從 dropdown 選） → Spawn 應顯示 git 錯誤訊息
