@@ -4,11 +4,10 @@ import * as fs from 'fs';
 import { list, ShadowClone, GitUtils, SHADOW_CLONES_DIR, METADATA_FILE } from '@lumi-ops/cli';
 import type { ReviewStatus } from '@lumi-ops/cli';
 
-const STATUS_SVG: Record<ReviewStatus, string> = {
-  todo:       'status-todo.svg',
-  inProgress: 'status-in-progress.svg',
-  done:       'status-done.svg',
-  wontDo:     'status-wont-do.svg',
+const STATUS_SVG: Partial<Record<ReviewStatus, string>> = {
+  todo:   'status-todo.svg',
+  done:   'status-done.svg',
+  wontDo: 'status-wont-do.svg',
 };
 
 const STATUS_LABELS: Record<ReviewStatus, string> = {
@@ -250,7 +249,9 @@ class ShadowItem extends vscode.TreeItem {
       this.iconPath = new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('notificationsInfoIcon.foreground'));
     } else {
       const svgFile = STATUS_SVG[status];
-      this.iconPath = vscode.Uri.file(path.join(this.extensionPath!, 'media', svgFile));
+      this.iconPath = svgFile
+        ? vscode.Uri.file(path.join(this.extensionPath!, 'media', svgFile))
+        : new vscode.ThemeIcon('circle-outline');
     }
   }
 
