@@ -37,6 +37,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
   /** Full refresh: clears item cache, re-fetches from git */
   refresh(): void {
     this.itemCache.clear();
+    this.lastFocusedBranch = null;
     this._onDidChangeTreeData.fire();
   }
 
