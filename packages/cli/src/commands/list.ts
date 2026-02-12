@@ -14,41 +14,51 @@ export interface ShadowClone {
   hasConflict?: boolean;
 }
 
+/**
+ * Parse raw `git worktree list --porcelain` entries into ShadowClone objects.
+ * Handles detached HEAD worktrees (e.g. during rebase conflict) by deriving
+ * the branch name from the worktree path relative to SHADOW_CLONES_DIR.
+ */
+export function parseWorktrees(rawEntries: string[], rootDir: string): ShadowClone[] {
+  const clones: ShadowClone[] = [];
+
+  for (const entry of rawEntries) {
+    const lines = entry.split('\n');
+    const wtLine = lines.find(l => l.startsWith('worktree '));
+    const worktreePath = wtLine ? wtLine.substring('worktree '.length) : undefined;
+    const branch = lines.find(l => l.startsWith('branch'))?.split(' ').pop();
+
+    if (worktreePath && branch) {
+      clones.push({
+        branch: branch.replace('refs/heads/', ''),
+        path: worktreePath,
+        isShadow: worktreePath.includes(SHADOW_CLONES_DIR),
+      });
+    } else if (worktreePath && !branch && worktreePath.includes(SHADOW_CLONES_DIR)) {
+      // Detached HEAD (e.g. during rebase conflict) — derive branch from path
+      const shadowRoot = path.join(rootDir, SHADOW_CLONES_DIR);
+      const relativePath = path.relative(shadowRoot, worktreePath);
+      if (relativePath && !relativePath.startsWith('..')) {
+        clones.push({
+          branch: relativePath,
+          path: worktreePath,
+          isShadow: true,
+          isDetached: true,
+        });
+      }
+    }
+  }
+
+  return clones;
+}
+
 export async function list(options: { root: string; json?: boolean }) {
   const rootDir = path.resolve(options.root);
   const git = new GitUtils(rootDir);
 
   try {
     const worktreesRaw = await git.listWorktrees();
-    const shadowClones: ShadowClone[] = [];
-
-    for (const entry of worktreesRaw) {
-      const lines = entry.split('\n');
-      const wtLine = lines.find(l => l.startsWith('worktree '));
-      const worktreePath = wtLine ? wtLine.substring('worktree '.length) : undefined;
-      const branch = lines.find(l => l.startsWith('branch'))?.split(' ').pop();
-
-      if (worktreePath && branch) {
-        const isShadow = worktreePath.includes(SHADOW_CLONES_DIR);
-        shadowClones.push({
-          branch: branch.replace('refs/heads/', ''),
-          path: worktreePath,
-          isShadow
-        });
-      } else if (worktreePath && !branch && worktreePath.includes(SHADOW_CLONES_DIR)) {
-        // Detached HEAD (e.g. during rebase conflict) — derive branch from path
-        const shadowRoot = path.join(rootDir, SHADOW_CLONES_DIR);
-        const relativePath = path.relative(shadowRoot, worktreePath);
-        if (relativePath && !relativePath.startsWith('..')) {
-          shadowClones.push({
-            branch: relativePath,
-            path: worktreePath,
-            isShadow: true,
-            isDetached: true
-          });
-        }
-      }
-    }
+    const shadowClones = parseWorktrees(worktreesRaw, rootDir);
 
     if (options.json) {
       console.log(JSON.stringify(shadowClones, null, 2));

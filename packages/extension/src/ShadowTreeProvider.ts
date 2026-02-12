@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { list, ShadowClone, GitUtils, SHADOW_CLONES_DIR, METADATA_FILE } from '@lumi-ops/cli';
+import { parseWorktrees, ShadowClone, GitUtils, SHADOW_CLONES_DIR, METADATA_FILE } from '@lumi-ops/cli';
 import type { ReviewStatus } from '@lumi-ops/cli';
 
 const STATUS_SVG: Partial<Record<ReviewStatus, string>> = {
@@ -98,8 +98,6 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
 
   private async getShadowClones(): Promise<ShadowClone[]> {
     if (!this.workspaceRoot) return [];
-    
-    const worktrees: ShadowClone[] = [];
 
     try {
         const git = new GitUtils(this.workspaceRoot);
@@ -115,67 +113,31 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
         }
 
         const worktreesRaw = await git.listWorktrees();
-        
-        // First pass: collect worktree data
-        const entries: { branchName: string; worktreePath: string; isShadow: boolean; isDetached: boolean; meta: any }[] = [];
-        for (const entry of worktreesRaw) {
-          const lines = entry.split('\n');
-          const wtLine = lines.find((l: string) => l.startsWith('worktree '));
-          const worktreePath = wtLine ? wtLine.substring('worktree '.length) : undefined;
-          const branch = lines.find((l: string) => l.startsWith('branch'))?.split(' ').pop();
-          const isDetached = lines.some((l: string) => l.trim() === 'detached');
+        const clones = parseWorktrees(worktreesRaw, this.workspaceRoot!);
 
-          if (worktreePath && branch) {
-            const branchName = branch.replace('refs/heads/', '');
-            entries.push({
-              branchName,
-              worktreePath,
-              isShadow: worktreePath.includes(SHADOW_CLONES_DIR),
-              isDetached: false,
-              meta: metadata[branchName],
-            });
-          } else if (worktreePath && !branch && isDetached && worktreePath.includes(SHADOW_CLONES_DIR)) {
-            // Detached HEAD (e.g. during rebase conflict) — derive branch from path
-            const shadowRoot = path.join(this.workspaceRoot!, SHADOW_CLONES_DIR);
-            const branchName = path.relative(shadowRoot, worktreePath);
-            if (branchName && !branchName.startsWith('..')) {
-              entries.push({
-                branchName,
-                worktreePath,
-                isShadow: true,
-                isDetached: true,
-                meta: metadata[branchName],
-              });
-            }
+        // Enrich with metadata
+        for (const clone of clones) {
+          const meta = metadata[clone.branch];
+          if (meta) {
+            clone.baseBranch = meta.baseBranch;
+            clone.reviewStatus = meta.reviewStatus;
           }
         }
 
-        // Second pass: check conflicts in parallel
+        // Check conflicts in parallel
         const conflictResults = await Promise.all(
-          entries.map(async (e) => {
+          clones.map(async (c) => {
             try {
-              const wtGit = new GitUtils(e.worktreePath);
+              const wtGit = new GitUtils(c.path);
               return await wtGit.hasConflicts();
             } catch {
               return false;
             }
           })
         );
+        clones.forEach((c, i) => { c.hasConflict = conflictResults[i]; });
 
-        // Build final list
-        for (let i = 0; i < entries.length; i++) {
-          const e = entries[i];
-          worktrees.push({
-            branch: e.branchName,
-            path: e.worktreePath,
-            isShadow: e.isShadow,
-            isDetached: e.isDetached,
-            baseBranch: e.meta?.baseBranch,
-            reviewStatus: e.meta?.reviewStatus,
-            hasConflict: conflictResults[i],
-          });
-        }
-        return worktrees;
+        return clones;
     } catch (e) {
         console.error(e);
         return [];
