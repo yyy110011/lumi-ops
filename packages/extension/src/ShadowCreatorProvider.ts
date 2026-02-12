@@ -78,31 +78,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           border: 1px solid var(--vscode-input-border);
           border-radius: 6px;
         }
-        .branch-row {
-          display: flex;
-          gap: 4px;
-          align-items: stretch;
-        }
-        .branch-row input {
-          flex: 1;
-          min-width: 0;
-        }
-        .branch-browse-btn {
-          flex-shrink: 0;
-          padding: 6px 8px;
-          background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
-          color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
-          border: 1px solid var(--vscode-input-border);
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 14px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .branch-browse-btn:hover {
-          background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-hoverBackground));
-        }
+
         .dropdown-overlay {
           display: none;
           position: fixed;
@@ -169,30 +145,6 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         .branch-wrapper {
           position: relative;
         }
-        /* Base branch selector row */
-        .base-branch-row {
-          display: flex;
-          gap: 4px;
-          align-items: stretch;
-        }
-        .base-branch-display {
-          flex: 1;
-          min-width: 0;
-          padding: 8px;
-          background: var(--vscode-input-background);
-          color: var(--vscode-input-foreground);
-          border: 1px solid var(--vscode-input-border);
-          border-radius: 6px;
-          font-size: 13px;
-          cursor: default;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .base-branch-display .current-marker {
-          color: var(--vscode-descriptionForeground);
-          font-size: 11px;
-        }
         button#spawnBtn {
           width: 100%;
           padding: 8px;
@@ -212,24 +164,16 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
       <div class="form-group">
         <label for="branch">Branch Name</label>
         <div class="branch-wrapper">
-          <div class="branch-row">
-            <input type="text" id="branch" placeholder="feature/new-task">
-            <button class="branch-browse-btn" id="browseBtn" title="Browse existing branches">▾</button>
-          </div>
+          <input type="text" id="branch" placeholder="feature/new-task">
           <div class="dropdown-overlay" id="overlay"></div>
           <div class="branch-dropdown" id="branchDropdown"></div>
         </div>
       </div>
 
       <div class="form-group" id="baseBranchGroup">
-        <label>Base Branch</label>
+        <label for="baseBranchInput">Base Branch</label>
         <div class="branch-wrapper">
-          <div class="base-branch-row">
-            <div class="base-branch-display" id="baseBranchDisplay">
-              <span id="baseBranchText">loading...</span>
-            </div>
-            <button class="branch-browse-btn" id="baseBrowseBtn" title="Choose base branch">▾</button>
-          </div>
+          <input type="text" id="baseBranchInput" placeholder="loading...">
           <div class="dropdown-overlay" id="baseOverlay"></div>
           <div class="branch-dropdown" id="baseBranchDropdown"></div>
         </div>
@@ -250,13 +194,10 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         let worktreeBranches = [];
 
         const branchInput = document.getElementById('branch');
-        const browseBtn = document.getElementById('browseBtn');
         const dropdown = document.getElementById('branchDropdown');
         const overlay = document.getElementById('overlay');
 
-        const baseBranchDisplay = document.getElementById('baseBranchDisplay');
-        const baseBranchText = document.getElementById('baseBranchText');
-        const baseBrowseBtn = document.getElementById('baseBrowseBtn');
+        const baseBranchInput = document.getElementById('baseBranchInput');
         const baseDropdown = document.getElementById('baseBranchDropdown');
         const baseOverlay = document.getElementById('baseOverlay');
 
@@ -291,7 +232,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
             if (newCurrent !== currentBranch || !selectedBaseBranch) {
               currentBranch = newCurrent;
               selectedBaseBranch = currentBranch;
-              updateBaseBranchDisplay();
+              baseBranchInput.value = selectedBaseBranch;
             }
             currentBranch = newCurrent;
             updateBaseBranchVisibility();
@@ -307,33 +248,27 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
             descriptionEl.value = '';
             spawnBtn.textContent = 'Create Clone Only';
             selectedBaseBranch = currentBranch;
-            updateBaseBranchDisplay();
+            baseBranchInput.value = selectedBaseBranch;
             updateBaseBranchVisibility();
             // Re-fetch branch list after spawn/kill
             vscode.postMessage({ command: 'getBranches' });
           }
         });
 
-        function updateBaseBranchDisplay() {
-          if (selectedBaseBranch === currentBranch) {
-            baseBranchText.innerHTML = selectedBaseBranch + ' <span class="current-marker">← current</span>';
-          } else {
-            baseBranchText.textContent = selectedBaseBranch;
-          }
-        }
-
         // ---- Branch Name Dropdown ----
-        function showDropdown() {
+        function renderBranchItems() {
           dropdown.innerHTML = '';
           const filter = branchInput.value.toLowerCase();
           const worktreeSet = new Set(worktreeBranches);
-          // Filter out worktree-occupied branches from Branch Name dropdown
           const available = branches.filter(b => !worktreeSet.has(b.name));
           const localFiltered = available.filter(b => !b.isRemote && b.name.toLowerCase().includes(filter));
           const remoteFiltered = available.filter(b => b.isRemote && b.name.toLowerCase().includes(filter));
 
           if (localFiltered.length === 0 && remoteFiltered.length === 0) {
-            dropdown.innerHTML = '<div class="branch-dropdown-empty">No matching branches</div>';
+            const empty = document.createElement('div');
+            empty.className = 'branch-dropdown-empty';
+            empty.textContent = filter ? '+ Create new branch: ' + branchInput.value.trim() : 'No branches available';
+            dropdown.appendChild(empty);
           } else {
             localFiltered.forEach(b => {
               const item = document.createElement('div');
@@ -367,6 +302,10 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
               });
             }
           }
+        }
+
+        function showDropdown() {
+          renderBranchItems();
           dropdown.classList.add('show');
           overlay.classList.add('show');
         }
@@ -376,28 +315,36 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           overlay.classList.remove('show');
         }
 
-        browseBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
+        overlay.addEventListener('click', hideDropdown);
+
+        // Typing in branch input filters dropdown in real-time
+        branchInput.addEventListener('input', () => {
+          updateBaseBranchVisibility();
           if (dropdown.classList.contains('show')) {
-            hideDropdown();
-          } else {
+            renderBranchItems();
+          }
+        });
+
+        // Clicking branch input opens dropdown
+        branchInput.addEventListener('focus', () => {
+          hideBaseDropdown(); // close other dropdown
+          if (!dropdown.classList.contains('show')) {
             vscode.postMessage({ command: 'getBranches' });
             showDropdown();
           }
         });
 
-        overlay.addEventListener('click', hideDropdown);
-
-        branchInput.addEventListener('input', () => {
-          updateBaseBranchVisibility();
-          if (dropdown.classList.contains('show')) {
-            showDropdown();
+        // Enter/Tab closes dropdown
+        branchInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === 'Tab') {
+            hideDropdown();
           }
         });
 
         // ---- Base Branch Dropdown ----
-        function showBaseDropdown() {
+        function renderBaseItems() {
           baseDropdown.innerHTML = '';
+          const filter = baseBranchInput.value.toLowerCase();
 
           const selectedBranch = branchInput.value.trim();
           const allBranches = [
@@ -405,8 +352,16 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
             ...branches.filter(b => b.name !== currentBranch)
           ].filter(b => b.name !== selectedBranch);
 
-          const localItems = allBranches.filter(b => !b.isRemote);
-          const remoteItems = allBranches.filter(b => b.isRemote);
+          const localItems = allBranches.filter(b => !b.isRemote && b.name.toLowerCase().includes(filter));
+          const remoteItems = allBranches.filter(b => b.isRemote && b.name.toLowerCase().includes(filter));
+
+          if (localItems.length === 0 && remoteItems.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'branch-dropdown-empty';
+            empty.textContent = filter ? 'No matching branches' : 'No branches available';
+            baseDropdown.appendChild(empty);
+            return;
+          }
 
           localItems.forEach(b => {
             const item = document.createElement('div');
@@ -414,7 +369,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
             item.textContent = b.name + (b.isCurrent ? ' ← current' : '');
             item.addEventListener('click', () => {
               selectedBaseBranch = b.name;
-              updateBaseBranchDisplay();
+              baseBranchInput.value = b.name;
               hideBaseDropdown();
             });
             baseDropdown.appendChild(item);
@@ -433,13 +388,16 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
               item.innerHTML = '<span class="remote-icon">☁</span>' + b.name;
               item.addEventListener('click', () => {
                 selectedBaseBranch = b.name;
-                updateBaseBranchDisplay();
+                baseBranchInput.value = b.name;
                 hideBaseDropdown();
               });
               baseDropdown.appendChild(item);
             });
           }
+        }
 
+        function showBaseDropdown() {
+          renderBaseItems();
           baseDropdown.classList.add('show');
           baseOverlay.classList.add('show');
         }
@@ -449,26 +407,30 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           baseOverlay.classList.remove('show');
         }
 
-        baseBrowseBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
+        baseOverlay.addEventListener('click', hideBaseDropdown);
+
+        // Typing in base input filters dropdown in real-time
+        baseBranchInput.addEventListener('input', () => {
           if (baseDropdown.classList.contains('show')) {
-            hideBaseDropdown();
-          } else {
+            renderBaseItems();
+          }
+        });
+
+        // Clicking base input opens dropdown
+        baseBranchInput.addEventListener('focus', () => {
+          hideDropdown(); // close other dropdown
+          if (!baseDropdown.classList.contains('show')) {
             vscode.postMessage({ command: 'getBranches' });
             showBaseDropdown();
           }
         });
 
-        baseBranchDisplay.addEventListener('click', (e) => {
-          e.stopPropagation();
-          if (baseDropdown.classList.contains('show')) {
+        // Enter/Tab closes dropdown
+        baseBranchInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === 'Tab') {
             hideBaseDropdown();
-          } else {
-            showBaseDropdown();
           }
         });
-
-        baseOverlay.addEventListener('click', hideBaseDropdown);
 
         // ---- Spawn Button ----
         const spawnBtn = document.getElementById('spawnBtn');
