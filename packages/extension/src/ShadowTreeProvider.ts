@@ -116,24 +116,48 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
 
         const worktreesRaw = await git.listWorktrees();
         
+        // First pass: collect worktree data
+        const entries: { branchName: string; worktreePath: string; isShadow: boolean; meta: any }[] = [];
         for (const entry of worktreesRaw) {
           const lines = entry.split('\n');
-          const worktreePath = lines.find((l: string) => l.startsWith('worktree'))?.split(' ')[1];
+          const wtLine = lines.find((l: string) => l.startsWith('worktree '));
+          const worktreePath = wtLine ? wtLine.substring('worktree '.length) : undefined;
           const branch = lines.find((l: string) => l.startsWith('branch'))?.split(' ').pop();
 
           if (worktreePath && branch) {
             const branchName = branch.replace('refs/heads/', '');
-            const isShadow = worktreePath.includes(SHADOW_CLONES_DIR);
-            const meta = metadata[branchName];
-            
-            worktrees.push({
-              branch: branchName,
-              path: worktreePath,
-              isShadow,
-              baseBranch: meta?.baseBranch,
-              reviewStatus: meta?.reviewStatus,
+            entries.push({
+              branchName,
+              worktreePath,
+              isShadow: worktreePath.includes(SHADOW_CLONES_DIR),
+              meta: metadata[branchName],
             });
           }
+        }
+
+        // Second pass: check conflicts in parallel
+        const conflictResults = await Promise.all(
+          entries.map(async (e) => {
+            try {
+              const wtGit = new GitUtils(e.worktreePath);
+              return await wtGit.hasConflicts();
+            } catch {
+              return false;
+            }
+          })
+        );
+
+        // Build final list
+        for (let i = 0; i < entries.length; i++) {
+          const e = entries[i];
+          worktrees.push({
+            branch: e.branchName,
+            path: e.worktreePath,
+            isShadow: e.isShadow,
+            baseBranch: e.meta?.baseBranch,
+            reviewStatus: e.meta?.reviewStatus,
+            hasConflict: conflictResults[i],
+          });
         }
         return worktrees;
     } catch (e) {
@@ -225,14 +249,17 @@ class ShadowItem extends vscode.TreeItem {
     this.id = `shadow-${clone.branch}`;
     this.contextValue = role;
 
+    const conflictPrefix = this.clone.hasConflict ? '⚠️ · ' : '';
+
     if (role === 'currentBranch') {
       this.tooltip = `Current workspace: ${this.clone.path}`;
-      this.description = '🏠 Current Branch';
+      this.description = `${conflictPrefix}Current Branch`;
       this.iconPath = new vscode.ThemeIcon('home');
     } else {
       const status: ReviewStatus = this.clone.reviewStatus || 'todo';
       this.applyStatus(status);
-      this.description = this.clone.baseBranch ? `← ${this.clone.baseBranch}` : 'Shadow Clone';
+      const baseDesc = this.clone.baseBranch ? `← ${this.clone.baseBranch}` : 'Shadow Clone';
+      this.description = `${conflictPrefix}${baseDesc}`;
       // Click the row → focus-then-cycle status
       this.command = {
         command: 'lumi-ops.cycleReviewStatus',

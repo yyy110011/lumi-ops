@@ -122,6 +122,39 @@ describe('e2e: spawn', () => {
     const missionPath = path.join(worktreePath, 'MISSION.md');
     expect(await fs.pathExists(missionPath)).toBe(false);
   });
+
+  it('should record baseBranch in metadata for new branches', async () => {
+    await spawn('feat/meta-new', { root: tmpDir, baseBranch: 'main' });
+
+    const metadataPath = path.join(tmpDir, '.shadow-clones', '.lumi-metadata.json');
+    const metadata = await fs.readJSON(metadataPath);
+    expect(metadata['feat/meta-new']).toBeDefined();
+    expect(metadata['feat/meta-new'].baseBranch).toBe('main');
+  });
+
+  it('should NOT record baseBranch for existing branches', async () => {
+    // Pre-create a branch
+    await git.checkoutLocalBranch('feat/meta-existing');
+    await git.checkout('main');
+
+    await spawn('feat/meta-existing', { root: tmpDir });
+
+    const metadataPath = path.join(tmpDir, '.shadow-clones', '.lumi-metadata.json');
+    const metadata = await fs.readJSON(metadataPath);
+    expect(metadata['feat/meta-existing']).toBeDefined();
+    expect(metadata['feat/meta-existing'].baseBranch).toBeUndefined();
+  });
+
+  it('should record custom baseBranch when provided', async () => {
+    await git.checkoutLocalBranch('develop');
+    await git.checkout('main');
+
+    await spawn('feat/meta-custom-base', { root: tmpDir, baseBranch: 'develop' });
+
+    const metadataPath = path.join(tmpDir, '.shadow-clones', '.lumi-metadata.json');
+    const metadata = await fs.readJSON(metadataPath);
+    expect(metadata['feat/meta-custom-base'].baseBranch).toBe('develop');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -149,6 +182,107 @@ describe('e2e: merge', () => {
     expect(await fs.pathExists(mergedFile)).toBe(true);
     const content = await fs.readFile(mergedFile, 'utf-8');
     expect(content).toBe('hello from shadow clone\n');
+  });
+
+  it('should use custom commitMessage when provided', async () => {
+    const branchName = 'feat/custom-msg';
+    await spawn(branchName, { root: tmpDir });
+
+    const worktreePath = path.join(tmpDir, '.shadow-clones', branchName);
+    await fs.writeFile(path.join(worktreePath, 'msg-test.txt'), 'custom\n');
+    const wtGit = simpleGit(worktreePath);
+    await wtGit.add('.');
+    await wtGit.commit('feat: for custom msg test');
+
+    await merge(branchName, { root: tmpDir, commitMessage: 'my custom message' });
+
+    // Verify the commit message on main
+    const log = await git.log({ maxCount: 1 });
+    expect(log.latest?.message).toBe('my custom message');
+  });
+
+  it('should merge into a different branch via cwd option', async () => {
+    // Create a target branch
+    await git.checkoutLocalBranch('develop');
+    await git.checkout('main');
+
+    const branchName = 'feat/cwd-merge';
+    await spawn(branchName, { root: tmpDir });
+
+    const worktreePath = path.join(tmpDir, '.shadow-clones', branchName);
+    await fs.writeFile(path.join(worktreePath, 'cwd-test.txt'), 'cwd works\n');
+    const wtGit = simpleGit(worktreePath);
+    await wtGit.add('.');
+    await wtGit.commit('feat: cwd test file');
+
+    // Create a worktree for develop to merge into
+    const developWT = path.join(tmpDir, '.shadow-clones', 'develop');
+    await git.raw(['worktree', 'add', developWT, 'develop']);
+
+    // Merge into develop via cwd
+    await merge(branchName, { root: tmpDir, cwd: developWT });
+
+    // Verify file exists in develop worktree
+    expect(await fs.pathExists(path.join(developWT, 'cwd-test.txt'))).toBe(true);
+
+    // Verify file does NOT exist on main
+    expect(await fs.pathExists(path.join(tmpDir, 'cwd-test.txt'))).toBe(false);
+  });
+
+  it('should throw CONFLICT when merge has conflicts', async () => {
+    const branchName = 'feat/conflict-test';
+    await spawn(branchName, { root: tmpDir });
+
+    // Modify a file in the clone
+    const worktreePath = path.join(tmpDir, '.shadow-clones', branchName);
+    await fs.writeFile(path.join(worktreePath, 'README.md'), 'CLONE version\n');
+    const wtGit = simpleGit(worktreePath);
+    await wtGit.add('.');
+    await wtGit.commit('feat: clone modifies README');
+
+    // Modify the same file on main (conflict)
+    await fs.writeFile(path.join(tmpDir, 'README.md'), 'MAIN version\n');
+    await git.add('.');
+    await git.commit('feat: main modifies README');
+
+    // Merge should throw CONFLICT
+    await expect(merge(branchName, { root: tmpDir })).rejects.toThrow('CONFLICT');
+  });
+
+  it('should detect conflicts via hasConflicts() after failed merge', async () => {
+    const { GitUtils } = await import('../utils/git');
+    const branchName = 'feat/detect-conflict';
+    await spawn(branchName, { root: tmpDir });
+
+    // Create conflicting changes
+    const worktreePath = path.join(tmpDir, '.shadow-clones', branchName);
+    await fs.writeFile(path.join(worktreePath, 'README.md'), 'CLONE side\n');
+    const wtGit = simpleGit(worktreePath);
+    await wtGit.add('.');
+    await wtGit.commit('clone: modify README');
+
+    await fs.writeFile(path.join(tmpDir, 'README.md'), 'MAIN side\n');
+    await git.add('.');
+    await git.commit('main: modify README');
+
+    // hasConflicts should be false before merge
+    const gitUtils = new GitUtils(tmpDir);
+    expect(await gitUtils.hasConflicts()).toBe(false);
+
+    // Trigger conflict
+    try {
+      await merge(branchName, { root: tmpDir });
+    } catch {
+      // Expected CONFLICT
+    }
+
+    // hasConflicts should be true after failed merge
+    expect(await gitUtils.hasConflicts()).toBe(true);
+
+    // Resolve conflict and verify auto-clear
+    await fs.writeFile(path.join(tmpDir, 'README.md'), 'resolved\n');
+    await git.add('.');
+    expect(await gitUtils.hasConflicts()).toBe(false);
   });
 });
 

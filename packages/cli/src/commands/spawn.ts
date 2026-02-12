@@ -58,11 +58,17 @@ export async function spawn(branchName: string, options: { root: string; descrip
 
     // 3b. Persist base branch metadata (centralized)
     const metadataPath = path.join(shadowDir, METADATA_FILE);
-    let metadata: Record<string, { baseBranch: string }> = {};
+    let metadata: Record<string, { baseBranch?: string }> = {};
     try { metadata = await fs.readJSON(metadataPath); } catch {}
-    metadata[branchName] = { baseBranch: resolvedBase };
+    if (exists) {
+      // Existing branch — base is unknown, don't record
+      metadata[branchName] = {};
+      console.log(chalk.gray(`✓ Base branch: unknown (existing branch)`));
+    } else {
+      metadata[branchName] = { baseBranch: resolvedBase };
+      console.log(chalk.gray(`✓ Recorded base branch: ${resolvedBase}`));
+    }
     await fs.writeJSON(metadataPath, metadata, { spaces: 2 });
-    console.log(chalk.gray(`✓ Recorded base branch: ${resolvedBase}`));
 
     // 4. Copy .env from root to worktree (if exists)
     const rootEnv = path.join(rootDir, '.env');

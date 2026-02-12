@@ -299,4 +299,47 @@ describe('GitUtils', () => {
       expect(result.find(b => b.name === 'feat/in-worktree')).toBeUndefined();
     });
   });
+
+  describe('hasConflicts', () => {
+    it('should return true when UU (both modified) conflicts exist', async () => {
+      mockGit.raw.mockResolvedValue('UU conflict-file.txt\n');
+      expect(await gitUtils.hasConflicts()).toBe(true);
+      expect(mockGit.raw).toHaveBeenCalledWith(['status', '--porcelain']);
+    });
+
+    it('should return true when AA (both added) conflicts exist', async () => {
+      mockGit.raw.mockResolvedValue('AA new-file.txt\n');
+      expect(await gitUtils.hasConflicts()).toBe(true);
+    });
+
+    it('should return true when DD (both deleted) conflicts exist', async () => {
+      mockGit.raw.mockResolvedValue('DD removed-file.txt\n');
+      expect(await gitUtils.hasConflicts()).toBe(true);
+    });
+
+    it('should return true when DU/UD conflicts exist', async () => {
+      mockGit.raw.mockResolvedValue('DU file-a.txt\nUD file-b.txt\n');
+      expect(await gitUtils.hasConflicts()).toBe(true);
+    });
+
+    it('should return false when working tree is clean', async () => {
+      mockGit.raw.mockResolvedValue('');
+      expect(await gitUtils.hasConflicts()).toBe(false);
+    });
+
+    it('should return false when only normal modifications exist (no conflicts)', async () => {
+      mockGit.raw.mockResolvedValue('M  modified.txt\nA  added.txt\n?? untracked.txt\n');
+      expect(await gitUtils.hasConflicts()).toBe(false);
+    });
+
+    it('should return true when conflicts exist alongside normal changes', async () => {
+      mockGit.raw.mockResolvedValue('M  clean.txt\nUU conflict.txt\n?? untracked.txt\n');
+      expect(await gitUtils.hasConflicts()).toBe(true);
+    });
+
+    it('should return false when git status throws', async () => {
+      mockGit.raw.mockRejectedValue(new Error('not a git repo'));
+      expect(await gitUtils.hasConflicts()).toBe(false);
+    });
+  });
 });

@@ -10,6 +10,7 @@ export interface ShadowClone {
   isShadow: boolean;
   baseBranch?: string;
   reviewStatus?: ReviewStatus;
+  hasConflict?: boolean;
 }
 
 export async function list(options: { root: string; json?: boolean }) {
@@ -22,7 +23,8 @@ export async function list(options: { root: string; json?: boolean }) {
 
     for (const entry of worktreesRaw) {
       const lines = entry.split('\n');
-      const worktreePath = lines.find(l => l.startsWith('worktree'))?.split(' ')[1];
+      const wtLine = lines.find(l => l.startsWith('worktree '));
+      const worktreePath = wtLine ? wtLine.substring('worktree '.length) : undefined;
       const branch = lines.find(l => l.startsWith('branch'))?.split(' ').pop();
 
       if (worktreePath && branch) {

@@ -2,37 +2,36 @@ import * as path from 'path';
 import { GitUtils } from '../utils/git';
 import chalk from 'chalk';
 
-export async function merge(branchName: string, options: { root: string }) {
-  // 1. Initialize Git at Root (Essential for correct worktree operations)
-  // We use options.root or process.cwd() as a fallback, but the extension usually passes options.root.
+export async function merge(branchName: string, options: {
+  root: string;
+  commitMessage?: string;
+  cwd?: string; // Directory to run merge in (worktree path for target branch)
+}) {
   const rootDir = options.root ? path.resolve(options.root) : process.cwd();
-  
-  const git = new GitUtils(rootDir);
+  // If cwd is provided, run merge there; otherwise merge in root (legacy fallback)
+  const mergeDir = options.cwd ? path.resolve(options.cwd) : rootDir;
+  const git = new GitUtils(mergeDir);
 
-  console.log(chalk.blue(`🔀 Merging shadow clone ${branchName} into current branch...`));
+  const effectiveCommitMessage = options.commitMessage || `feat: merged ${branchName} (shadow clone)`;
+
+  console.log(chalk.blue(`🔀 Merging shadow clone ${branchName} in ${mergeDir}...`));
 
   try {
-    // 2. Execute Squash Merge
-    // This merges the changes from the shadow clone branch into the *current* active branch of the main repo.
-    // We assume the user has the correct destination branch checked out (e.g., main).
+    // 1. Execute Squash Merge
     await git.mergeSquash(branchName);
     console.log(chalk.gray('✓ Squash merge successful.'));
 
-    // 3. Commit
-    const commitMsg = `feat: merged ${branchName} (shadow clone)`;
-    await git.commit(commitMsg);
-    
-    console.log(chalk.green(`\n✨ Successfully merged ${branchName}! `));
+    // 2. Commit
+    await git.commit(effectiveCommitMessage);
+    console.log(chalk.green(`\n✨ Successfully merged ${branchName}!`));
 
   } catch (error: any) {
     const errorMsg = error.message || '';
-    
-    // 4. Handle Conflicts 
-    // If it's a conflict, we throw a specific error so the UI can prompt the user.
+
+    // 3. Handle Conflicts
     if (errorMsg.includes('CONFLICT') || errorMsg.toLowerCase().includes('conflict')) {
-       console.error(chalk.yellow(`\n⚠️  Merge Conflict detected.`));
-       // We DO NOT abort. We let the user resolve it in VS Code Source Control view.
-       throw new Error('CONFLICT'); 
+      console.error(chalk.yellow(`\n⚠️  Merge Conflict detected.`));
+      throw new Error('CONFLICT');
     }
 
     // General failure

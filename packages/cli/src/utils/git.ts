@@ -92,4 +92,16 @@ export class GitUtils {
     await this.git.raw(['fetch', remote, `${branchName}:refs/heads/${branchName}`]);
   }
 
+  /**
+   * Check if the working tree has unmerged (conflicted) files.
+   */
+  async hasConflicts(): Promise<boolean> {
+    try {
+      const output = await this.git.raw(['status', '--porcelain']);
+      return output.split('\n').some(line => /^(UU|AA|DD|DU|UD)/.test(line));
+    } catch {
+      return false;
+    }
+  }
+
 }

@@ -21,6 +21,7 @@ vi.mock('chalk', () => ({
 }));
 
 import { merge } from './merge';
+import { GitUtils } from '../utils/git';
 
 describe('merge', () => {
   const branchName = 'feat/some-feature';
@@ -32,7 +33,9 @@ describe('merge', () => {
     mockGitUtils.commit.mockResolvedValue(undefined);
   });
 
-  it('should perform squash merge and commit', async () => {
+  // --- Basic merge (no cwd, legacy fallback) ---
+
+  it('should perform squash merge and commit with default message', async () => {
     await merge(branchName, options);
 
     expect(mockGitUtils.mergeSquash).toHaveBeenCalledWith(branchName);
@@ -40,6 +43,41 @@ describe('merge', () => {
       `feat: merged ${branchName} (shadow clone)`,
     );
   });
+
+  it('should use root as merge directory when no cwd provided', async () => {
+    await merge(branchName, options);
+
+    expect(GitUtils).toHaveBeenCalledWith('/fake/root');
+  });
+
+  // --- cwd option (worktree-based merge) ---
+
+  it('should use cwd as merge directory when provided', async () => {
+    await merge(branchName, { ...options, cwd: '/fake/worktree/develop' });
+
+    expect(GitUtils).toHaveBeenCalledWith('/fake/worktree/develop');
+    expect(mockGitUtils.mergeSquash).toHaveBeenCalledWith(branchName);
+    expect(mockGitUtils.commit).toHaveBeenCalled();
+  });
+
+  // --- commitMessage ---
+
+  it('should use custom commitMessage when provided', async () => {
+    const customMsg = 'fix: integrate auth module from shadow clone';
+    await merge(branchName, { ...options, commitMessage: customMsg });
+
+    expect(mockGitUtils.commit).toHaveBeenCalledWith(customMsg);
+  });
+
+  it('should use default commitMessage when not provided', async () => {
+    await merge(branchName, options);
+
+    expect(mockGitUtils.commit).toHaveBeenCalledWith(
+      `feat: merged ${branchName} (shadow clone)`,
+    );
+  });
+
+  // --- Conflict handling ---
 
   it('should throw CONFLICT error when merge has conflicts', async () => {
     mockGitUtils.mergeSquash.mockRejectedValue(new Error('CONFLICT (content): merge conflict in file.ts'));
@@ -60,8 +98,18 @@ describe('merge', () => {
     await expect(merge(branchName, options)).rejects.toThrow(originalError);
   });
 
-  it('should use process.cwd() when root is not provided', async () => {
-    await merge(branchName, { root: '/another/root' });
+  // --- Combined: cwd + commitMessage ---
+
+  it('should merge in worktree with custom commit message', async () => {
+    const customMsg = 'feat: add dark mode support';
+    await merge(branchName, {
+      ...options,
+      cwd: '/fake/worktree/develop',
+      commitMessage: customMsg,
+    });
+
+    expect(GitUtils).toHaveBeenCalledWith('/fake/worktree/develop');
     expect(mockGitUtils.mergeSquash).toHaveBeenCalledWith(branchName);
+    expect(mockGitUtils.commit).toHaveBeenCalledWith(customMsg);
   });
 });
