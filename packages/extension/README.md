@@ -38,7 +38,17 @@ Click a clone in the sidebar to cycle through statuses. A focus-then-click guard
 Your main editor window remains free. Spawn 5 agents working on 5 different features simultaneously in their own isolated windows. Click the **📂 Open Clone** button to open any clone in a new window.
 
 ### 🔀 Merge & Cleanup
-Right-click a clone in the **Active Clones** view and select **Squash & Merge**. Lumi-Ops brings the changes back to your branch and cleans up the worktree.
+Right-click a clone in the **Active Clones** view and select **Squash & Merge**:
+- **Target Branch Selection** — Choose which branch to merge into. The recorded base branch is highlighted as `← recommended`.
+- **One-Step Flow** — Select a branch and merge immediately. A default commit message (`feat: merged <branch> (squash)`) is applied automatically.
+- **Conflict Detection** — If conflicts are detected, the clone shows a ⚠️ indicator in the sidebar.
+
+### 🔍 Dropdown Search Filter
+Branch Name and Base Branch fields double as **live search inputs**:
+- **Click to open** — Focus the input to reveal the full branch list.
+- **Type to filter** — Narrow down branches in real-time as you type.
+- **Create new branch** — When no match is found, the dropdown shows `+ Create new branch: <name>`.
+- **Enter/Tab to dismiss** — Press Enter or Tab to close the dropdown and confirm your selection.
 
 ### 🗑️ Flexible Kill Options
 When removing a clone, choose whether to:
@@ -52,14 +62,14 @@ Your active workspace branch is displayed at the top of the sidebar with a 🏠 
 
 1. **Open the "Shadow Ops" Sidebar** from the activity bar.
 2. **Create a Shadow Clone**:
-   - Enter a **Branch Name** (e.g., `feat/login`), or browse existing branches with **▾**.
+   - Enter a **Branch Name** (e.g., `feat/login`), or click the field to browse existing branches.
    - Optionally select a **Base Branch** (defaults to your current branch).
    - Optionally enter a **Task Description** for `MISSION.md`.
    - Click **Spawn Agent** (or **Create Clone Only** if no description).
 3. **Open the Clone**: Click the **📂** button next to the clone in the sidebar.
 4. **Let AI Work**: Tag `@MISSION.md` in your AI chat to provide the mission context.
 5. **Track Progress**: Click the clone row to cycle its review status.
-6. **Merge**: Right-click the clone → **Squash & Merge**.
+6. **Merge**: Right-click the clone → **Squash & Merge** → select target branch.
 
 ## ⚙️ Requirements
 
