@@ -8,6 +8,7 @@ export interface ShadowClone {
   branch: string;
   path: string;
   isShadow: boolean;
+  isDetached?: boolean;
   baseBranch?: string;
   reviewStatus?: ReviewStatus;
   hasConflict?: boolean;
@@ -34,6 +35,18 @@ export async function list(options: { root: string; json?: boolean }) {
           path: worktreePath,
           isShadow
         });
+      } else if (worktreePath && !branch && worktreePath.includes(SHADOW_CLONES_DIR)) {
+        // Detached HEAD (e.g. during rebase conflict) — derive branch from path
+        const shadowRoot = path.join(rootDir, SHADOW_CLONES_DIR);
+        const relativePath = path.relative(shadowRoot, worktreePath);
+        if (relativePath && !relativePath.startsWith('..')) {
+          shadowClones.push({
+            branch: relativePath,
+            path: worktreePath,
+            isShadow: true,
+            isDetached: true
+          });
+        }
       }
     }
 

@@ -117,12 +117,13 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
         const worktreesRaw = await git.listWorktrees();
         
         // First pass: collect worktree data
-        const entries: { branchName: string; worktreePath: string; isShadow: boolean; meta: any }[] = [];
+        const entries: { branchName: string; worktreePath: string; isShadow: boolean; isDetached: boolean; meta: any }[] = [];
         for (const entry of worktreesRaw) {
           const lines = entry.split('\n');
           const wtLine = lines.find((l: string) => l.startsWith('worktree '));
           const worktreePath = wtLine ? wtLine.substring('worktree '.length) : undefined;
           const branch = lines.find((l: string) => l.startsWith('branch'))?.split(' ').pop();
+          const isDetached = lines.some((l: string) => l.trim() === 'detached');
 
           if (worktreePath && branch) {
             const branchName = branch.replace('refs/heads/', '');
@@ -130,8 +131,22 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
               branchName,
               worktreePath,
               isShadow: worktreePath.includes(SHADOW_CLONES_DIR),
+              isDetached: false,
               meta: metadata[branchName],
             });
+          } else if (worktreePath && !branch && isDetached && worktreePath.includes(SHADOW_CLONES_DIR)) {
+            // Detached HEAD (e.g. during rebase conflict) — derive branch from path
+            const shadowRoot = path.join(this.workspaceRoot!, SHADOW_CLONES_DIR);
+            const branchName = path.relative(shadowRoot, worktreePath);
+            if (branchName && !branchName.startsWith('..')) {
+              entries.push({
+                branchName,
+                worktreePath,
+                isShadow: true,
+                isDetached: true,
+                meta: metadata[branchName],
+              });
+            }
           }
         }
 
@@ -154,6 +169,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
             branch: e.branchName,
             path: e.worktreePath,
             isShadow: e.isShadow,
+            isDetached: e.isDetached,
             baseBranch: e.meta?.baseBranch,
             reviewStatus: e.meta?.reviewStatus,
             hasConflict: conflictResults[i],
@@ -258,8 +274,9 @@ class ShadowItem extends vscode.TreeItem {
     } else {
       const status: ReviewStatus = this.clone.reviewStatus || 'todo';
       this.applyStatus(status);
+      const detachedPrefix = this.clone.isDetached ? '🔀 rebasing · ' : '';
       const baseDesc = this.clone.baseBranch ? `← ${this.clone.baseBranch}` : 'Shadow Clone';
-      this.description = `${conflictPrefix}${baseDesc}`;
+      this.description = `${conflictPrefix}${detachedPrefix}${baseDesc}`;
       // Click the row → focus-then-cycle status
       this.command = {
         command: 'lumi-ops.cycleReviewStatus',
