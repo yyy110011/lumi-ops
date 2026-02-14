@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { ShadowTreeProvider } from './ShadowTreeProvider';
 import { ShadowCreatorProvider } from './ShadowCreatorProvider';
+import { PromptLibraryProvider, PromptScope } from './PromptLibraryProvider';
 
 
 import { spawn, kill, merge, GitUtils, SHADOW_CLONES_DIR, METADATA_FILE } from '@lumi-ops/cli';
@@ -70,6 +71,11 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider('lumi-ops.creator', creatorProvider)
   );
 
+  const promptLibraryProvider = new PromptLibraryProvider(context.globalStorageUri);
+  if (rootPath) {
+    promptLibraryProvider.setProjectRoot(vscode.Uri.file(rootPath));
+  }
+
   // -- Polling for live updates + branch change detection --
   let lastKnownBranch: string | undefined;
   const pollInterval = setInterval(async () => {
@@ -104,7 +110,7 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('lumi-ops.spawn', async (args?: { branch: string, description: string, baseBranch?: string }) => {
+    vscode.commands.registerCommand('lumi-ops.spawn', async (args?: { branch: string, description: string, baseBranch?: string, templates?: { name: string; content: string }[] }) => {
       if (!rootPath) {
         vscode.window.showErrorMessage('No workspace folder open.');
         return;
@@ -170,7 +176,7 @@ export async function activate(context: vscode.ExtensionContext) {
               }
             }
 
-            await spawn(branchName, { root: rootPath, description, baseBranch });
+            await spawn(branchName, { root: rootPath, description, baseBranch, templates: args?.templates });
 
           });
 
@@ -178,6 +184,8 @@ export async function activate(context: vscode.ExtensionContext) {
           vscode.window.showInformationMessage(`Shadow clone ${branchName} created successfully.`);
           shadowTreeProvider.refresh();
           creatorProvider.resetForm();
+          // Notify webview to update ✦ indicators
+          notifyCloneBranches();
         } catch (error: any) {
           vscode.window.showErrorMessage(`Failed to spawn shadow clone: ${error.message}`);
         }
@@ -217,6 +225,7 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.window.showInformationMessage(msg);
             shadowTreeProvider.refresh();
             creatorProvider.resetForm();
+            notifyCloneBranches();
           } catch (error: any) {
             vscode.window.showErrorMessage(`Failed to kill shadow clone: ${error.message}`);
           }
@@ -463,6 +472,166 @@ export async function activate(context: vscode.ExtensionContext) {
       } catch (e) {
         // Silently ignore — branches just won't populate
       }
+    })
+  );
+
+  // -- Prompt management (webview internal commands) --
+
+  /** Send active clone branches to webview for ✦ indicators */
+  async function notifyCloneBranches() {
+    if (!rootPath) return;
+    try {
+      const git = new GitUtils(rootPath);
+      const worktreeEntries = await git.listWorktrees();
+      const cloneBranches = worktreeEntries
+        .map(entry => {
+          const match = entry.match(/branch refs\/heads\/(.+)/);
+          return match ? match[1] : null;
+        })
+        .filter(Boolean) as string[];
+      creatorProvider.updateCloneBranches(cloneBranches);
+    } catch {
+      // ignore
+    }
+  }
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops._getPrompts', async (scopes?: PromptScope[]) => {
+      try {
+        const activeScopes = scopes || ['global', 'project'];
+        const items = await promptLibraryProvider.listPrompts(activeScopes);
+        creatorProvider.updatePrompts(items);
+      } catch {
+        creatorProvider.updatePrompts([]);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops._selectPrompt', async (fileName: string, scope?: PromptScope) => {
+      if (!fileName) return;
+      try {
+        const content = await promptLibraryProvider.getPromptContent(fileName, scope || 'project');
+        const name = fileName.replace(/\.md$/, '');
+        creatorProvider.loadPrompt(name, content);
+      } catch (error: any) {
+        vscode.window.showErrorMessage(`Failed to load prompt: ${error.message}`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops._importFolder', async (scope?: PromptScope) => {
+      const targetScope = scope || 'project';
+      const selections = await vscode.window.showOpenDialog({
+        canSelectMany: true,
+        canSelectFolders: true,
+        canSelectFiles: true,
+        filters: { 'Markdown': ['md'] },
+        openLabel: 'Import'
+      });
+      if (!selections || selections.length === 0) return;
+
+      let totalCount = 0;
+      for (const uri of selections) {
+        const stat = await vscode.workspace.fs.stat(uri);
+        if (stat.type === vscode.FileType.Directory) {
+          totalCount += await promptLibraryProvider.importFolder(uri, targetScope);
+        } else {
+          await promptLibraryProvider.importPrompt(uri, targetScope);
+          totalCount++;
+        }
+      }
+      vscode.window.showInformationMessage(`Imported ${totalCount} prompt(s) to ${targetScope}.`);
+      vscode.commands.executeCommand('lumi-ops._getPrompts');
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops._addPrompt', async (scope?: PromptScope) => {
+      const targetScope = scope || 'project';
+      const name = await vscode.window.showInputBox({
+        prompt: 'Prompt name',
+        placeHolder: 'e.g. refactor-component'
+      });
+      if (!name) return;
+
+      const content = await vscode.window.showInputBox({
+        prompt: 'Prompt content (or leave empty to edit in file)',
+        placeHolder: 'Describe the task objective...'
+      });
+
+      const fileName = name.endsWith('.md') ? name : `${name}.md`;
+      await promptLibraryProvider.savePrompt(fileName, content || '', targetScope);
+      vscode.commands.executeCommand('lumi-ops._getPrompts');
+
+      if (!content) {
+        const fileUri = promptLibraryProvider.getPromptFileUri(fileName, targetScope);
+        const doc = await vscode.workspace.openTextDocument(fileUri);
+        await vscode.window.showTextDocument(doc);
+      } else {
+        vscode.window.showInformationMessage(`Prompt "${name}" created in ${targetScope}.`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops._deletePrompt', async (fileName: string, scope?: PromptScope) => {
+      if (!fileName) return;
+      const targetScope = scope || 'project';
+      const promptName = fileName.replace(/\.md$/, '');
+      const suppress = context.globalState.get<boolean>('suppressDeleteConfirm', false);
+
+      if (!suppress) {
+        const confirm = await vscode.window.showWarningMessage(
+          `Delete prompt "${promptName}" (${targetScope})?`,
+          { modal: true },
+          'Delete',
+          "Delete & Don't Ask Again"
+        );
+        if (!confirm) return;
+        if (confirm === "Delete & Don't Ask Again") {
+          await context.globalState.update('suppressDeleteConfirm', true);
+        }
+      }
+
+      await promptLibraryProvider.deletePrompt(fileName, targetScope);
+      vscode.commands.executeCommand('lumi-ops._getPrompts');
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.saveAsPrompt', async (content?: string, scope?: PromptScope) => {
+      if (!content) return;
+      const targetScope = scope || 'project';
+      const name = await vscode.window.showInputBox({
+        prompt: 'Enter a name for this prompt template',
+        placeHolder: 'e.g. my-agent-prompt'
+      });
+      if (name) {
+        const fileName = name.endsWith('.md') ? name : `${name}.md`;
+        await promptLibraryProvider.savePrompt(fileName, content, targetScope);
+        vscode.window.showInformationMessage(`Prompt "${name}" saved to ${targetScope}.`);
+        vscode.commands.executeCommand('lumi-ops._getPrompts');
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops._movePrompt', async (fileName: string, fromScope: PromptScope, toScope: PromptScope) => {
+      if (!fileName || !fromScope || !toScope) return;
+      try {
+        await promptLibraryProvider.movePrompt(fileName, fromScope, toScope);
+        vscode.commands.executeCommand('lumi-ops._getPrompts');
+      } catch (error: any) {
+        vscode.window.showErrorMessage(`Failed to move prompt: ${error.message}`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops._getCloneBranches', async () => {
+      await notifyCloneBranches();
     })
   );
 }

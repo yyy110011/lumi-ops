@@ -70,6 +70,10 @@
       {
         "command": "lumi-ops.cycleReviewStatus",
         "title": "Cycle Status"
+      },
+      {
+        "command": "lumi-ops.saveAsPrompt",
+        "title": "Save as Prompt Template"
       }
     ],
     "menus": {
