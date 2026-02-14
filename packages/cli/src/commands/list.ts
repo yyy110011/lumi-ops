@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { GitUtils } from '../utils/git';
-import { SHADOW_CLONES_DIR } from '../constants';
+import { getClonesDir } from '../constants';
 import type { ReviewStatus } from '../constants';
 import chalk from 'chalk';
 
@@ -17,10 +17,11 @@ export interface ShadowClone {
 /**
  * Parse raw `git worktree list --porcelain` entries into ShadowClone objects.
  * Handles detached HEAD worktrees (e.g. during rebase conflict) by deriving
- * the branch name from the worktree path relative to SHADOW_CLONES_DIR.
+ * the branch name from the worktree path relative to the clones directory.
  */
 export function parseWorktrees(rawEntries: string[], rootDir: string): ShadowClone[] {
   const clones: ShadowClone[] = [];
+  const clonesDir = getClonesDir(rootDir);
 
   for (const entry of rawEntries) {
     const lines = entry.split('\n');
@@ -32,12 +33,11 @@ export function parseWorktrees(rawEntries: string[], rootDir: string): ShadowClo
       clones.push({
         branch: branch.replace('refs/heads/', ''),
         path: worktreePath,
-        isShadow: worktreePath.includes(SHADOW_CLONES_DIR),
+        isShadow: worktreePath.startsWith(clonesDir),
       });
-    } else if (worktreePath && !branch && worktreePath.includes(SHADOW_CLONES_DIR)) {
+    } else if (worktreePath && !branch && worktreePath.startsWith(clonesDir)) {
       // Detached HEAD (e.g. during rebase conflict) — derive branch from path
-      const shadowRoot = path.join(rootDir, SHADOW_CLONES_DIR);
-      const relativePath = path.relative(shadowRoot, worktreePath);
+      const relativePath = path.relative(clonesDir, worktreePath);
       if (relativePath && !relativePath.startsWith('..')) {
         clones.push({
           branch: relativePath,

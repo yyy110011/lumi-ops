@@ -5,7 +5,7 @@ import { ShadowCreatorProvider } from './ShadowCreatorProvider';
 import { PromptLibraryProvider, PromptScope } from './PromptLibraryProvider';
 
 
-import { spawn, kill, merge, GitUtils, SHADOW_CLONES_DIR, METADATA_FILE } from '@lumi-ops/cli';
+import { spawn, kill, merge, GitUtils, getClonesDir, getRepoStorageDir, LUMI_OPS_HOME, METADATA_FILE, hasLegacyClones, migrateLegacyClones } from '@lumi-ops/cli';
 
 
 
@@ -62,6 +62,38 @@ export async function activate(context: vscode.ExtensionContext) {
   const rootPath = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
     ? vscode.workspace.workspaceFolders[0].uri.fsPath
     : undefined;
+
+  // Silent migration: move legacy .shadow-clones/ to external storage
+  if (rootPath && hasLegacyClones(rootPath)) {
+    try {
+      await migrateLegacyClones(rootPath);
+    } catch {
+      // Best-effort — don't block activation
+    }
+  }
+
+  // Silent migration: move global prompts from VS Code globalStorage to ~/.lumi-ops/.prompts/
+  try {
+    const legacyGlobalPrompts = vscode.Uri.joinPath(context.globalStorageUri, 'prompts');
+    const entries = await vscode.workspace.fs.readDirectory(legacyGlobalPrompts);
+    if (entries.length > 0) {
+      const newGlobalPrompts = vscode.Uri.file(path.join(LUMI_OPS_HOME, '.prompts'));
+      try { await vscode.workspace.fs.createDirectory(newGlobalPrompts); } catch {}
+      for (const [name, type] of entries) {
+        if (type === vscode.FileType.File) {
+          const src = vscode.Uri.joinPath(legacyGlobalPrompts, name);
+          const dst = vscode.Uri.joinPath(newGlobalPrompts, name);
+          try { await vscode.workspace.fs.stat(dst); } catch {
+            // Only copy if destination doesn't already exist
+            await vscode.workspace.fs.copy(src, dst);
+          }
+        }
+      }
+      await vscode.workspace.fs.delete(legacyGlobalPrompts, { recursive: true });
+    }
+  } catch {
+    // No legacy global prompts or already migrated
+  }
 
   const shadowTreeProvider = new ShadowTreeProvider(rootPath, context.extensionPath);
   vscode.window.registerTreeDataProvider('lumi-ops.activeClones', shadowTreeProvider);
@@ -244,7 +276,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const fs = await import('fs');
 
         // 1. Read baseBranch from centralized metadata
-        const metadataPath = path.join(rootPath, SHADOW_CLONES_DIR, METADATA_FILE);
+        const metadataPath = path.join(getRepoStorageDir(rootPath), METADATA_FILE);
         let baseBranch: string | undefined;
         try {
           const raw = fs.readFileSync(metadataPath, 'utf-8');
@@ -331,8 +363,12 @@ export async function activate(context: vscode.ExtensionContext) {
           if (confirm !== 'Merge Anyway') return;
         }
 
-        // 6. Use default commit message
-        const commitMessage = `feat: merged ${branchName} (squash)`;
+        // 6. Let user edit commit message
+        const commitMessage = await vscode.window.showInputBox({
+          prompt: `Squash merge ${branchName} → ${targetBranch}`,
+          value: `feat: merged ${branchName} (shadow clone)`,
+        });
+        if (commitMessage === undefined) return;
 
         // 7. Resolve the cwd: find existing worktree or create a temporary one
         let mergeCwd: string;
@@ -345,8 +381,8 @@ export async function activate(context: vscode.ExtensionContext) {
           // Target is in an existing worktree — use that path
           mergeCwd = worktreeMap.get(targetBranch)!;
         } else {
-          // Target not in any worktree — create one under .shadow-clones/
-          const newWorktreePath = path.join(rootPath, SHADOW_CLONES_DIR, targetBranch);
+          // Target not in any worktree — create one under clones dir
+          const newWorktreePath = path.join(getClonesDir(rootPath), targetBranch);
           try {
             await git.addWorktreeExisting(newWorktreePath, targetBranch);
           } catch (wtError: any) {

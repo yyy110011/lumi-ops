@@ -7,6 +7,7 @@ import { spawn } from '../commands/spawn';
 import { kill } from '../commands/kill';
 import { list } from '../commands/list';
 import { merge } from '../commands/merge';
+import { getClonesDir, getRepoStorageDir, METADATA_FILE } from '../constants';
 
 /**
  * E2E tests for @lumi-ops/cli
@@ -44,11 +45,16 @@ beforeEach(async () => {
 
 afterEach(async () => {
   process.exit = originalExit;
-  // Clean up: remove the temp directory
+  // Clean up: remove the temp directory and external storage
   try {
     await fs.remove(tmpDir);
   } catch {
     // Best-effort cleanup — Windows/CI may hold locks
+  }
+  try {
+    await fs.remove(getRepoStorageDir(tmpDir));
+  } catch {
+    // Best-effort cleanup
   }
 });
 
@@ -56,10 +62,10 @@ afterEach(async () => {
 // spawn
 // ---------------------------------------------------------------------------
 describe('e2e: spawn', () => {
-  it('should create a worktree directory under .shadow-clones/', async () => {
+  it('should create a worktree directory under external clones dir', async () => {
     await spawn('feat/e2e-test', { root: tmpDir });
 
-    const worktreePath = path.join(tmpDir, '.shadow-clones', 'feat/e2e-test');
+    const worktreePath = path.join(getClonesDir(tmpDir), 'feat/e2e-test');
     expect(await fs.pathExists(worktreePath)).toBe(true);
   });
 
@@ -73,22 +79,12 @@ describe('e2e: spawn', () => {
   it('should generate MISSION.md inside the worktree', async () => {
     await spawn('feat/mission-check', { root: tmpDir, description: 'Test objective' });
 
-    const missionPath = path.join(tmpDir, '.shadow-clones', 'feat/mission-check', 'MISSION.md');
+    const missionPath = path.join(getClonesDir(tmpDir), 'feat/mission-check', 'MISSION.md');
     expect(await fs.pathExists(missionPath)).toBe(true);
 
     const content = await fs.readFile(missionPath, 'utf-8');
     expect(content).toContain('feat/mission-check');
     expect(content).toContain('Test objective');
-  });
-
-  it('should add .shadow-clones to .gitignore', async () => {
-    await spawn('feat/gitignore-check', { root: tmpDir });
-
-    const gitignorePath = path.join(tmpDir, '.gitignore');
-    expect(await fs.pathExists(gitignorePath)).toBe(true);
-
-    const content = await fs.readFile(gitignorePath, 'utf-8');
-    expect(content).toContain('.shadow-clones');
   });
 
   it('should attach to an existing branch instead of creating a new one', async () => {
@@ -103,7 +99,7 @@ describe('e2e: spawn', () => {
     // Spawn should attach to the existing branch, not fail
     await spawn('feat/existing-branch', { root: tmpDir });
 
-    const worktreePath = path.join(tmpDir, '.shadow-clones', 'feat/existing-branch');
+    const worktreePath = path.join(getClonesDir(tmpDir), 'feat/existing-branch');
     expect(await fs.pathExists(worktreePath)).toBe(true);
 
     // The file from the existing branch should be present
@@ -116,7 +112,7 @@ describe('e2e: spawn', () => {
   it('should NOT generate MISSION.md when no description is provided', async () => {
     await spawn('feat/no-desc', { root: tmpDir });
 
-    const worktreePath = path.join(tmpDir, '.shadow-clones', 'feat/no-desc');
+    const worktreePath = path.join(getClonesDir(tmpDir), 'feat/no-desc');
     expect(await fs.pathExists(worktreePath)).toBe(true);
 
     const missionPath = path.join(worktreePath, 'MISSION.md');
@@ -126,7 +122,7 @@ describe('e2e: spawn', () => {
   it('should record baseBranch in metadata for new branches', async () => {
     await spawn('feat/meta-new', { root: tmpDir, baseBranch: 'main' });
 
-    const metadataPath = path.join(tmpDir, '.shadow-clones', '.lumi-metadata.json');
+    const metadataPath = path.join(getRepoStorageDir(tmpDir), METADATA_FILE);
     const metadata = await fs.readJSON(metadataPath);
     expect(metadata['feat/meta-new']).toBeDefined();
     expect(metadata['feat/meta-new'].baseBranch).toBe('main');
@@ -139,7 +135,7 @@ describe('e2e: spawn', () => {
 
     await spawn('feat/meta-existing', { root: tmpDir });
 
-    const metadataPath = path.join(tmpDir, '.shadow-clones', '.lumi-metadata.json');
+    const metadataPath = path.join(getRepoStorageDir(tmpDir), METADATA_FILE);
     const metadata = await fs.readJSON(metadataPath);
     expect(metadata['feat/meta-existing']).toBeDefined();
     expect(metadata['feat/meta-existing'].baseBranch).toBeUndefined();
@@ -151,7 +147,7 @@ describe('e2e: spawn', () => {
 
     await spawn('feat/meta-custom-base', { root: tmpDir, baseBranch: 'develop' });
 
-    const metadataPath = path.join(tmpDir, '.shadow-clones', '.lumi-metadata.json');
+    const metadataPath = path.join(getRepoStorageDir(tmpDir), METADATA_FILE);
     const metadata = await fs.readJSON(metadataPath);
     expect(metadata['feat/meta-custom-base'].baseBranch).toBe('develop');
   });
@@ -166,7 +162,7 @@ describe('e2e: merge', () => {
     await spawn(branchName, { root: tmpDir });
 
     // Make a change inside the worktree
-    const worktreePath = path.join(tmpDir, '.shadow-clones', branchName);
+    const worktreePath = path.join(getClonesDir(tmpDir), branchName);
     const newFile = path.join(worktreePath, 'new-feature.txt');
     await fs.writeFile(newFile, 'hello from shadow clone\n');
 
@@ -188,7 +184,7 @@ describe('e2e: merge', () => {
     const branchName = 'feat/custom-msg';
     await spawn(branchName, { root: tmpDir });
 
-    const worktreePath = path.join(tmpDir, '.shadow-clones', branchName);
+    const worktreePath = path.join(getClonesDir(tmpDir), branchName);
     await fs.writeFile(path.join(worktreePath, 'msg-test.txt'), 'custom\n');
     const wtGit = simpleGit(worktreePath);
     await wtGit.add('.');
@@ -209,14 +205,14 @@ describe('e2e: merge', () => {
     const branchName = 'feat/cwd-merge';
     await spawn(branchName, { root: tmpDir });
 
-    const worktreePath = path.join(tmpDir, '.shadow-clones', branchName);
+    const worktreePath = path.join(getClonesDir(tmpDir), branchName);
     await fs.writeFile(path.join(worktreePath, 'cwd-test.txt'), 'cwd works\n');
     const wtGit = simpleGit(worktreePath);
     await wtGit.add('.');
     await wtGit.commit('feat: cwd test file');
 
     // Create a worktree for develop to merge into
-    const developWT = path.join(tmpDir, '.shadow-clones', 'develop');
+    const developWT = path.join(getClonesDir(tmpDir), 'develop');
     await git.raw(['worktree', 'add', developWT, 'develop']);
 
     // Merge into develop via cwd
@@ -234,7 +230,7 @@ describe('e2e: merge', () => {
     await spawn(branchName, { root: tmpDir });
 
     // Modify a file in the clone
-    const worktreePath = path.join(tmpDir, '.shadow-clones', branchName);
+    const worktreePath = path.join(getClonesDir(tmpDir), branchName);
     await fs.writeFile(path.join(worktreePath, 'README.md'), 'CLONE version\n');
     const wtGit = simpleGit(worktreePath);
     await wtGit.add('.');
@@ -255,7 +251,7 @@ describe('e2e: merge', () => {
     await spawn(branchName, { root: tmpDir });
 
     // Create conflicting changes
-    const worktreePath = path.join(tmpDir, '.shadow-clones', branchName);
+    const worktreePath = path.join(getClonesDir(tmpDir), branchName);
     await fs.writeFile(path.join(worktreePath, 'README.md'), 'CLONE side\n');
     const wtGit = simpleGit(worktreePath);
     await wtGit.add('.');
@@ -294,7 +290,7 @@ describe('e2e: kill', () => {
     const branchName = 'feat/kill-test';
     await spawn(branchName, { root: tmpDir });
 
-    const worktreePath = path.join(tmpDir, '.shadow-clones', branchName);
+    const worktreePath = path.join(getClonesDir(tmpDir), branchName);
     expect(await fs.pathExists(worktreePath)).toBe(true);
 
     await kill(branchName, { root: tmpDir });
@@ -311,7 +307,7 @@ describe('e2e: kill', () => {
     const branchName = 'feat/keep-branch-test';
     await spawn(branchName, { root: tmpDir });
 
-    const worktreePath = path.join(tmpDir, '.shadow-clones', branchName);
+    const worktreePath = path.join(getClonesDir(tmpDir), branchName);
     expect(await fs.pathExists(worktreePath)).toBe(true);
 
     await kill(branchName, { root: tmpDir, keepBranch: true });
@@ -361,7 +357,7 @@ describe('e2e: full lifecycle', () => {
 
     // 1. Spawn
     await spawn(branchName, { root: tmpDir, description: 'Lifecycle test' });
-    const worktreePath = path.join(tmpDir, '.shadow-clones', branchName);
+    const worktreePath = path.join(getClonesDir(tmpDir), branchName);
     expect(await fs.pathExists(worktreePath)).toBe(true);
 
     // 2. Make changes in the worktree

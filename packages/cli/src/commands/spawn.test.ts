@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as path from 'path';
+import * as os from 'os';
 
 // --- Mocks (vi.hoisted ensures these are available when vi.mock factories run) ---
 const { mockGitUtils, mockFs } = vi.hoisted(() => ({
@@ -44,13 +45,14 @@ vi.mock('chalk', () => ({
 const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
 
 import { spawn } from './spawn';
-import { SHADOW_CLONES_DIR, METADATA_FILE } from '../constants';
+import { getClonesDir, getRepoStorageDir, METADATA_FILE } from '../constants';
 
 describe('spawn', () => {
   const rootDir = '/fake/root';
   const branchName = 'feat/my-feature';
-  const shadowDir = path.join(rootDir, SHADOW_CLONES_DIR);
-  const targetPath = path.join(shadowDir, branchName);
+  const clonesDir = getClonesDir(rootDir);
+  const repoStorageDir = getRepoStorageDir(rootDir);
+  const targetPath = path.join(clonesDir, branchName);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -69,45 +71,9 @@ describe('spawn', () => {
     mockFs.readJSON.mockRejectedValue(new Error('ENOENT'));
   });
 
-  it('should create shadow clone directory', async () => {
+  it('should create clones directory', async () => {
     await spawn(branchName, { root: rootDir });
-    expect(mockFs.ensureDir).toHaveBeenCalledWith(shadowDir);
-  });
-
-  it('should add .shadow-clones to .gitignore if not present', async () => {
-    mockFs.pathExists.mockImplementation(async (p: string) => {
-      if (p.endsWith('.gitignore')) return true;
-      return false;
-    });
-    mockFs.readFile.mockResolvedValue('node_modules\ndist\n');
-
-    await spawn(branchName, { root: rootDir });
-
-    expect(mockFs.appendFile).toHaveBeenCalledWith(
-      path.join(rootDir, '.gitignore'),
-      '.shadow-clones\n',
-    );
-  });
-
-  it('should NOT append to .gitignore if .shadow-clones already listed', async () => {
-    mockFs.pathExists.mockImplementation(async (p: string) => {
-      if (p.endsWith('.gitignore')) return true;
-      return false;
-    });
-    mockFs.readFile.mockResolvedValue('node_modules\n.shadow-clones\ndist\n');
-
-    await spawn(branchName, { root: rootDir });
-
-    expect(mockFs.appendFile).not.toHaveBeenCalled();
-  });
-
-  it('should create .gitignore if it does not exist', async () => {
-    mockFs.pathExists.mockResolvedValue(false);
-    mockFs.readFile.mockResolvedValue('');
-
-    await spawn(branchName, { root: rootDir });
-
-    expect(mockFs.appendFile).toHaveBeenCalled();
+    expect(mockFs.ensureDir).toHaveBeenCalledWith(clonesDir);
   });
 
   it('should create new worktree from current branch when branch does not exist', async () => {
@@ -136,7 +102,7 @@ describe('spawn', () => {
     await spawn(branchName, { root: rootDir, baseBranch: 'develop' });
 
     expect(mockFs.writeJSON).toHaveBeenCalledWith(
-      path.join(shadowDir, METADATA_FILE),
+      path.join(repoStorageDir, METADATA_FILE),
       { [branchName]: { baseBranch: 'develop' } },
       { spaces: 2 },
     );
@@ -149,7 +115,7 @@ describe('spawn', () => {
     await spawn(branchName, { root: rootDir });
 
     expect(mockFs.writeJSON).toHaveBeenCalledWith(
-      path.join(shadowDir, METADATA_FILE),
+      path.join(repoStorageDir, METADATA_FILE),
       { [branchName]: { baseBranch: 'main' } },
       { spaces: 2 },
     );
@@ -167,10 +133,8 @@ describe('spawn', () => {
   it('should copy .env when it exists', async () => {
     mockFs.pathExists.mockImplementation(async (p: string) => {
       if (p === path.join(rootDir, '.env')) return true;
-      if (p.endsWith('.gitignore')) return true;
       return false;
     });
-    mockFs.readFile.mockResolvedValue('.shadow-clones\n');
 
     await spawn(branchName, { root: rootDir });
 

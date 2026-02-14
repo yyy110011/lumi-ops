@@ -1,14 +1,14 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { GitUtils } from '../utils/git';
-import { SHADOW_CLONES_DIR, METADATA_FILE } from '../constants';
+import { getClonesDir, getRepoStorageDir, METADATA_FILE } from '../constants';
 import chalk from 'chalk';
 
 export async function spawn(branchName: string, options: { root: string; description?: string; baseBranch?: string; templates?: { name: string; content: string }[] }) {
   const rootDir = path.resolve(options.root);
   const git = new GitUtils(rootDir);
-  const shadowDir = path.join(rootDir, SHADOW_CLONES_DIR);
-  const targetPath = path.join(shadowDir, branchName);
+  const clonesDir = getClonesDir(rootDir);
+  const targetPath = path.join(clonesDir, branchName);
 
   try {
     if (!(await git.isGitRepo())) {
@@ -18,33 +18,10 @@ export async function spawn(branchName: string, options: { root: string; descrip
 
     console.log(chalk.blue(`🚀 Spawning shadow clone for branch: ${branchName}...`));
 
-    // 1. Ensure .shadow-clones exists
-    await fs.ensureDir(shadowDir);
+    // 1. Ensure clones directory exists
+    await fs.ensureDir(clonesDir);
 
-    // 2. Add .shadow-clones to .gitignore (if not already present)
-    const gitignorePath = path.join(rootDir, '.gitignore');
-    const shadowClonesEntry = SHADOW_CLONES_DIR;
-    
-    try {
-      let gitignoreContent = '';
-      if (await fs.pathExists(gitignorePath)) {
-        gitignoreContent = await fs.readFile(gitignorePath, 'utf-8');
-      }
-      
-      // Check if .shadow-clones is already in .gitignore
-      const lines = gitignoreContent.split('\n').map(l => l.trim());
-      const alreadyIgnored = lines.includes(shadowClonesEntry) || lines.includes(`${shadowClonesEntry}/`);
-      if (!alreadyIgnored) {
-        // Append to .gitignore
-        const newLine = gitignoreContent.endsWith('\n') || gitignoreContent === '' ? '' : '\n';
-        await fs.appendFile(gitignorePath, `${newLine}${shadowClonesEntry}\n`);
-        console.log(chalk.gray(`✓ Added ${SHADOW_CLONES_DIR} to .gitignore.`));
-      }
-    } catch (e) {
-      // Silently ignore gitignore errors
-    }
-
-    // 3. Add worktree — if branch exists, attach to it; otherwise create new from base branch
+    // 2. Add worktree — if branch exists, attach to it; otherwise create new from base branch
     const currentBranch = await git.getCurrentBranch();
     const resolvedBase = options.baseBranch || currentBranch;
     const exists = await git.branchExists(branchName);
@@ -56,8 +33,9 @@ export async function spawn(branchName: string, options: { root: string; descrip
       await git.addWorktree(branchName, targetPath, resolvedBase);
     }
 
-    // 3b. Persist base branch metadata (centralized)
-    const metadataPath = path.join(shadowDir, METADATA_FILE);
+    // 3. Persist base branch metadata (centralized)
+    const repoStorageDir = getRepoStorageDir(rootDir);
+    const metadataPath = path.join(repoStorageDir, METADATA_FILE);
     let metadata: Record<string, { baseBranch?: string }> = {};
     try { metadata = await fs.readJSON(metadataPath); } catch {}
     if (exists) {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { getClonesDir } from '../constants';
 
 // --- Mocks ---
 const mockGitUtils = {
@@ -26,6 +27,7 @@ import { list } from './list';
 
 describe('list', () => {
   const rootDir = '/fake/root';
+  const clonesDir = getClonesDir(rootDir);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -34,7 +36,7 @@ describe('list', () => {
   it('should parse porcelain worktrees and identify shadow clones', async () => {
     mockGitUtils.listWorktrees.mockResolvedValue([
       'worktree /fake/root\nHEAD abc123\nbranch refs/heads/main',
-      'worktree /fake/root/.shadow-clones/feat/test\nHEAD def456\nbranch refs/heads/feat/test',
+      `worktree ${clonesDir}/feat/test\nHEAD def456\nbranch refs/heads/feat/test`,
     ]);
 
     await list({ root: rootDir, json: true });
@@ -48,7 +50,7 @@ describe('list', () => {
     });
     expect(output[1]).toEqual({
       branch: 'feat/test',
-      path: '/fake/root/.shadow-clones/feat/test',
+      path: `${clonesDir}/feat/test`,
       isShadow: true,
     });
   });
