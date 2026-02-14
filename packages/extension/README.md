@@ -28,6 +28,14 @@ When you spawn a clone with a task description, Lumi-Ops auto-generates a `MISSI
 
 > **Tip**: Leave the description empty and click **Create Clone Only** to create a worktree without `MISSION.md` — useful when you just need an isolated workspace.
 
+### 📚 Prompt Library
+Save and reuse task descriptions as **prompt templates** across projects:
+- **Dual-Scope Storage** — Global prompts (`~/.lumi-ops/prompts/*.md`) are shared across all projects. Project prompts (`.lumi-ops/prompts/*.md`) are repo-specific.
+- **Scope Badges** — Each prompt shows a **[G]** or **[P]** badge. Click the badge to move a prompt between Global and Project scope.
+- **Select & Compose** — Click a prompt from the dropdown to load it into the task description. The selected prompt’s content is injected into `MISSION.md`.
+- **Import & Save** — Import existing `.md` files or folders into the library. Use **Save as Template** to save the current description as a reusable prompt.
+- **Filter Bar** — Toggle **Project** / **Global** filters and search prompts by name.
+
 ### 📋 Review Status Tracking
 Track the progress of each shadow clone with a visual status cycle:
 - **○ Todo** → **🔄 In Progress** → **✓ Done** → **✗ Won't Do**
@@ -45,10 +53,10 @@ Right-click a clone in the **Active Clones** view and select **Squash & Merge**:
 
 ### 🔍 Dropdown Search Filter
 Branch Name and Base Branch fields double as **live search inputs**:
-- **Click to open** — Focus the input to reveal the full branch list.
+- **Click to open** — Click the input to reveal the full branch list.
 - **Type to filter** — Narrow down branches in real-time as you type.
 - **Create new branch** — When no match is found, the dropdown shows `+ Create new branch: <name>`.
-- **Enter/Tab to dismiss** — Press Enter or Tab to close the dropdown and confirm your selection.
+- **Esc / Enter / Tab to dismiss** — Press Escape, Enter, or Tab to close the dropdown.
 
 ### 🗑️ Flexible Kill Options
 When removing a clone, choose whether to:
@@ -64,7 +72,7 @@ Your active workspace branch is displayed at the top of the sidebar with a 🏠 
 2. **Create a Shadow Clone**:
    - Enter a **Branch Name** (e.g., `feat/login`), or click the field to browse existing branches.
    - Optionally select a **Base Branch** (defaults to your current branch).
-   - Optionally enter a **Task Description** for `MISSION.md`.
+   - Optionally click **Prompts** to select a saved template, or type a **Task Description** for `MISSION.md`.
    - Click **Spawn Agent** (or **Create Clone Only** if no description).
 3. **Open the Clone**: Click the **📂** button next to the clone in the sidebar.
 4. **Let AI Work**: Tag `@MISSION.md` in your AI chat to provide the mission context.
