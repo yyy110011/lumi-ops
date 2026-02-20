@@ -25,7 +25,7 @@ export function hasLegacyClones(rootDir: string): boolean {
 
 /**
  * Migrate all worktrees from the legacy `.shadow-clones/` directory
- * to the new external storage at `~/.lumi-ops/<repo>/clones/`.
+ * to the new external storage at `<repoRoot>.worktrees/`.
  *
  * For each worktree found:
  *   1. Move the worktree directory to the new location

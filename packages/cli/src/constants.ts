@@ -24,10 +24,6 @@ export const REPO_ID_FILE = 'lumi-ops-id';
  */
 export const LUMI_OPS_HOME = path.join(os.homedir(), '.lumi-ops');
 
-/**
- * Subdirectory under the repo storage dir that contains worktree clones.
- */
-export const CLONES_SUBDIR = 'clones';
 
 /**
  * Get the per-repo storage directory.
@@ -114,8 +110,10 @@ export async function initRepoStorageDir(rootDir: string): Promise<string> {
 
 /**
  * Get the directory where worktree clones are stored for a repo.
- * Structure: ~/.lumi-ops/<repo-name>-<hash>/clones/
+ * Structure: <repoRoot>.worktrees/
+ * Matches VS Code native git extension convention.
  */
 export function getClonesDir(rootDir: string): string {
-  return path.join(getRepoStorageDir(rootDir), CLONES_SUBDIR);
+  const resolved = path.resolve(rootDir);
+  return `${resolved}.worktrees`;
 }

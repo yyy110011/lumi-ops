@@ -24,7 +24,9 @@ const originalExit = process.exit;
 
 beforeEach(async () => {
   // Create a real temporary git repo
-  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lumi-ops-e2e-'));
+  // fs.realpathSync resolves macOS /tmp → /private/tmp symlink
+  // This ensures paths match between getClonesDir() and git worktree list
+  tmpDir = fs.realpathSync(await fs.mkdtemp(path.join(os.tmpdir(), 'lumi-ops-e2e-')));
   git = simpleGit(tmpDir);
 
   await git.init();
@@ -45,11 +47,16 @@ beforeEach(async () => {
 
 afterEach(async () => {
   process.exit = originalExit;
-  // Clean up: remove the temp directory and external storage
+  // Clean up: remove the temp directory, worktrees, and external storage
   try {
     await fs.remove(tmpDir);
   } catch {
     // Best-effort cleanup — Windows/CI may hold locks
+  }
+  try {
+    await fs.remove(`${tmpDir}.worktrees`);
+  } catch {
+    // Best-effort cleanup
   }
   try {
     await fs.remove(getRepoStorageDir(tmpDir));

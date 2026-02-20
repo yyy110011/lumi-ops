@@ -13,7 +13,7 @@ export async function spawn(branchName: string, options: { root: string; descrip
       process.exit(1);
     }
 
-    // 0. Ensure Repo Storage ID is initialized safely
+    // 0. Ensure Repo Storage ID is initialized (needed for metadata storage in ~/.lumi-ops/)
     const { initRepoStorageDir } = await import('../constants');
     await initRepoStorageDir(rootDir);
 
@@ -105,19 +105,6 @@ ${objectiveSection}
       await fs.writeFile(contextFile, contextContent);
       console.log(chalk.gray('✓ Generated MISSION.md.'));
     }
-
-    // 6. Always generate .agents/context.md — tells AI agents where they are
-    const agentsDir = path.join(targetPath, '.agents');
-    await fs.ensureDir(agentsDir);
-    const agentContextContent = `# Workspace Context
-
-Your active workspace is: \`${targetPath}\`
-
-This is an isolated Git Worktree created by Lumi-Ops (Shadow Clone Protocol).
-Run all commands from this directory. Do NOT use the scratch directory.
-`;
-    await fs.writeFile(path.join(agentsDir, 'context.md'), agentContextContent);
-    console.log(chalk.gray('✓ Generated .agents/context.md.'));
 
     console.log(chalk.green(`\n✨ Shadow clone ready at: ${targetPath}`));
   } catch (error: any) {

@@ -63,21 +63,11 @@ export async function activate(context: vscode.ExtensionContext) {
     ? vscode.workspace.workspaceFolders[0].uri.fsPath
     : undefined;
 
-  // Resolve true rootPath if we are currently inside a shadow clone worktree
+  // If opened inside a .worktrees/<branch> directory, resolve back to the repo root
   if (rootPath) {
-    const fs = require('fs');
-    const gitFile = path.join(rootPath, '.git');
-    if (fs.existsSync(gitFile) && fs.statSync(gitFile).isFile()) {
-      const gitContent: string = fs.readFileSync(gitFile, 'utf-8').trim();
-      if (gitContent.startsWith('gitdir: ')) {
-        const gitDirPath = gitContent.substring(8).trim();
-        // gitDirPath is typically like /path/to/repo/.git/worktrees/branch
-        // We go up two levels from .git/
-        const match = gitDirPath.match(/(.*?)\/\.git\/worktrees\/.+/);
-        if (match && match[1]) {
-          rootPath = match[1];
-        }
-      }
+    const worktreesMatch = rootPath.match(/^(.+)\.worktrees\/.+$/);
+    if (worktreesMatch && worktreesMatch[1]) {
+      rootPath = worktreesMatch[1];
     }
   }
 

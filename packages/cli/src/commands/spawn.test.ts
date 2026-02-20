@@ -62,7 +62,12 @@ describe('spawn', () => {
     mockGitUtils.addWorktreeExisting.mockResolvedValue(undefined);
     mockGitUtils.branchExists.mockResolvedValue(false);
     mockFs.ensureDir.mockResolvedValue(undefined);
-    mockFs.pathExists.mockResolvedValue(false);
+    mockFs.pathExists.mockImplementation(async (p: string) => {
+      // initRepoStorageDir checks for .git and lumi-ops-id
+      if (p.endsWith('.git')) return true;
+      if (p.endsWith('lumi-ops-id')) return true;
+      return false;
+    });
     mockFs.readFile.mockResolvedValue('');
     mockFs.appendFile.mockResolvedValue(undefined);
     mockFs.copy.mockResolvedValue(undefined);
@@ -133,6 +138,8 @@ describe('spawn', () => {
   it('should copy .env when it exists', async () => {
     mockFs.pathExists.mockImplementation(async (p: string) => {
       if (p === path.join(rootDir, '.env')) return true;
+      if (p.endsWith('.git')) return true;
+      if (p.endsWith('lumi-ops-id')) return true;
       return false;
     });
 
@@ -166,7 +173,7 @@ describe('spawn', () => {
   it('should NOT generate MISSION.md when no description provided', async () => {
     await spawn(branchName, { root: rootDir });
 
-    // writeFile should not be called at all (no MISSION.md)
+    // writeFile should not be called at all (no MISSION.md, no .agents/context.md)
     expect(mockFs.writeFile).not.toHaveBeenCalled();
   });
 
