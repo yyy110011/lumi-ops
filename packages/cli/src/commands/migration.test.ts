@@ -1,6 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as path from 'path';
 import * as os from 'os';
+import { exec } from 'child_process';
+
+// --- Mocks ---
+vi.mock('child_process', () => ({
+  exec: vi.fn((cmd, cb) => {
+    // default success
+    cb(null, { stdout: '/fake/.git', stderr: '' });
+  }),
+}));
 
 // --- Mocks ---
 const mockFs = vi.hoisted(() => ({
@@ -14,12 +23,22 @@ const mockFs = vi.hoisted(() => ({
   readJSON: vi.fn(),
   writeJSON: vi.fn(),
   readdir: vi.fn(),
+  copy: vi.fn(),
+  pathExists: vi.fn(),
 }));
 
 vi.mock('fs-extra', () => ({
   default: mockFs,
   ...mockFs,
 }));
+
+vi.mock('../constants', async () => {
+  const actual = await vi.importActual<any>('../constants');
+  return {
+    ...actual,
+    initRepoStorageDir: vi.fn().mockResolvedValue('/fake/root/.lumi-ops'),
+  };
+});
 
 import { hasLegacyClones, migrateLegacyClones } from './migration';
 import { SHADOW_CLONES_DIR, getClonesDir, getRepoStorageDir } from '../constants';
@@ -70,6 +89,7 @@ describe('migration', () => {
         if (p === path.join(legacyDir, '.prompts')) return false;
         return false;
       });
+      mockFs.pathExists.mockResolvedValue(false); // target does not exist
       mockFs.statSync.mockReturnValue({ isFile: () => true });
       mockFs.readdir.mockResolvedValue([
         { name: 'develop', isDirectory: () => true },
@@ -83,8 +103,14 @@ describe('migration', () => {
       expect(results).toHaveLength(1);
       expect(results[0]).toEqual({ branch: 'develop', success: true });
 
-      // Should move directory
-      expect(mockFs.move).toHaveBeenCalledWith(oldPath, newPath, { overwrite: false });
+      // Should copy directory
+      expect(mockFs.copy).toHaveBeenCalledWith(oldPath, newPath, { overwrite: false });
+
+      // Should have verified git worktree
+      expect(exec).toHaveBeenCalledWith(
+        `git -C "${newPath}" rev-parse --git-dir`,
+        expect.any(Function)
+      );
 
       // Should update gitdir
       expect(mockFs.writeFile).toHaveBeenCalledWith(
@@ -92,7 +118,10 @@ describe('migration', () => {
         path.join(newPath, '.git') + '\n'
       );
 
-      // Should remove legacy dir
+      // Should effectively remove old path after successful verify
+      expect(mockFs.remove).toHaveBeenCalledWith(oldPath);
+
+      // Should remove legacy dir eventually
       expect(mockFs.remove).toHaveBeenCalledWith(legacyDir);
     });
 
@@ -111,6 +140,7 @@ describe('migration', () => {
         if (p === path.join(legacyDir, '.prompts')) return false;
         return false;
       });
+      mockFs.pathExists.mockResolvedValue(false);
       mockFs.statSync.mockReturnValue({ isFile: () => true });
 
       // Root readdir returns feat/ directory
@@ -131,7 +161,8 @@ describe('migration', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].branch).toBe('feat/my-feature');
-      expect(mockFs.move).toHaveBeenCalledWith(oldPath, newPath, { overwrite: false });
+      expect(mockFs.copy).toHaveBeenCalledWith(oldPath, newPath, { overwrite: false });
+      expect(mockFs.remove).toHaveBeenCalledWith(oldPath);
     });
 
     it('should update MISSION.md path references', async () => {
@@ -148,6 +179,7 @@ describe('migration', () => {
         if (p === path.join(legacyDir, '.prompts')) return false;
         return false;
       });
+      mockFs.pathExists.mockResolvedValue(false);
       mockFs.statSync.mockReturnValue({ isFile: () => true });
       mockFs.readdir.mockResolvedValue([
         { name: 'develop', isDirectory: () => true },
@@ -184,6 +216,7 @@ describe('migration', () => {
         if (p === path.join(legacyDir, '.prompts')) return false;
         return false;
       });
+      mockFs.pathExists.mockResolvedValue(false);
       mockFs.statSync.mockReturnValue({ isFile: () => true });
       mockFs.readdir.mockResolvedValue([
         { name: 'develop', isDirectory: () => true },
@@ -226,6 +259,7 @@ describe('migration', () => {
         if (p === path.join(clonesDir, 'develop', 'MISSION.md')) return false;
         return false;
       });
+      mockFs.pathExists.mockResolvedValue(false);
       mockFs.statSync.mockReturnValue({ isFile: () => true });
       mockFs.readdir.mockResolvedValue([
         { name: 'develop', isDirectory: () => true },
@@ -249,6 +283,7 @@ describe('migration', () => {
         if (p === path.join(oldPath, '.git')) return true;
         return false;
       });
+      mockFs.pathExists.mockResolvedValue(false);
       mockFs.statSync.mockReturnValue({ isFile: () => true });
       mockFs.readdir.mockResolvedValue([
         { name: 'develop', isDirectory: () => true },
@@ -261,8 +296,8 @@ describe('migration', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].success).toBe(true);
-      // Should NOT move or write anything
-      expect(mockFs.move).not.toHaveBeenCalled();
+      // Should NOT move or copy or write anything
+      expect(mockFs.copy).not.toHaveBeenCalled();
       expect(mockFs.writeFile).not.toHaveBeenCalled();
       expect(mockFs.ensureDir).not.toHaveBeenCalled();
       expect(mockFs.remove).not.toHaveBeenCalled();
@@ -285,7 +320,7 @@ describe('migration', () => {
       mockFs.readFile.mockResolvedValue(
         `gitdir: ${rootDir}/.git/worktrees/broken`
       );
-      mockFs.move.mockRejectedValueOnce(new Error('Permission denied'));
+      mockFs.copy.mockRejectedValueOnce(new Error('Permission denied'));
 
       const results = await migrateLegacyClones(rootDir);
 
@@ -295,6 +330,72 @@ describe('migration', () => {
         success: false,
         error: 'Permission denied',
       });
+    });
+
+    it('should skip migration if target path already exists', async () => {
+      const oldPath = path.join(legacyDir, 'develop');
+      const newPath = path.join(clonesDir, 'develop');
+      mockFs.existsSync.mockImplementation((p: string) => {
+        if (p === legacyDir) return true;
+        if (p === path.join(oldPath, '.git')) return true;
+        return false;
+      });
+      mockFs.statSync.mockReturnValue({ isFile: () => true });
+      mockFs.readdir.mockResolvedValue([
+        { name: 'develop', isDirectory: () => true },
+      ]);
+      mockFs.readFile.mockResolvedValue(
+        `gitdir: ${rootDir}/.git/worktrees/develop`
+      );
+
+      // Target already exists!
+      mockFs.pathExists.mockImplementation(async (p: string) => {
+        if (p === newPath) return true;
+        return false;
+      });
+
+      const results = await migrateLegacyClones(rootDir);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].success).toBe(false);
+      expect(results[0].error).toBe('Target exists');
+      expect(mockFs.copy).not.toHaveBeenCalled();
+    });
+
+    it('should rollback and clean up target if git verification fails', async () => {
+      const oldPath = path.join(legacyDir, 'broken');
+      const newPath = path.join(clonesDir, 'broken');
+
+      mockFs.existsSync.mockImplementation((p: string) => {
+        if (p === legacyDir) return true;
+        if (p === path.join(oldPath, '.git')) return true;
+        return false;
+      });
+      mockFs.pathExists.mockResolvedValue(false);
+      mockFs.statSync.mockReturnValue({ isFile: () => true });
+      mockFs.readdir.mockResolvedValue([
+        { name: 'broken', isDirectory: () => true },
+      ]);
+      mockFs.readFile.mockResolvedValue(
+        `gitdir: ${rootDir}/.git/worktrees/broken`
+      );
+      
+      // Make validation fail
+      const mockedExec = vi.mocked(exec);
+      mockedExec.mockImplementationOnce(((cmd: string, cb: any) => {
+        cb(new Error('fatal: not a git path'), { stdout: '', stderr: 'fatal' });
+      }) as any);
+
+      const results = await migrateLegacyClones(rootDir);
+
+      expect(results).toHaveLength(1);
+      expect(results[0].success).toBe(false);
+      expect(results[0].error).toContain('Git verification failed');
+
+      // It should have removed newPath
+      expect(mockFs.remove).toHaveBeenCalledWith(newPath);
+      // It should NOT have removed oldPath
+      expect(mockFs.remove).not.toHaveBeenCalledWith(oldPath);
     });
   });
 });

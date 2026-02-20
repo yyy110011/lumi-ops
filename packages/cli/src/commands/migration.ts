@@ -1,6 +1,10 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
-import { SHADOW_CLONES_DIR, METADATA_FILE, getClonesDir, getRepoStorageDir } from '../constants';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { SHADOW_CLONES_DIR, METADATA_FILE, getClonesDir, getRepoStorageDir, initRepoStorageDir } from '../constants';
+
+const execAsync = promisify(exec);
 import chalk from 'chalk';
 
 /**
@@ -50,6 +54,7 @@ export async function migrateLegacyClones(rootDir: string, options: { dryRun?: b
   console.log(chalk.blue(`📦 Found ${entries.length} legacy worktree(s) to migrate.\n`));
 
   if (!options.dryRun) {
+    await initRepoStorageDir(rootDir);
     await fs.ensureDir(newClonesDir);
   }
 
@@ -63,9 +68,15 @@ export async function migrateLegacyClones(rootDir: string, options: { dryRun?: b
     }
 
     try {
-      // 1. Move the worktree directory
+      if (await fs.pathExists(newPath)) {
+        console.log(chalk.yellow(`  ⚠ ${branch}: Target already exists, skipping move.`));
+        results.push({ branch, success: false, error: 'Target exists' });
+        continue;
+      }
+
+      // 1. Copy the worktree directory
       await fs.ensureDir(path.dirname(newPath));
-      await fs.move(oldPath, newPath, { overwrite: false });
+      await fs.copy(oldPath, newPath, { overwrite: false });
 
       // 2. Update .git/worktrees/<name>/gitdir to point to the new location
       const gitdirFile = path.join(rootDir, '.git', 'worktrees', gitWorktreeName, 'gitdir');
@@ -73,13 +84,25 @@ export async function migrateLegacyClones(rootDir: string, options: { dryRun?: b
         await fs.writeFile(gitdirFile, path.join(newPath, '.git') + '\n');
       }
 
-      // 3. Update path references inside MISSION.md
+      // 3. Verify git considers the new location a valid worktree
+      try {
+        await execAsync(`git -C "${newPath}" rev-parse --git-dir`);
+      } catch (verifyErr: any) {
+        // Rollback on failure
+        await fs.remove(newPath);
+        throw new Error(`Git verification failed after copy: ${verifyErr.message}`);
+      }
+
+      // 4. Update path references inside MISSION.md
       const missionFile = path.join(newPath, 'MISSION.md');
       if (fs.existsSync(missionFile)) {
         let content = await fs.readFile(missionFile, 'utf-8');
-        content = content.replace(oldPath, newPath);
+        content = content.replace(new RegExp(oldPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), newPath);
         await fs.writeFile(missionFile, content);
       }
+
+      // 5. Verification passed, safely remove original oldPath
+      await fs.remove(oldPath);
 
       console.log(chalk.green(`  ✓ ${branch}`));
       results.push({ branch, success: true });

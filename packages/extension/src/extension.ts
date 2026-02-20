@@ -65,11 +65,17 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Silent migration: move legacy .shadow-clones/ to external storage
   if (rootPath && hasLegacyClones(rootPath)) {
-    try {
-      await migrateLegacyClones(rootPath);
-    } catch {
-      // Best-effort — don't block activation
-    }
+    vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: 'Lumi-Ops: Migrating worktrees…' },
+      async () => {
+        try {
+          await migrateLegacyClones(rootPath!);
+          // Optional: shadowTreeProvider.refresh() if constructed
+        } catch {
+          // Best-effort — don't block activation
+        }
+      }
+    );
   }
 
   // Silent migration: move global prompts from VS Code globalStorage to ~/.lumi-ops/.prompts/
@@ -103,7 +109,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.registerWebviewViewProvider('lumi-ops.creator', creatorProvider)
   );
 
-  const promptLibraryProvider = new PromptLibraryProvider(context.globalStorageUri);
+  const promptLibraryProvider = new PromptLibraryProvider();
   if (rootPath) {
     promptLibraryProvider.setProjectRoot(vscode.Uri.file(rootPath));
   }

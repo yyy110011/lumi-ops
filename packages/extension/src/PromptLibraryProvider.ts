@@ -20,7 +20,7 @@ export class PromptLibraryProvider {
   private globalDir: vscode.Uri;
   private projectDir: vscode.Uri | null = null;
 
-  constructor(_globalStorageUri: vscode.Uri) {
+  constructor() {
     this.globalDir = vscode.Uri.file(path.join(LUMI_OPS_HOME, '.prompts'));
   }
 
