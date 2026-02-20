@@ -106,6 +106,19 @@ ${objectiveSection}
       console.log(chalk.gray('✓ Generated MISSION.md.'));
     }
 
+    // 6. Always generate .agents/context.md — tells AI agents where they are
+    const agentsDir = path.join(targetPath, '.agents');
+    await fs.ensureDir(agentsDir);
+    const agentContextContent = `# Workspace Context
+
+Your active workspace is: \`${targetPath}\`
+
+This is an isolated Git Worktree created by Lumi-Ops (Shadow Clone Protocol).
+Run all commands from this directory. Do NOT use the scratch directory.
+`;
+    await fs.writeFile(path.join(agentsDir, 'context.md'), agentContextContent);
+    console.log(chalk.gray('✓ Generated .agents/context.md.'));
+
     console.log(chalk.green(`\n✨ Shadow clone ready at: ${targetPath}`));
   } catch (error: any) {
     console.error(chalk.red(`\n❌ Failed to spawn shadow clone: ${error.message}`));
