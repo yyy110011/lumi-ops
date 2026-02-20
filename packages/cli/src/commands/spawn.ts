@@ -1,24 +1,24 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { GitUtils } from '../utils/git';
-import { getClonesDir, getRepoStorageDir, METADATA_FILE, initRepoStorageDir } from '../constants';
+import { getClonesDir, getRepoStorageDir, METADATA_FILE } from '../constants';
 import chalk from 'chalk';
 
 export async function spawn(branchName: string, options: { root: string; description?: string; baseBranch?: string; templates?: { name: string; content: string }[] }) {
   const rootDir = path.resolve(options.root);
-
-  // 0. Ensure Repo Storage ID is initialized safely before anything else
-  await initRepoStorageDir(rootDir);
-
   const git = new GitUtils(rootDir);
-  const clonesDir = getClonesDir(rootDir);
-  const targetPath = path.join(clonesDir, branchName);
-
   try {
     if (!(await git.isGitRepo())) {
       console.error(chalk.red('Error: Not a git repository.'));
       process.exit(1);
     }
+
+    // 0. Ensure Repo Storage ID is initialized safely
+    const { initRepoStorageDir } = await import('../constants');
+    await initRepoStorageDir(rootDir);
+
+    const clonesDir = getClonesDir(rootDir);
+    const targetPath = path.join(clonesDir, branchName);
 
     console.log(chalk.blue(`🚀 Spawning shadow clone for branch: ${branchName}...`));
 

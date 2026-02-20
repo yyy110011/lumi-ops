@@ -59,9 +59,27 @@ export async function activate(context: vscode.ExtensionContext) {
 
 
 
-  const rootPath = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
+  let rootPath = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
     ? vscode.workspace.workspaceFolders[0].uri.fsPath
     : undefined;
+
+  // Resolve true rootPath if we are currently inside a shadow clone worktree
+  if (rootPath) {
+    const fs = require('fs');
+    const gitFile = path.join(rootPath, '.git');
+    if (fs.existsSync(gitFile) && fs.statSync(gitFile).isFile()) {
+      const gitContent: string = fs.readFileSync(gitFile, 'utf-8').trim();
+      if (gitContent.startsWith('gitdir: ')) {
+        const gitDirPath = gitContent.substring(8).trim();
+        // gitDirPath is typically like /path/to/repo/.git/worktrees/branch
+        // We go up two levels from .git/
+        const match = gitDirPath.match(/(.*?)\/\.git\/worktrees\/.+/);
+        if (match && match[1]) {
+          rootPath = match[1];
+        }
+      }
+    }
+  }
 
   // Silent migration: move legacy .shadow-clones/ to external storage
   if (rootPath && hasLegacyClones(rootPath)) {
