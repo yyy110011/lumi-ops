@@ -1,13 +1,13 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { GitUtils } from '../utils/git';
-import { SHADOW_CLONES_DIR, METADATA_FILE } from '../constants';
+import { getClonesDir, getRepoStorageDir, METADATA_FILE } from '../constants';
 import chalk from 'chalk';
 
 export async function kill(branchName: string, options: { root: string; keepBranch?: boolean }) {
   const rootDir = path.resolve(options.root);
   const git = new GitUtils(rootDir);
-  const targetPath = path.join(rootDir, SHADOW_CLONES_DIR, branchName);
+  const targetPath = path.join(getClonesDir(rootDir), branchName);
 
   try {
     console.log(chalk.yellow(`🧨 Killing shadow clone: ${branchName}...`));
@@ -25,7 +25,7 @@ export async function kill(branchName: string, options: { root: string; keepBran
     }
 
     // 3. Remove entry from centralized metadata
-    const metadataPath = path.join(rootDir, SHADOW_CLONES_DIR, METADATA_FILE);
+    const metadataPath = path.join(getRepoStorageDir(rootDir), METADATA_FILE);
     try {
       const metadata = await fs.readJSON(metadataPath);
       if (metadata[branchName]) {

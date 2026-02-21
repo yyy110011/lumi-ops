@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { parseWorktrees, ShadowClone, GitUtils, SHADOW_CLONES_DIR, METADATA_FILE } from '@lumi-ops/cli';
+import { parseWorktrees, ShadowClone, GitUtils, getRepoStorageDir, METADATA_FILE } from '@lumi-ops/cli';
 import type { ReviewStatus } from '@lumi-ops/cli';
 
 const STATUS_SVG: Partial<Record<ReviewStatus, string>> = {
@@ -103,7 +103,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
         const git = new GitUtils(this.workspaceRoot);
 
         // Load centralized metadata once
-        const metadataPath = path.join(this.workspaceRoot, SHADOW_CLONES_DIR, METADATA_FILE);
+        const metadataPath = path.join(getRepoStorageDir(this.workspaceRoot), METADATA_FILE);
         let metadata: Record<string, { baseBranch?: string; reviewStatus?: ReviewStatus }> = {};
         try {
           const raw = fs.readFileSync(metadataPath, 'utf-8');
@@ -174,7 +174,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
    */
   private flushStatusToDisk(): void {
     if (!this.workspaceRoot) return;
-    const metadataPath = path.join(this.workspaceRoot, SHADOW_CLONES_DIR, METADATA_FILE);
+    const metadataPath = path.join(getRepoStorageDir(this.workspaceRoot), METADATA_FILE);
     try {
       let metadata: Record<string, any> = {};
       try {

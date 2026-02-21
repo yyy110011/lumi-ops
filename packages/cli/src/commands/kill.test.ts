@@ -34,13 +34,13 @@ vi.mock('chalk', () => ({
 const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
 
 import { kill } from './kill';
-import { SHADOW_CLONES_DIR, METADATA_FILE } from '../constants';
+import { getClonesDir, getRepoStorageDir, METADATA_FILE } from '../constants';
 
 describe('kill', () => {
   const branchName = 'feat/old-feature';
   const rootDir = '/fake/root';
-  const targetPath = path.join(rootDir, SHADOW_CLONES_DIR, branchName);
-  const metadataPath = path.join(rootDir, SHADOW_CLONES_DIR, METADATA_FILE);
+  const targetPath = path.join(getClonesDir(rootDir), branchName);
+  const metadataPath = path.join(getRepoStorageDir(rootDir), METADATA_FILE);
 
   beforeEach(() => {
     vi.clearAllMocks();

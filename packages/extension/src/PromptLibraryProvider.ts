@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { getRepoStorageDir, LUMI_OPS_HOME } from '@lumi-ops/cli';
 
 export type PromptScope = 'global' | 'project';
 
@@ -12,20 +13,21 @@ export interface PromptInfo {
 
 /**
  * Dual-scope prompt storage service.
- * - Global:  globalStorageUri/prompts/
- * - Project: <workspaceRoot>/.shadow-clones/.prompts/
+ * - Global:  ~/.lumi-ops/.prompts/
+ * - Project: ~/.lumi-ops/<repo-name>/.prompts/
  */
 export class PromptLibraryProvider {
   private globalDir: vscode.Uri;
   private projectDir: vscode.Uri | null = null;
 
-  constructor(globalStorageUri: vscode.Uri) {
-    this.globalDir = vscode.Uri.joinPath(globalStorageUri, 'prompts');
+  constructor() {
+    this.globalDir = vscode.Uri.file(path.join(LUMI_OPS_HOME, '.prompts'));
   }
 
-  /** Set project root so we can resolve .shadow-clones/.prompts/ */
+  /** Set project root so we can resolve prompt directory */
   setProjectRoot(rootUri: vscode.Uri) {
-    this.projectDir = vscode.Uri.joinPath(rootUri, '.shadow-clones', '.prompts');
+    const storageDir = getRepoStorageDir(rootUri.fsPath);
+    this.projectDir = vscode.Uri.file(path.join(storageDir, '.prompts'));
   }
 
   /** Get the directory URI for a given scope. */

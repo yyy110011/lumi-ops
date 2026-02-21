@@ -46,10 +46,10 @@ All git worktree logic lives in `packages/cli`. The extension imports from `@lum
 Tests sit next to their source: `spawn.ts` → `spawn.test.ts`. Run with `pnpm test` from the CLI package or the repo root.
 
 ### 3. Constants are centralized
-`SHADOW_CLONES_DIR` (`.shadow-clones`) and `METADATA_FILE` (`.lumi-metadata.json`) are defined in `constants.ts`. Never hardcode these strings.
+`METADATA_FILE` (`.lumi-metadata.json`) is defined in `constants.ts`. Never hardcode these strings.
 
 ### 4. Shadow clones directory
-All worktrees are created under `<repo>/.shadow-clones/<branch-name>/`. This directory is gitignored. Metadata for all clones is stored in `.shadow-clones/.lumi-metadata.json` (centralized, not per-clone).
+All worktrees are created under `<repo>.worktrees/<branch-name>/`. This directory lives outside the source repository. Metadata for all clones is stored in `<repo>.worktrees/.lumi-metadata.json` (centralized, not per-clone).
 
 ### 5. Extension activation
 The extension auto-detects whether it's in a **root workspace** (shows Active Clones + Spawn form) or a **shadow clone** (opens MISSION.md automatically). Detection is done by checking for MISSION.md in the workspace root.
