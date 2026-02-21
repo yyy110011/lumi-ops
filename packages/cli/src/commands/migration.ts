@@ -1,8 +1,9 @@
 import * as path from 'path';
+import * as os from 'os';
 import * as fs from 'fs-extra';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { SHADOW_CLONES_DIR, METADATA_FILE, getClonesDir, getRepoStorageDir, initRepoStorageDir } from '../constants';
+import { SHADOW_CLONES_DIR, METADATA_FILE, getClonesDir, getRepoStorageDir } from '../constants';
 
 const execAsync = promisify(exec);
 import chalk from 'chalk';
@@ -38,23 +39,22 @@ export async function migrateLegacyClones(rootDir: string, options: { dryRun?: b
   const legacyDir = path.join(rootDir, SHADOW_CLONES_DIR);
   const newClonesDir = getClonesDir(rootDir);
   const results: MigrationResult[] = [];
+  const repoName = path.basename(path.resolve(rootDir));
+  const legacyCentralDir = path.join(os.homedir(), '.lumi-ops', repoName);
 
-  if (!fs.existsSync(legacyDir)) {
+  // If no shadow-clones and no legacy central dir, nothing to do
+  if (!fs.existsSync(legacyDir) && !fs.existsSync(legacyCentralDir)) {
     return results;
   }
 
-  // Discover worktree branches by reading their .git files
-  const entries = await discoverWorktrees(legacyDir);
+  // Discover worktree branches by reading their .git files (if legacy dir exists)
+  const entries = fs.existsSync(legacyDir) ? await discoverWorktrees(legacyDir) : [];
 
-  if (entries.length === 0) {
-    console.log(chalk.gray('No worktrees found in legacy directory.'));
-    return results;
+  if (entries.length > 0) {
+    console.log(chalk.blue(`📦 Found ${entries.length} legacy worktree(s) to migrate.\n`));
   }
-
-  console.log(chalk.blue(`📦 Found ${entries.length} legacy worktree(s) to migrate.\n`));
 
   if (!options.dryRun) {
-    await initRepoStorageDir(rootDir);
     await fs.ensureDir(newClonesDir);
   }
 
@@ -112,38 +112,63 @@ export async function migrateLegacyClones(rootDir: string, options: { dryRun?: b
     }
   }
 
-  // 3. Migrate centralized metadata file
-  const legacyMetadata = path.join(legacyDir, METADATA_FILE);
-  if (fs.existsSync(legacyMetadata) && !options.dryRun) {
-    const newMetadataPath = path.join(getRepoStorageDir(rootDir), METADATA_FILE);
-    try {
-      // Merge: if new metadata already exists, merge old into new
-      let merged: Record<string, any> = {};
-      try { merged = await fs.readJSON(newMetadataPath); } catch {}
-      const legacy = await fs.readJSON(legacyMetadata);
-      merged = { ...legacy, ...merged }; // new takes precedence
-      await fs.writeJSON(newMetadataPath, merged, { spaces: 2 });
-      await fs.remove(legacyMetadata);
-      console.log(chalk.green('  ✓ Migrated metadata'));
-    } catch (err: any) {
-      console.log(chalk.red(`  ✗ Metadata migration failed: ${err.message}`));
+  // 3. Migrate centralized metadata file (check both legacyDir and legacyCentralDir)
+  const legacyMetaPaths = [
+    path.join(legacyDir, METADATA_FILE),
+    path.join(legacyCentralDir, METADATA_FILE)
+  ];
+  const newMetadataPath = path.join(newClonesDir, METADATA_FILE);
+
+  for (const metaPath of legacyMetaPaths) {
+    if (fs.existsSync(metaPath) && !options.dryRun) {
+      try {
+        let merged: Record<string, any> = {};
+        try { merged = await fs.readJSON(newMetadataPath); } catch {}
+        const legacy = await fs.readJSON(metaPath);
+        merged = { ...legacy, ...merged }; // new takes precedence
+        await fs.writeJSON(newMetadataPath, merged, { spaces: 2 });
+        await fs.remove(metaPath);
+        console.log(chalk.green(`  ✓ Migrated metadata from ${metaPath}`));
+      } catch (err: any) {
+        console.log(chalk.red(`  ✗ Metadata migration failed from ${metaPath}: ${err.message}`));
+      }
     }
   }
 
-  // 4. Move .prompts and remove legacy directory
+  // 4. Move .prompts and remove legacy directories
   if (!options.dryRun) {
-    try {
-      const legacyPrompts = path.join(legacyDir, '.prompts');
-      if (fs.existsSync(legacyPrompts)) {
-        const newPrompts = path.join(getRepoStorageDir(rootDir), '.prompts');
-        await fs.move(legacyPrompts, newPrompts, { overwrite: false });
-        console.log(chalk.green('  ✓ Migrated prompt templates'));
+    const legacyPromptPaths = [
+      path.join(legacyDir, '.prompts'),
+      path.join(legacyCentralDir, '.prompts')
+    ];
+    const newPrompts = path.join(newClonesDir, '.prompts');
+
+    for (const promptPath of legacyPromptPaths) {
+      if (fs.existsSync(promptPath)) {
+        try {
+          // ensure target dir exists
+          await fs.ensureDir(newPrompts);
+          // fs.move doesn't merge directories by default if target exists and is not empty.
+          // Since it's prompts, we copy them over then delete
+          await fs.copy(promptPath, newPrompts, { overwrite: false });
+          await fs.remove(promptPath);
+          console.log(chalk.green(`  ✓ Migrated prompt templates from ${promptPath}`));
+        } catch (err: any) {
+          console.log(chalk.red(`  ✗ Prompt migration failed from ${promptPath}: ${err.message}`));
+        }
       }
-      await fs.remove(legacyDir);
-      console.log(chalk.green('\n✓ Removed legacy .shadow-clones/ directory.'));
-    } catch {
-      // Best-effort cleanup
     }
+
+    try { await fs.remove(legacyDir); } catch {}
+    try {
+      // Only remove if empty, it's safer
+      if (fs.existsSync(legacyCentralDir)) {
+        const remaining = await fs.readdir(legacyCentralDir);
+        if (remaining.length === 0) {
+          await fs.remove(legacyCentralDir);
+        }
+      }
+    } catch {}
   }
 
   return results;

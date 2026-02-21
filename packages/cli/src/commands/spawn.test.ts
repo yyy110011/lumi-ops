@@ -62,12 +62,7 @@ describe('spawn', () => {
     mockGitUtils.addWorktreeExisting.mockResolvedValue(undefined);
     mockGitUtils.branchExists.mockResolvedValue(false);
     mockFs.ensureDir.mockResolvedValue(undefined);
-    mockFs.pathExists.mockImplementation(async (p: string) => {
-      // initRepoStorageDir checks for .git and lumi-ops-id
-      if (p.endsWith('.git')) return true;
-      if (p.endsWith('lumi-ops-id')) return true;
-      return false;
-    });
+    // No longer need to mock pathExists for lumi-ops-id
     mockFs.readFile.mockResolvedValue('');
     mockFs.appendFile.mockResolvedValue(undefined);
     mockFs.copy.mockResolvedValue(undefined);

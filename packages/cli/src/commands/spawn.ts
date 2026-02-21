@@ -13,9 +13,7 @@ export async function spawn(branchName: string, options: { root: string; descrip
       process.exit(1);
     }
 
-    // 0. Ensure Repo Storage ID is initialized (needed for metadata storage in ~/.lumi-ops/)
-    const { initRepoStorageDir } = await import('../constants');
-    await initRepoStorageDir(rootDir);
+    // 0. Ensure Repo Storage ID is initialized (needed for metadata storage in ~/.lumi-ops/)    const { getClonesDir } = await import('../constants');
 
     const clonesDir = getClonesDir(rootDir);
     const targetPath = path.join(clonesDir, branchName);

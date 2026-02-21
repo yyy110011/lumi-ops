@@ -32,7 +32,7 @@ Press **F5** in VS Code / Antigravity to launch the Extension Development Host.
 
 - **Spawn Shadow Clones** — Create a new branch + worktree instantly from the sidebar.
 - **Agent Context** — Auto-generates `MISSION.md` with the task objective for your AI Agent.
-- **Prompt Library** — Save and reuse task descriptions as templates. Dual-scope storage (Global `~/.lumi-ops/prompts/` + Project `.lumi-ops/prompts/`). Select prompts from a dropdown, import folders, and move between scopes.
+- **Prompt Library** — Save and reuse task descriptions as templates. Dual-scope storage (Global `~/.lumi-ops/.prompts/` + Project `<repo>.worktrees/.prompts/`). Select prompts from a dropdown, import folders, and move between scopes.
 - **Non-Blocking** — Main window stays on your current branch. Spawn as many agents as you want.
 - **Squash & Merge** — Select a target branch and merge with one click. Base branch shown as `← recommended`.
 - **Conflict Detection** — Unresolved merge conflicts are detected and shown with ⚠️ in the sidebar.

@@ -7,3 +7,13 @@ out/
 .vscode-test/
 *.vsix
 MISSION.md
+doc/Background-Agent-Plan.md
+doc/QA-merge-improvement.md
+doc/conflict-detection.md
+doc/feature-candidates.md
+doc/mcp-agent-sandbox.md
+doc/merge-improvement.md
+doc/prompt-library.md
+doc/roadmap.md
+doc/shadow-mode-ui.md
+GEMINI.md

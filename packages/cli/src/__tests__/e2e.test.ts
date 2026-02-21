@@ -58,11 +58,6 @@ afterEach(async () => {
   } catch {
     // Best-effort cleanup
   }
-  try {
-    await fs.remove(getRepoStorageDir(tmpDir));
-  } catch {
-    // Best-effort cleanup
-  }
 });
 
 // ---------------------------------------------------------------------------

@@ -30,7 +30,7 @@ When you spawn a clone with a task description, Lumi-Ops auto-generates a `MISSI
 
 ### 📚 Prompt Library
 Save and reuse task descriptions as **prompt templates** across projects:
-- **Dual-Scope Storage** — Global prompts (`~/.lumi-ops/prompts/*.md`) are shared across all projects. Project prompts (`.lumi-ops/prompts/*.md`) are repo-specific.
+- **Dual-Scope Storage** — Global prompts (`~/.lumi-ops/.prompts/*.md`) are shared across all projects. Project prompts (`<repo>.worktrees/.prompts/*.md`) are repo-specific.
 - **Scope Badges** — Each prompt shows a **[G]** or **[P]** badge. Click the badge to move a prompt between Global and Project scope.
 - **Select & Compose** — Click a prompt from the dropdown to load it into the task description. The selected prompt’s content is injected into `MISSION.md`.
 - **Import & Save** — Import existing `.md` files or folders into the library. Use **Save as Template** to save the current description as a reusable prompt.

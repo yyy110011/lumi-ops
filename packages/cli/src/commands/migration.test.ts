@@ -32,13 +32,6 @@ vi.mock('fs-extra', () => ({
   ...mockFs,
 }));
 
-vi.mock('../constants', async () => {
-  const actual = await vi.importActual<any>('../constants');
-  return {
-    ...actual,
-    initRepoStorageDir: vi.fn().mockResolvedValue('/fake/root/.lumi-ops'),
-  };
-});
 
 import { hasLegacyClones, migrateLegacyClones } from './migration';
 import { SHADOW_CLONES_DIR, getClonesDir, getRepoStorageDir } from '../constants';
@@ -270,9 +263,10 @@ describe('migration', () => {
 
       await migrateLegacyClones(rootDir);
 
-      expect(mockFs.move).toHaveBeenCalledWith(
+      expect(mockFs.copy).toHaveBeenCalledWith(
         legacyPrompts, newPrompts, { overwrite: false }
       );
+      expect(mockFs.remove).toHaveBeenCalledWith(legacyPrompts);
     });
 
     it('should not move files in dry-run mode', async () => {
