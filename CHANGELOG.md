@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.2] - 2026-02-22
+
+### 🐛 Bug Fixes
+- **Prompt Import Failure** — Fixed a bug where importing prompts failed on certain file system mounts or symbolic links due to strict `vscode.FileType` equality checks, replacing them with proper bitwise logic.
+- **Extension Crash** — Fixed a critical crash during extension activation by restoring the missing `LUMI_OPS_HOME` constant export from the `@lumi-ops/cli` package, ensuring successful command registration.
+
 ## [0.2.6] - 2026-02-12
 
 ### ✨ New Features

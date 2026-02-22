@@ -5,9 +5,8 @@ import { ShadowCreatorProvider } from './ShadowCreatorProvider';
 import { PromptLibraryProvider, PromptScope } from './PromptLibraryProvider';
 
 
+import * as os from 'os';
 import { spawn, kill, merge, GitUtils, getClonesDir, getRepoStorageDir, LUMI_OPS_HOME, METADATA_FILE, hasLegacyClones, migrateLegacyClones } from '@lumi-ops/cli';
-
-
 
 export async function activate(context: vscode.ExtensionContext) {
 
@@ -585,7 +584,7 @@ export async function activate(context: vscode.ExtensionContext) {
       let totalCount = 0;
       for (const uri of selections) {
         const stat = await vscode.workspace.fs.stat(uri);
-        if (stat.type === vscode.FileType.Directory) {
+        if ((stat.type & vscode.FileType.Directory) !== 0) {
           totalCount += await promptLibraryProvider.importFolder(uri, targetScope);
         } else {
           await promptLibraryProvider.importPrompt(uri, targetScope);

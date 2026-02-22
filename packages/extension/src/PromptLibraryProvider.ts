@@ -48,7 +48,7 @@ export class PromptLibraryProvider {
         await this.ensureDir(dir);
         const entries = await vscode.workspace.fs.readDirectory(dir);
         for (const [name, type] of entries) {
-          if (type === vscode.FileType.File && name.endsWith('.md')) {
+          if ((type & vscode.FileType.File) !== 0 && name.endsWith('.md')) {
             const label = name.replace(/\.md$/, '');
             const preview = await this.getFirstLine(dir, name);
             items.push({ name: label, fileName: name, preview, scope });
@@ -91,7 +91,7 @@ export class PromptLibraryProvider {
     const entries = await vscode.workspace.fs.readDirectory(folderUri);
     let count = 0;
     for (const [name, type] of entries) {
-      if (type === vscode.FileType.File && name.endsWith('.md')) {
+      if ((type & vscode.FileType.File) !== 0 && name.endsWith('.md')) {
         const sourceUri = vscode.Uri.joinPath(folderUri, name);
         const destUri = vscode.Uri.joinPath(dir, name);
         await vscode.workspace.fs.copy(sourceUri, destUri, { overwrite: true });

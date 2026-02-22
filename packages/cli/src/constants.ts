@@ -8,6 +8,11 @@ import * as os from 'os';
 export const SHADOW_CLONES_DIR = '.shadow-clones';
 
 /**
+ * Global directory for Lumi-Ops (used for global prompts).
+ */
+export const LUMI_OPS_HOME = path.join(os.homedir(), '.lumi-ops');
+
+/**
  * Name of the centralized metadata file.
  */
 export const METADATA_FILE = '.lumi-metadata.json';
