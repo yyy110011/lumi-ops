@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.3] - 2026-02-23
+
+### ✨ New Features
+- **Shadow Mode UI** — When opened inside a Shadow Clone (Git Worktree), the extension automatically switches to a focused Prompt Library view, hiding Spawn/Kill/Merge controls.
+- **Return to Root** — A 🏠 button in the Shadow Mode header lets you return to the main repository window (with confirmation dialog).
+- **Copy Branch Name** — Right-click any clone in the sidebar to copy its branch name to the clipboard.
+- **Cross-Window Prompt Sync** — Prompts are synced in real-time across Root and Shadow Clone windows via file system watchers.
+- **Inline Prompt Creation** — Double-click the prompt list to create a new prompt inline from the dropdown.
+
+### 🔧 Improvements
+- **Project Prompts Path** — Moved project prompts from `<repo>.worktrees/.prompts/` to `<repoRoot>/.prompts/` for simpler cross-worktree access. Automatic migration included.
+- **Migration Refactor** — Consolidated all one-time migrations (legacy worktrees, global prompts, project prompts) into a dedicated `migrations.ts` module.
+
+
 ## [0.3.2] - 2026-02-22
 
 ### 🐛 Bug Fixes
