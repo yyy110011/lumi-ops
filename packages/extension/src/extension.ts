@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { ShadowTreeProvider } from './ShadowTreeProvider';
 import { ShadowCreatorProvider } from './ShadowCreatorProvider';
 import { PromptLibraryProvider, PromptScope } from './PromptLibraryProvider';
+import { runMigrations } from './migrations';
 
-
-import * as os from 'os';
-import { spawn, kill, merge, GitUtils, getClonesDir, getRepoStorageDir, LUMI_OPS_HOME, METADATA_FILE, hasLegacyClones, migrateLegacyClones } from '@lumi-ops/cli';
+import { spawn, kill, merge, GitUtils, getClonesDir, getRepoStorageDir, LUMI_OPS_HOME, METADATA_FILE } from '@lumi-ops/cli';
 
 export async function activate(context: vscode.ExtensionContext) {
 
@@ -62,56 +62,46 @@ export async function activate(context: vscode.ExtensionContext) {
     ? vscode.workspace.workspaceFolders[0].uri.fsPath
     : undefined;
 
-  // If opened inside a .worktrees/<branch> directory, resolve back to the repo root
+  let isShadowMode = false;
+  let shadowBranchName: string | undefined = undefined;
+
+  // Detect if we are in a Git Worktree (Shadow Mode) by checking the path convention
+  // This helps us accurately determine the branch name even with slashes (e.g. feat/task)
   if (rootPath) {
-    const worktreesMatch = rootPath.match(/^(.+)\.worktrees\/.+$/);
+    // First check if the path itself sits inside a .worktrees directory
+    const worktreesMatch = rootPath.match(/^(.+)\.worktrees[\\\/]/);
+    
     if (worktreesMatch && worktreesMatch[1]) {
-      rootPath = worktreesMatch[1];
+      isShadowMode = true;
+      const originalWorkspacePath = rootPath;
+      rootPath = worktreesMatch[1]; // Resolve back to the main repository root
+      
+      try {
+        // Use GitUtils in the original workspace folder (the worktree)
+        // to correctly resolve the branch name, e.g. feat/shadow-mode-ui
+        const git = new GitUtils(originalWorkspacePath);
+        shadowBranchName = await git.getCurrentBranch();
+      } catch (e) {
+        console.error("Failed to get worktree branch name via GitUtils:", e);
+      }
+      
+      vscode.commands.executeCommand('setContext', 'lumi-ops.isShadowMode', true);
+    } else {
+      vscode.commands.executeCommand('setContext', 'lumi-ops.isShadowMode', false);
     }
   }
 
-  // Silent migration: move legacy .shadow-clones/ to external storage
-  if (rootPath && hasLegacyClones(rootPath)) {
-    vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: 'Lumi-Ops: Migrating worktrees…' },
-      async () => {
-        try {
-          await migrateLegacyClones(rootPath!);
-          // Optional: shadowTreeProvider.refresh() if constructed
-        } catch {
-          // Best-effort — don't block activation
-        }
-      }
-    );
+  // Run all one-time migrations
+  await runMigrations(context, rootPath);
+
+  const shadowTreeProvider = new ShadowTreeProvider(rootPath, context.extensionPath, isShadowMode, shadowBranchName);
+  const activeClonesView = vscode.window.createTreeView('lumi-ops.activeClones', { treeDataProvider: shadowTreeProvider });
+  if (isShadowMode) {
+    activeClonesView.title = 'Shadow Clone Status';
   }
+  context.subscriptions.push(activeClonesView);
 
-  // Silent migration: move global prompts from VS Code globalStorage to ~/.lumi-ops/.prompts/
-  try {
-    const legacyGlobalPrompts = vscode.Uri.joinPath(context.globalStorageUri, 'prompts');
-    const entries = await vscode.workspace.fs.readDirectory(legacyGlobalPrompts);
-    if (entries.length > 0) {
-      const newGlobalPrompts = vscode.Uri.file(path.join(LUMI_OPS_HOME, '.prompts'));
-      try { await vscode.workspace.fs.createDirectory(newGlobalPrompts); } catch {}
-      for (const [name, type] of entries) {
-        if (type === vscode.FileType.File) {
-          const src = vscode.Uri.joinPath(legacyGlobalPrompts, name);
-          const dst = vscode.Uri.joinPath(newGlobalPrompts, name);
-          try { await vscode.workspace.fs.stat(dst); } catch {
-            // Only copy if destination doesn't already exist
-            await vscode.workspace.fs.copy(src, dst);
-          }
-        }
-      }
-      await vscode.workspace.fs.delete(legacyGlobalPrompts, { recursive: true });
-    }
-  } catch {
-    // No legacy global prompts or already migrated
-  }
-
-  const shadowTreeProvider = new ShadowTreeProvider(rootPath, context.extensionPath);
-  vscode.window.registerTreeDataProvider('lumi-ops.activeClones', shadowTreeProvider);
-
-  const creatorProvider = new ShadowCreatorProvider(context.extensionUri);
+  const creatorProvider = new ShadowCreatorProvider(context.extensionUri, isShadowMode, shadowBranchName);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('lumi-ops.creator', creatorProvider)
   );
@@ -121,7 +111,40 @@ export async function activate(context: vscode.ExtensionContext) {
     promptLibraryProvider.setProjectRoot(vscode.Uri.file(rootPath));
   }
 
-  // -- Polling for live updates + branch change detection --
+  // -- fs.watch for instant cross-window prompt refresh --
+  const refreshPromptsNow = () => {
+    vscode.commands.executeCommand('lumi-ops._getPrompts');
+  };
+
+  const globalPromptsPath = path.join(LUMI_OPS_HOME, '.prompts');
+  try {
+    if (!fs.existsSync(globalPromptsPath)) {
+      fs.mkdirSync(globalPromptsPath, { recursive: true });
+    }
+    const globalWatcher = fs.watch(globalPromptsPath, () => {
+      refreshPromptsNow();
+    });
+    context.subscriptions.push({ dispose: () => globalWatcher.close() });
+  } catch (e) {
+    console.error('[lumi-ops] ❌ Failed to watch global prompts:', e);
+  }
+
+  if (rootPath) {
+    const projectPromptsPath = path.join(rootPath, '.prompts');
+    try {
+      if (!fs.existsSync(projectPromptsPath)) {
+        fs.mkdirSync(projectPromptsPath, { recursive: true });
+      }
+      const projectWatcher = fs.watch(projectPromptsPath, () => {
+        refreshPromptsNow();
+      });
+      context.subscriptions.push({ dispose: () => projectWatcher.close() });
+    } catch (e) {
+      console.error('[lumi-ops] ❌ Failed to watch project prompts:', e);
+    }
+  }
+
+  // -- Polling for live updates + branch change detection (fallback) --
   let lastKnownBranch: string | undefined;
   const pollInterval = setInterval(async () => {
     shadowTreeProvider.refresh();
@@ -478,6 +501,31 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.copyBranchName', async (item: any) => {
+      const branchName = item?.clone?.branch;
+      if (!branchName) return;
+      await vscode.env.clipboard.writeText(branchName);
+      vscode.window.showInformationMessage(`Copied: ${branchName}`);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.returnToRoot', async () => {
+      if (rootPath) {
+        const choice = await vscode.window.showInformationMessage(
+          'Return to the main repository workspace?',
+          { modal: true, detail: 'This will reload the VS Code window.' },
+          'Return to Root'
+        );
+        if (choice === 'Return to Root') {
+          const uri = vscode.Uri.file(rootPath);
+          vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: false });
+        }
+      }
+    })
+  );
+
 
 
   context.subscriptions.push(
@@ -565,6 +613,46 @@ export async function activate(context: vscode.ExtensionContext) {
         creatorProvider.loadPrompt(name, content);
       } catch (error: any) {
         vscode.window.showErrorMessage(`Failed to load prompt: ${error.message}`);
+      }
+    })
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops._createPromptInline', async (name: string, scope?: PromptScope) => {
+      if (!name) return;
+      
+      const targetScope = scope || 'project';
+      const cleanName = name.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      const fileName = `${cleanName}.md`;
+      const fileUri = promptLibraryProvider.getPromptFileUri(fileName, targetScope);
+      
+      try {
+        await vscode.workspace.fs.stat(fileUri);
+        vscode.window.showErrorMessage(`Prompt "${fileName}" already exists in ${targetScope} scope.`);
+        return;
+      } catch {
+        // File does not exist, safe to create
+      }
+
+      try {
+        await vscode.workspace.fs.writeFile(fileUri, new Uint8Array(0));
+        vscode.commands.executeCommand('lumi-ops._getPrompts', undefined); // Refresh ui list
+        const doc = await vscode.workspace.openTextDocument(fileUri);
+        await vscode.window.showTextDocument(doc, { preview: false });
+      } catch (error: any) {
+        vscode.window.showErrorMessage(`Failed to create prompt: ${error.message}`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.openPromptFile', async (fileName: string, scope?: PromptScope) => {
+      if (!fileName) return;
+      try {
+        const fileUri = promptLibraryProvider.getPromptFileUri(fileName, scope || 'project');
+        const doc = await vscode.workspace.openTextDocument(fileUri);
+        await vscode.window.showTextDocument(doc, { preview: false });
+      } catch (error: any) {
+        vscode.window.showErrorMessage(`Failed to open prompt: ${error.message}`);
       }
     })
   );

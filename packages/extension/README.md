@@ -31,7 +31,9 @@ When you spawn a clone with a task description, Lumi-Ops auto-generates a `MISSI
 
 ### 📚 Prompt Library
 Save and reuse task descriptions as **prompt templates** across projects:
-- **Dual-Scope Storage** — Global prompts (`~/.lumi-ops/.prompts/*.md`) are shared across all projects. Project prompts (`<repo>.worktrees/.prompts/*.md`) are repo-specific.
+- **Dual-Scope Storage** — Global prompts (`~/.lumi-ops/.prompts/*.md`) are shared across all projects. Project prompts (`<repoRoot>/.prompts/*.md`) are repo-specific.
+- **Cross-Window Sync** — Prompts are synced in real-time across Root and Shadow Clone windows via file system watchers.
+- **Inline Creation** — Double-click the prompt list to create a new prompt inline, right from the dropdown.
 - **Scope Badges** — Each prompt shows a **[G]** or **[P]** badge. Click the badge to move a prompt between Global and Project scope.
 - **Select & Compose** — Click a prompt from the dropdown to load it into the task description. The selected prompt’s content is injected into `MISSION.md`.
 - **Import & Save** — Import existing `.md` files or folders into the library. Use **Save as Template** to save the current description as a reusable prompt.
@@ -64,8 +66,17 @@ When removing a clone, choose whether to:
 - **Remove Clone Only** — Delete the worktree but keep the branch for later.
 - **Remove Clone & Delete Branch** — Full cleanup.
 
+### 📋 Copy Branch Name
+Right-click any clone in the sidebar to **Copy Branch Name** to the clipboard.
+
 ### 🏠 Current Branch Protection
 Your active workspace branch is displayed at the top of the sidebar with a 🏠 icon and **cannot** be accidentally killed or merged.
+
+### 👻 Shadow Mode
+When Lumi-Ops detects you are inside a **Shadow Clone** (Git Worktree), the UI automatically adapts:
+- **Sidebar** — The Active Clones list is hidden to prevent accidental operations (Spawn, Kill, Merge) from within a clone.
+- **Webview** — The Spawn Form is replaced by a focused **Prompt Library**. Clicking a prompt opens the `.md` file directly in the editor.
+- **Return to Root** — A 🏠 button in the header lets you return to the main repository window (with confirmation dialog).
 
 ## 🚀 Usage
 
@@ -79,6 +90,8 @@ Your active workspace branch is displayed at the top of the sidebar with a 🏠 
 4. **Let AI Work**: Tag `@MISSION.md` in your AI chat to provide the mission context.
 5. **Track Progress**: Click the clone row to cycle its review status.
 6. **Merge**: Right-click the clone → **Squash & Merge** → select target branch.
+
+> **Tip**: When opened inside a Shadow Clone, Lumi-Ops automatically switches to **Shadow Mode** — showing only the Prompt Library and a Return to Root button.
 
 ## ⚙️ Requirements
 

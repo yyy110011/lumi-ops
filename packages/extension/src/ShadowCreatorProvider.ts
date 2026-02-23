@@ -5,7 +5,11 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
 
   private _view?: vscode.WebviewView;
 
-  constructor(private readonly _extensionUri: vscode.Uri) {}
+  constructor(
+    private readonly _extensionUri: vscode.Uri,
+    private readonly _isShadowMode: boolean = false,
+    private readonly _shadowBranchName?: string
+  ) {}
 
   public resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -13,6 +17,9 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
     _token: vscode.CancellationToken,
   ) {
     this._view = webviewView;
+    if (this._isShadowMode) {
+      webviewView.title = 'Prompt Library';
+    }
 
     webviewView.webview.options = {
       enableScripts: true,
@@ -38,7 +45,13 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           vscode.commands.executeCommand('lumi-ops._getPrompts', data.scopes);
           break;
         case 'selectPrompt':
-          vscode.commands.executeCommand('lumi-ops._selectPrompt', data.fileName, data.scope);
+          if (this._isShadowMode) {
+            // In Shadow Mode, opening a prompt just opens the markdown file
+            vscode.commands.executeCommand('lumi-ops.openPromptFile', data.fileName, data.scope);
+          } else {
+            // In Root Mode, selecting a prompt loads its content into the webview textarea
+            vscode.commands.executeCommand('lumi-ops._selectPrompt', data.fileName, data.scope);
+          }
           break;
         case 'importFolder':
           vscode.commands.executeCommand('lumi-ops._importFolder', data.scope);
@@ -46,8 +59,14 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         case 'addPrompt':
           vscode.commands.executeCommand('lumi-ops._addPrompt', data.scope);
           break;
+        case 'createPromptInline':
+          vscode.commands.executeCommand('lumi-ops._createPromptInline', data.name, data.scope);
+          break;
         case 'deletePrompt':
           vscode.commands.executeCommand('lumi-ops._deletePrompt', data.fileName, data.scope);
+          break;
+        case 'returnToRoot':
+          vscode.commands.executeCommand('lumi-ops.returnToRoot');
           break;
         case 'movePrompt':
           vscode.commands.executeCommand('lumi-ops._movePrompt', data.fileName, data.fromScope, data.toScope);
@@ -94,12 +113,30 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
   }
 
   private _getHtmlForWebview(webview: vscode.Webview) {
+    return this._getUnifiedHtml();
+  }
+
+
+  private _getUnifiedHtml() {
     return `<!DOCTYPE html>
     <html lang="en">
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <style>
+        ${this._isShadowMode ? `
+          .form-group:not(.prompts-section), #spawnBtn { display: none !important; }
+          .desc-label-row { display: none !important; }
+          .desc-container { display: none !important; }
+          .prompts-dropdown {
+            display: flex !important;
+            position: relative !important;
+            height: 100% !important;
+            border: none !important;
+            background: transparent !important;
+          }
+        ` : ''}
+
         html, body {
           height: 100%;
           margin: 0;
@@ -412,9 +449,43 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           height: 14px;
           vertical-align: middle;
         }
+        /* -- Shadow Header -- */
+        .shadow-mode-header {
+          display: ${this._isShadowMode ? 'flex' : 'none'};
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+          padding-bottom: 8px;
+          margin-bottom: 8px;
+          border-bottom: 1px solid var(--vscode-input-border);
+        }
+        .shadow-branch-info {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--vscode-foreground);
+        }
+        .shadow-root-link {
+          color: var(--vscode-icon-foreground);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          padding: 2px;
+          border-radius: 3px;
+        }
+        .shadow-root-link:hover {
+          background-color: var(--vscode-toolbar-hoverBackground);
+          color: var(--vscode-icon-foreground);
+        }
       </style>
     </head>
     <body>
+      <!-- Shadow Mode Header -->
+      <div class="shadow-mode-header">
+        <div class="shadow-branch-info">Branch: <span id="shadowBranchVal">${this._shadowBranchName || 'loading...'}</span></div>
+        <div class="shadow-root-link" id="returnRootBtn" title="Return to root">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8.36 1.37l6.36 5.8-.71.71L13 6.96V14h-3v-4H6v4H3V6.97L1.99 7.88l-.71-.71 6.36-5.8h.72zM4 6.03V13h1v-4h6v4h1V6.04L8 2.37 4 6.03z"/></svg>
+        </div>
+      </div>
       <!-- Branch Name -->
       <div class="form-group">
         <label for="branch">Branch Name</label>
@@ -486,6 +557,14 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         const promptsDropdown = document.getElementById('promptsDropdown');
         const promptsChevron = document.getElementById('promptsChevron');
         const promptsCount = document.getElementById('promptsCount');
+        const shadowBranchVal = document.getElementById('shadowBranchVal');
+        const returnRootBtn = document.getElementById('returnRootBtn');
+
+        if (returnRootBtn) {
+          returnRootBtn.addEventListener('click', () => {
+            vscode.postMessage({ command: 'returnToRoot' });
+          });
+        }
 
         // Request data on load
         vscode.postMessage({ command: 'getBranches' });
@@ -646,6 +725,60 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
 
             listContainer.appendChild(item);
           });
+          
+          // Double-click to create inline prompt
+          listContainer.addEventListener('dblclick', (e) => {
+            if (e.target !== listContainer && document.activeElement?.tagName !== 'INPUT') return;
+            
+            // Check if there's already an active inline input
+            if (listContainer.querySelector('.prompt-inline-input')) return;
+
+            const inlineWrapper = document.createElement('div');
+            inlineWrapper.className = 'prompt-item inline-create-item';
+            
+            const icon = document.createElement('span');
+            icon.className = 'prompt-item-indicator';
+            icon.textContent = '📄';
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'prompt-inline-input';
+            input.value = 'prompt';
+            input.style.flex = '1';
+            input.style.padding = '2px 4px';
+            input.style.fontSize = '11px';
+            input.style.border = '1px solid var(--vscode-focusBorder)';
+            input.style.borderRadius = '2px';
+            input.style.background = 'var(--vscode-input-background)';
+            input.style.color = 'var(--vscode-input-foreground)';
+            
+            inlineWrapper.appendChild(icon);
+            inlineWrapper.appendChild(input);
+            
+            // Insert at the bottom
+            listContainer.appendChild(inlineWrapper);
+            
+            // Scroll to bottom so the user can see it
+            listContainer.scrollTop = listContainer.scrollHeight;
+            
+            input.select();
+            
+            const submitInline = () => {
+              const val = input.value.trim();
+              if (val) {
+                vscode.postMessage({ command: 'createPromptInline', name: val, scope: showProject ? 'project' : 'global' });
+              }
+              renderPrompts(); // re-render to remove the input
+            };
+            
+            input.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter') submitInline();
+              if (e.key === 'Escape') renderPrompts();
+            });
+            
+            input.addEventListener('blur', submitInline);
+          });
+          
           promptsDropdown.appendChild(listContainer);
         }
 
@@ -661,6 +794,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
                 currentBranch = newCurrent;
                 selectedBaseBranch = currentBranch;
                 baseBranchInput.value = selectedBaseBranch;
+                if (shadowBranchVal && !${this._isShadowMode}) shadowBranchVal.textContent = currentBranch;
               }
               currentBranch = newCurrent;
               updateBaseBranchVisibility();

@@ -32,7 +32,12 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
   /** Track which branch is currently focused (selected) for focus-then-click guard */
   private lastFocusedBranch: string | null = null;
 
-  constructor(private workspaceRoot: string | undefined, private extensionPath: string) {}
+  constructor(
+    private workspaceRoot: string | undefined,
+    private extensionPath: string,
+    private isShadowMode: boolean = false,
+    private shadowBranchName?: string
+  ) {}
 
   /** Full refresh: clears item cache, re-fetches from git */
   refresh(): void {
@@ -53,6 +58,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
     if (element) {
       return [];
     } else {
+      // Root Mode: Show all clones
       try {
         const clones = await this.getShadowClones();
         const items: ShadowItem[] = [];
@@ -224,7 +230,7 @@ class ShadowItem extends vscode.TreeItem {
   ) {
     super(label, collapsibleState);
     // Stable ID so VS Code tracks this item across updates
-    this.id = `shadow-${clone.branch}`;
+    this.id = `shadow-${clone.branch}-${role}`;
     this.contextValue = role;
 
     const conflictPrefix = this.clone.hasConflict ? '⚠️ · ' : '';

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { getRepoStorageDir, LUMI_OPS_HOME } from '@lumi-ops/cli';
+import { LUMI_OPS_HOME } from '@lumi-ops/cli';
 
 export type PromptScope = 'global' | 'project';
 
@@ -14,7 +14,7 @@ export interface PromptInfo {
 /**
  * Dual-scope prompt storage service.
  * - Global:  ~/.lumi-ops/.prompts/
- * - Project: ~/.lumi-ops/<repo-name>/.prompts/
+ * - Project: <repoRoot>/.prompts/
  */
 export class PromptLibraryProvider {
   private globalDir: vscode.Uri;
@@ -26,8 +26,7 @@ export class PromptLibraryProvider {
 
   /** Set project root so we can resolve prompt directory */
   setProjectRoot(rootUri: vscode.Uri) {
-    const storageDir = getRepoStorageDir(rootUri.fsPath);
-    this.projectDir = vscode.Uri.file(path.join(storageDir, '.prompts'));
+    this.projectDir = vscode.Uri.file(path.join(rootUri.fsPath, '.prompts'));
   }
 
   /** Get the directory URI for a given scope. */
@@ -110,13 +109,28 @@ export class PromptLibraryProvider {
     await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf-8'));
   }
 
-  /** Move a prompt between scopes (copy + delete). */
+  /** Move a prompt between scopes (copy + delete). Safe against duplicate moves from other windows. */
   async movePrompt(fileName: string, fromScope: PromptScope, toScope: PromptScope): Promise<void> {
     const fromDir = this.getDir(fromScope);
     const toDir = this.getDir(toScope);
     await this.ensureDir(toDir);
     const srcUri = vscode.Uri.joinPath(fromDir, fileName);
     const destUri = vscode.Uri.joinPath(toDir, fileName);
+
+    // Check if source still exists (may have been moved by another window already)
+    let sourceExists = true;
+    try { await vscode.workspace.fs.stat(srcUri); } catch { sourceExists = false; }
+
+    if (!sourceExists) {
+      // Source is gone — check if it already landed at the destination
+      try {
+        await vscode.workspace.fs.stat(destUri);
+        return; // Already moved, nothing to do
+      } catch {
+        throw new Error(`"${fileName}" no longer exists in either scope.`);
+      }
+    }
+
     await vscode.workspace.fs.copy(srcUri, destUri, { overwrite: true });
     await vscode.workspace.fs.delete(srcUri);
   }

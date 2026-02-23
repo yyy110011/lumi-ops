@@ -33,7 +33,8 @@
       "lumi-ops": [
         {
           "id": "lumi-ops.activeClones",
-          "name": "Active Clones"
+          "name": "Active Clones",
+          "when": "!lumi-ops.isShadowMode"
         },
         {
           "id": "lumi-ops.creator",
@@ -74,6 +75,18 @@
       {
         "command": "lumi-ops.saveAsPrompt",
         "title": "Save as Prompt Template"
+      },
+      {
+        "command": "lumi-ops.returnToRoot",
+        "title": "Return to Root Workspace"
+      },
+      {
+        "command": "lumi-ops.openPromptFile",
+        "title": "Open Prompt File"
+      },
+      {
+        "command": "lumi-ops.copyBranchName",
+        "title": "Copy Branch Name"
       }
     ],
     "menus": {
@@ -85,7 +98,7 @@
         },
         {
           "command": "lumi-ops.spawn",
-          "when": "view == lumi-ops.activeClones",
+          "when": "view == lumi-ops.activeClones && !lumi-ops.isShadowMode",
           "group": "navigation"
         }
       ],
@@ -99,6 +112,11 @@
           "command": "lumi-ops.kill",
           "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "inline@2"
+        },
+        {
+          "command": "lumi-ops.copyBranchName",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "group": "modification@0"
         },
         {
           "command": "lumi-ops.merge",
