@@ -2,26 +2,29 @@
 
 > 根據目前功能現況、設計文件與近期重構整理。
 
-## 現況 (v0.3.1)
+## 現況 (v0.3.3)
 
 ✅ Spawn / Kill / Merge 完整生命週期
 ✅ Review Status Tracking & Metadata Management
 ✅ Conflict Auto-Detection
-✅ **Prompt Library** (Main & Project dual-scope, template variables)
+✅ **Prompt Library** (Global & Project dual-scope, cross-window sync, inline creation)
 ✅ **Clone Path Convention** (採用 `.worktrees/` 標準化目錄，相容原生 VS Code)
+✅ **Shadow Mode UI** (Clone workspace 自動切換為精簡 Prompt Library)
+✅ **Return to Root** (🏠 一鍵回到主 repo)
+✅ **Copy Branch Name** (右鍵複製 branch name)
+✅ **Migration Module** (Legacy worktrees / global prompts / project prompts 自動遷移)
 ✅ 首版 MCP Server 建置
 
 ---
 
-## v0.4 — Shadow Mode UI (工作區隔離體驗)
+## v0.4 — Shadow Mode UI 強化
 
-**目標**：在 Shadow Clone 的 workspace 中開啟 VS Code 時，顯示針對 AI Agent 協作的專屬功能，隱藏不必要的 Root 功能。
-**參考文件**：[shadow-mode-ui.md](./shadow-mode-ui.md)
+**目標**：進一步豐富 Shadow Clone workspace 的專屬體驗。
 
-- [ ] 偵測當前是否為 Shadow Mode（檢查 `.git` 為檔案而非目錄）
-- [ ] Tree View 簡化：不顯示所有 Clone，僅提供「回到 Root」導航
-- [ ] 取代 Spawn 控制版：為 Shadow Mode 開啟 Prompt Library，快速發派次級任務
-- [ ] 隱藏在 Clone 中不合理的操作指令（禁止在 clone 中再建立 clone 等）
+- [ ] MISSION.md 預覽摘要（在 Webview 中顯示任務摘要）
+- [ ] Clone 專屬快速操作列（跑測試、Git 操作等）
+- [ ] 顯示與 base branch 的 diff 狀態
+- [ ] Prompt Library 分類功能（This Clone / Project / Global 分組顯示）
 
 ---
 
