@@ -17,9 +17,9 @@
 
 ---
 
-## Shadow Mode UI 強化 (Optional)
+## v0.4 — Shadow Mode UI 強化
 
-**狀態**：Nice-to-have，非優先。
+**目標**：進一步豐富 Shadow Clone workspace 的專屬體驗。
 
 - [ ] MISSION.md 預覽摘要（在 Webview 中顯示任務摘要）
 - [ ] Clone 專屬快速操作列（跑測試、Git 操作等）
