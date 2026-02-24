@@ -33,8 +33,7 @@
       "lumi-ops": [
         {
           "id": "lumi-ops.activeClones",
-          "name": "Active Clones",
-          "when": "!lumi-ops.isShadowMode"
+          "name": "Active Clones"
         },
         {
           "id": "lumi-ops.creator",
@@ -105,27 +104,27 @@
       "view/item/context": [
         {
           "command": "lumi-ops.open",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone && !lumi-ops.isShadowMode",
           "group": "inline@1"
         },
         {
           "command": "lumi-ops.kill",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone && !lumi-ops.isShadowMode",
           "group": "inline@2"
         },
         {
           "command": "lumi-ops.copyBranchName",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone && !lumi-ops.isShadowMode",
           "group": "modification@0"
         },
         {
           "command": "lumi-ops.merge",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone && !lumi-ops.isShadowMode",
           "group": "modification@1"
         },
         {
           "command": "lumi-ops.kill",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone && !lumi-ops.isShadowMode",
           "group": "modification@3"
         }
       ]

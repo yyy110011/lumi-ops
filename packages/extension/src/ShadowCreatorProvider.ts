@@ -449,43 +449,11 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           height: 14px;
           vertical-align: middle;
         }
-        /* -- Shadow Header -- */
-        .shadow-mode-header {
-          display: ${this._isShadowMode ? 'flex' : 'none'};
-          flex-direction: row;
-          align-items: center;
-          justify-content: space-between;
-          padding-bottom: 8px;
-          margin-bottom: 8px;
-          border-bottom: 1px solid var(--vscode-input-border);
-        }
-        .shadow-branch-info {
-          font-size: 12px;
-          font-weight: 600;
-          color: var(--vscode-foreground);
-        }
-        .shadow-root-link {
-          color: var(--vscode-icon-foreground);
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          padding: 2px;
-          border-radius: 3px;
-        }
-        .shadow-root-link:hover {
-          background-color: var(--vscode-toolbar-hoverBackground);
-          color: var(--vscode-icon-foreground);
-        }
+
       </style>
     </head>
     <body>
-      <!-- Shadow Mode Header -->
-      <div class="shadow-mode-header">
-        <div class="shadow-branch-info">Branch: <span id="shadowBranchVal">${this._shadowBranchName || 'loading...'}</span></div>
-        <div class="shadow-root-link" id="returnRootBtn" title="Return to root">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8.36 1.37l6.36 5.8-.71.71L13 6.96V14h-3v-4H6v4H3V6.97L1.99 7.88l-.71-.71 6.36-5.8h.72zM4 6.03V13h1v-4h6v4h1V6.04L8 2.37 4 6.03z"/></svg>
-        </div>
-      </div>
+
       <!-- Branch Name -->
       <div class="form-group">
         <label for="branch">Branch Name</label>
@@ -557,14 +525,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         const promptsDropdown = document.getElementById('promptsDropdown');
         const promptsChevron = document.getElementById('promptsChevron');
         const promptsCount = document.getElementById('promptsCount');
-        const shadowBranchVal = document.getElementById('shadowBranchVal');
-        const returnRootBtn = document.getElementById('returnRootBtn');
 
-        if (returnRootBtn) {
-          returnRootBtn.addEventListener('click', () => {
-            vscode.postMessage({ command: 'returnToRoot' });
-          });
-        }
 
         // Request data on load
         vscode.postMessage({ command: 'getBranches' });
@@ -794,7 +755,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
                 currentBranch = newCurrent;
                 selectedBaseBranch = currentBranch;
                 baseBranchInput.value = selectedBaseBranch;
-                if (shadowBranchVal && !${this._isShadowMode}) shadowBranchVal.textContent = currentBranch;
+                
               }
               currentBranch = newCurrent;
               updateBaseBranchVisibility();

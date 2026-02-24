@@ -36,7 +36,8 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
     private workspaceRoot: string | undefined,
     private extensionPath: string,
     private isShadowMode: boolean = false,
-    private shadowBranchName?: string
+    private shadowBranchName?: string,
+    private currentWorkspacePath?: string
   ) {}
 
   /** Full refresh: clears item cache, re-fetches from git */
@@ -70,7 +71,10 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
             currentWorktree.branch,
             vscode.TreeItemCollapsibleState.None,
             currentWorktree,
-            'currentBranch'
+            'currentBranch',
+            this.extensionPath,
+            this.isShadowMode,
+            this.currentWorkspacePath
           ));
         }
 
@@ -87,7 +91,9 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
             vscode.TreeItemCollapsibleState.None,
             clone,
             'shadowClone',
-            this.extensionPath
+            this.extensionPath,
+            this.isShadowMode,
+            this.currentWorkspacePath
           );
           // Store live reference for partial updates
           this.itemCache.set(clone.branch, item);
@@ -226,7 +232,9 @@ class ShadowItem extends vscode.TreeItem {
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
     public readonly clone: ShadowClone,
     public readonly role: 'currentBranch' | 'shadowClone',
-    private extensionPath?: string
+    private extensionPath?: string,
+    private isShadowMode: boolean = false,
+    private currentWorkspacePath?: string
   ) {
     super(label, collapsibleState);
     // Stable ID so VS Code tracks this item across updates
@@ -237,20 +245,45 @@ class ShadowItem extends vscode.TreeItem {
 
     if (role === 'currentBranch') {
       this.tooltip = `Current workspace: ${this.clone.path}`;
-      this.description = `${conflictPrefix}Current Branch`;
+      if (this.isShadowMode) {
+        this.description = `${conflictPrefix}Root Branch`;
+        // Click = navigate to root workspace
+        this.command = {
+          command: 'lumi-ops.returnToRoot',
+          title: 'Return to Root',
+        };
+      } else {
+        this.description = `${conflictPrefix}Current Branch · ★`;
+      }
       this.iconPath = new vscode.ThemeIcon('home');
     } else {
       const status: ReviewStatus = this.clone.reviewStatus || 'todo';
       this.applyStatus(status);
       const detachedPrefix = this.clone.isDetached ? '🔀 rebasing · ' : '';
-      const baseDesc = this.clone.baseBranch ? `← ${this.clone.baseBranch}` : 'Shadow Clone';
-      this.description = `${conflictPrefix}${detachedPrefix}${baseDesc}`;
-      // Click the row → focus-then-cycle status
-      this.command = {
-        command: 'lumi-ops.cycleReviewStatus',
-        title: 'Cycle Status',
-        arguments: [this]
-      };
+
+      if (this.isShadowMode) {
+        // Shadow Mode: check if this clone is the current workspace
+        const isCurrent = this.currentWorkspacePath && this.clone.path === this.currentWorkspacePath;
+        const baseDesc = this.clone.baseBranch ? `← ${this.clone.baseBranch}` : 'Shadow Clone';
+        this.description = isCurrent
+          ? `${conflictPrefix}${detachedPrefix}${baseDesc} · ★`
+          : `${conflictPrefix}${detachedPrefix}${baseDesc}`;
+        // Click = navigate to that workspace
+        this.command = {
+          command: 'vscode.openFolder',
+          title: 'Open Workspace',
+          arguments: [vscode.Uri.file(this.clone.path), { forceNewWindow: true }]
+        };
+      } else {
+        // Root Mode: click = focus-then-cycle status
+        const baseDesc = this.clone.baseBranch ? `← ${this.clone.baseBranch}` : 'Shadow Clone';
+        this.description = `${conflictPrefix}${detachedPrefix}${baseDesc}`;
+        this.command = {
+          command: 'lumi-ops.cycleReviewStatus',
+          title: 'Cycle Status',
+          arguments: [this]
+        };
+      }
     }
   }
 

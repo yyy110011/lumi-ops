@@ -64,6 +64,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   let isShadowMode = false;
   let shadowBranchName: string | undefined = undefined;
+  let originalWorkspacePath: string | undefined = undefined;
 
   // Detect if we are in a Git Worktree (Shadow Mode) by checking the path convention
   // This helps us accurately determine the branch name even with slashes (e.g. feat/task)
@@ -73,7 +74,7 @@ export async function activate(context: vscode.ExtensionContext) {
     
     if (worktreesMatch && worktreesMatch[1]) {
       isShadowMode = true;
-      const originalWorkspacePath = rootPath;
+      originalWorkspacePath = rootPath;
       rootPath = worktreesMatch[1]; // Resolve back to the main repository root
       
       try {
@@ -94,7 +95,7 @@ export async function activate(context: vscode.ExtensionContext) {
   // Run all one-time migrations
   await runMigrations(context, rootPath);
 
-  const shadowTreeProvider = new ShadowTreeProvider(rootPath, context.extensionPath, isShadowMode, shadowBranchName);
+  const shadowTreeProvider = new ShadowTreeProvider(rootPath, context.extensionPath, isShadowMode, shadowBranchName, originalWorkspacePath);
   const activeClonesView = vscode.window.createTreeView('lumi-ops.activeClones', { treeDataProvider: shadowTreeProvider });
   if (isShadowMode) {
     activeClonesView.title = 'Shadow Clone Status';
@@ -513,15 +514,8 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('lumi-ops.returnToRoot', async () => {
       if (rootPath) {
-        const choice = await vscode.window.showInformationMessage(
-          'Return to the main repository workspace?',
-          { modal: true, detail: 'This will reload the VS Code window.' },
-          'Return to Root'
-        );
-        if (choice === 'Return to Root') {
-          const uri = vscode.Uri.file(rootPath);
-          vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: false });
-        }
+        const uri = vscode.Uri.file(rootPath);
+        vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: false });
       }
     })
   );
