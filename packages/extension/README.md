@@ -74,9 +74,9 @@ Your active workspace branch is displayed at the top of the sidebar with a 🏠 
 
 ### 👻 Shadow Mode
 When Lumi-Ops detects you are inside a **Shadow Clone** (Git Worktree), the UI automatically adapts:
-- **Sidebar** — The Active Clones list is hidden to prevent accidental operations (Spawn, Kill, Merge) from within a clone.
+- **Sidebar** — The Active Clones list remains visible with the same layout as Root Mode. Click any clone to open it in a new window. Right-click actions (Kill, Merge) are hidden. Your current clone is marked with `★`.
 - **Webview** — The Spawn Form is replaced by a focused **Prompt Library**. Clicking a prompt opens the `.md` file directly in the editor.
-- **Return to Root** — A 🏠 button in the header lets you return to the main repository window (with confirmation dialog).
+- **Return to Root** — Click the 🏠 Root row in the sidebar to return to the main repository window instantly.
 
 ## 🚀 Usage
 

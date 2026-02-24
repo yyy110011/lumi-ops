@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.4] - 2026-02-24
+
+### 🔧 Improvements
+- **Shadow Mode — Active Clones visible** — The sidebar Tree View now shows all clones in Shadow Mode (same layout as Root). Click any clone to open it in a new window; the current clone is marked with `★`.
+- **Shadow Mode — No right-click** — Context menu actions (Kill, Merge, Copy Branch Name) are hidden in Shadow Mode to prevent accidental operations.
+- **Return to Root — No popup** — The 🏠 Return to Root action now executes immediately without a confirmation dialog.
+- **Cleaner Webview** — Removed the redundant Shadow Mode header from the Webview since navigation is now handled by the Tree View.
+
 ## [0.3.3] - 2026-02-23
 
 ### ✨ New Features
