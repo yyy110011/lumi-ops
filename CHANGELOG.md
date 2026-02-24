@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.5] - 2026-02-24
+
+### 📝 Documentation
+- **README updates** — Updated Shadow Mode description to reflect v0.3.4 UX improvements (visible clones, ★ indicator, no popup).
+- **English docs** — Translated all internal docs (`roadmap.md`, `feature-candidates.md`, `Background-Agent-Plan.md`, `mcp-agent-sandbox.md`) to English.
+
 ## [0.3.4] - 2026-02-24
 
 ### 🔧 Improvements
