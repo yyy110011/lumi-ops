@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.6] - 2026-02-26
+
+### 🐛 Bug Fixes
+- **Remote SSH Support** — Added `extensionKind: ["workspace"]` so the extension runs on the remote machine when using VS Code Remote SSH / Remote Explorer. Previously, the extension ran locally and could not access the remote Git repository, causing the Active Clones tree to appear empty.
+
 ## [0.3.5] - 2026-02-24
 
 ### 📝 Documentation

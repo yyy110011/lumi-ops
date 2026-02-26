@@ -14,6 +14,7 @@
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
+  "extensionKind": ["workspace"],
   "icon": "icon.png",
   "repository": {
     "type": "git",
