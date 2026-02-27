@@ -54,9 +54,12 @@ jobs:
           dependencies: false
 
       - name: Publish to VS Code Marketplace
-        run: |
-          cd packages/extension
-          npx --yes @vscode/vsce publish --no-dependencies -p ${{ secrets.AZURE_PAT }}
+        uses: HaaLeo/publish-vscode-extension@v2
+        with:
+          pat: ${{ secrets.AZURE_PAT }}
+          registryUrl: https://marketplace.visualstudio.com
+          packagePath: packages/extension
+          dependencies: false
 
       - name: Create version bump PR
         run: |
