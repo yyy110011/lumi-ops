@@ -44,10 +44,10 @@ describe('GitUtils', () => {
 
   describe('getCurrentBranch', () => {
     it('should return trimmed branch name', async () => {
-      mockGit.revparse.mockResolvedValue('  main  \n');
+      mockGit.raw.mockResolvedValue('  main  \n');
       const branch = await gitUtils.getCurrentBranch();
       expect(branch).toBe('main');
-      expect(mockGit.revparse).toHaveBeenCalledWith(['--abbrev-ref', 'HEAD']);
+      expect(mockGit.raw).toHaveBeenCalledWith(['branch', '--show-current']);
     });
   });
 

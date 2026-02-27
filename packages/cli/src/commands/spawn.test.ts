@@ -7,6 +7,7 @@ const { mockGitUtils, mockFs } = vi.hoisted(() => ({
   mockGitUtils: {
     isGitRepo: vi.fn(),
     getCurrentBranch: vi.fn(),
+    hasCommits: vi.fn(),
     addWorktree: vi.fn(),
     addWorktreeExisting: vi.fn(),
     branchExists: vi.fn(),
@@ -58,6 +59,7 @@ describe('spawn', () => {
     vi.clearAllMocks();
     mockGitUtils.isGitRepo.mockResolvedValue(true);
     mockGitUtils.getCurrentBranch.mockResolvedValue('main');
+    mockGitUtils.hasCommits.mockResolvedValue(true);
     mockGitUtils.addWorktree.mockResolvedValue(undefined);
     mockGitUtils.addWorktreeExisting.mockResolvedValue(undefined);
     mockGitUtils.branchExists.mockResolvedValue(false);
@@ -172,20 +174,22 @@ describe('spawn', () => {
     expect(mockFs.writeFile).not.toHaveBeenCalled();
   });
 
-  it('should exit with code 1 when not a git repo', async () => {
+  it('should throw when not a git repo', async () => {
     mockGitUtils.isGitRepo.mockResolvedValue(false);
 
-    await spawn(branchName, { root: rootDir });
-
-    expect(mockExit).toHaveBeenCalledWith(1);
+    await expect(spawn(branchName, { root: rootDir })).rejects.toThrow('Not a git repository');
   });
 
-  it('should exit with code 1 on general error', async () => {
+  it('should throw when repo has no commits', async () => {
+    mockGitUtils.hasCommits.mockResolvedValue(false);
+
+    await expect(spawn(branchName, { root: rootDir })).rejects.toThrow('no commits');
+  });
+
+  it('should throw on general error', async () => {
     mockGitUtils.isGitRepo.mockResolvedValue(true);
     mockGitUtils.addWorktree.mockRejectedValue(new Error('git failed'));
 
-    await spawn(branchName, { root: rootDir });
-
-    expect(mockExit).toHaveBeenCalledWith(1);
+    await expect(spawn(branchName, { root: rootDir })).rejects.toThrow('git failed');
   });
 });

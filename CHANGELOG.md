@@ -2,10 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.3.6] - 2026-02-26
+## [0.3.6] - 2026-02-27
 
 ### 🐛 Bug Fixes
-- **Remote SSH Support** — Added `extensionKind: ["workspace"]` so the extension runs on the remote machine when using VS Code Remote SSH / Remote Explorer. Previously, the extension ran locally and could not access the remote Git repository, causing the Active Clones tree to appear empty.
+- **Remote SSH Support** — Added `extensionKind: ["workspace"]` so the extension runs on the remote machine when using VS Code Remote SSH. Previously, the extension could run locally, causing the Active Clones tree to appear empty.
+- **Empty Repo Support** — `getCurrentBranch()` now uses `git branch --show-current` instead of `git rev-parse --abbrev-ref HEAD`, which crashed on repositories with zero commits. This also fixes the Base Branch dropdown being stuck on "loading..." in new repos.
+- **Spawn Error Visibility** — Spawn now throws errors instead of calling `process.exit(1)`, so the VS Code extension can display the actual error message instead of a false "created successfully" notification.
+- **Empty Repo Guard** — Added a pre-spawn check (`hasCommits()`) that shows a clear error when attempting to create a Shadow Clone in a repository with no commits, since `git worktree add` requires at least one commit.
 
 ## [0.3.5] - 2026-02-24
 

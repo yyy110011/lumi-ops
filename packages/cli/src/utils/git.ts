@@ -18,8 +18,17 @@ export class GitUtils {
   }
 
   async getCurrentBranch(): Promise<string> {
-    const rev = await this.git.revparse(['--abbrev-ref', 'HEAD']);
-    return rev.trim();
+    const branch = await this.git.raw(['branch', '--show-current']);
+    return branch.trim();
+  }
+
+  async hasCommits(): Promise<boolean> {
+    try {
+      await this.git.raw(['rev-parse', 'HEAD']);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async listBranches(): Promise<string[]> {

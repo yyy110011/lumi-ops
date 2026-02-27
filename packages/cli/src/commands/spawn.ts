@@ -9,8 +9,11 @@ export async function spawn(branchName: string, options: { root: string; descrip
   const git = new GitUtils(rootDir);
   try {
     if (!(await git.isGitRepo())) {
-      console.error(chalk.red('Error: Not a git repository.'));
-      process.exit(1);
+      throw new Error('Not a git repository.');
+    }
+
+    if (!(await git.hasCommits())) {
+      throw new Error('Repository has no commits. Please make an initial commit before creating a Shadow Clone.');
     }
 
     // 0. Ensure Repo Storage ID is initialized (needed for metadata storage in ~/.lumi-ops/)    const { getClonesDir } = await import('../constants');
@@ -106,7 +109,6 @@ ${objectiveSection}
 
     console.log(chalk.green(`\n✨ Shadow clone ready at: ${targetPath}`));
   } catch (error: any) {
-    console.error(chalk.red(`\n❌ Failed to spawn shadow clone: ${error.message}`));
-    process.exit(1);
+    throw error;
   }
 }
