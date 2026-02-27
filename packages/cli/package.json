@@ -1,6 +1,6 @@
 {
   "name": "@lumi-ops/cli",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Core logic for Lumi-Ops Shadow Clone Protocol",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
