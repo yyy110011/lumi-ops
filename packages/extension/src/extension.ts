@@ -62,6 +62,11 @@ export async function activate(context: vscode.ExtensionContext) {
     ? vscode.workspace.workspaceFolders[0].uri.fsPath
     : undefined;
 
+  // Resolve symlinks so our paths match what git worktree list returns
+  if (rootPath) {
+    try { rootPath = fs.realpathSync(rootPath); } catch { /* keep original if resolve fails */ }
+  }
+
   let isShadowMode = false;
   let shadowBranchName: string | undefined = undefined;
   let originalWorkspacePath: string | undefined = undefined;

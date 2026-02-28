@@ -382,3 +382,42 @@ describe('e2e: full lifecycle', () => {
     expect(branches.all).not.toContain(branchName);
   });
 });
+
+// ---------------------------------------------------------------------------
+// symlink resolution
+// ---------------------------------------------------------------------------
+describe('e2e: symlink resolution', () => {
+  let symlinkDir: string;
+
+  afterEach(async () => {
+    try { await fs.remove(symlinkDir); } catch {}
+  });
+
+  it('should detect shadow clones when workspace is opened via symlink', async () => {
+    const { parseWorktrees } = await import('../commands/list');
+    const { GitUtils } = await import('../utils/git');
+
+    // Create a symlink to the real repo (simulates ~/app -> /mnt/data/app)
+    symlinkDir = path.join(path.dirname(tmpDir), 'symlink-test-' + Date.now());
+    await fs.ensureSymlink(tmpDir, symlinkDir);
+
+    // Spawn a clone using the REAL path
+    await spawn('feat/symlink-test', { root: tmpDir });
+
+    // Simulate extension using symlink path as rootPath
+    const git = new GitUtils(symlinkDir);
+    const worktreesRaw = await git.listWorktrees();
+
+    // BUG: Using symlink path → parseWorktrees can't find clones
+    const clonesViaSym = parseWorktrees(worktreesRaw, symlinkDir);
+    const shadowViaSym = clonesViaSym.filter(c => c.isShadow);
+    expect(shadowViaSym).toHaveLength(0); // proves the bug exists
+
+    // FIX: Using realpathSync → parseWorktrees correctly identifies clones
+    const resolvedPath = fs.realpathSync(symlinkDir);
+    const clonesViaReal = parseWorktrees(worktreesRaw, resolvedPath);
+    const shadowViaReal = clonesViaReal.filter(c => c.isShadow);
+    expect(shadowViaReal).toHaveLength(1);
+    expect(shadowViaReal[0].branch).toBe('feat/symlink-test');
+  });
+});

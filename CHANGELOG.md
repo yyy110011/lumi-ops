@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.7] - 2026-02-28
+
+### 🐛 Bug Fixes
+- **Symlink Workspace Support** — Resolve symlinks on the workspace root path using `fs.realpathSync()` so that `getClonesDir()` and `git worktree list` return matching paths. Previously, opening a workspace via a symlink (e.g. `~/app` → `/mnt/data/app`) caused the Tree View to show no clones because the path comparison (`startsWith`) failed silently.
+
+### 🧪 Tests
+- Added e2e test for symlink resolution that proves both the bug and the fix.
+
 ## [0.3.6] - 2026-02-27
 
 ### 🐛 Bug Fixes
