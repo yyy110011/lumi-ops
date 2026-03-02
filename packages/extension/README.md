@@ -21,7 +21,7 @@ Scale your development by spawning isolated "Shadow Clones" for your AI Agents.
 
 Lumi-Ops enables a **Multi-Threaded Coding Workflow**. Instead of blocking your main editor while an AI Agent writes code, you can "Spawn a Shadow Clone" — an isolated **Git Worktree** with a `MISSION.md` file containing your instructions. Let AI work there, and squash merge it back when done.
 
-![Sidebar Overview](media/sidebar-overview.png)
+![Sidebar Overview](https://raw.githubusercontent.com/yyy110011/lumi-ops/main/packages/extension/media/sidebar-overview.png)
 
 ---
 
@@ -29,7 +29,7 @@ Lumi-Ops enables a **Multi-Threaded Coding Workflow**. Instead of blocking your 
 
 **1. Spawn** — Fill in a branch name and task description, then click **Spawn Agent**.
 
-![Spawn Flow](media/spawn-flow.png)
+![Spawn Flow](https://raw.githubusercontent.com/yyy110011/lumi-ops/main/packages/extension/media/spawn-flow.png)
 
 **2. Work** — Open the clone in a new window. Tag `@MISSION.md` in your AI chat to give the agent its instructions.
 
@@ -50,12 +50,12 @@ Lumi-Ops enables a **Multi-Threaded Coding Workflow**. Instead of blocking your 
 ### 📄 Mission Templates
 Define reusable MISSION.md templates with **Task / Rules / Instructions** fields. Templates support dual-scope (Global + Project), and open in a built-in form editor.
 
-![Mission Template Editor](media/mission-template.png)
+![Mission Template Editor](https://raw.githubusercontent.com/yyy110011/lumi-ops/main/packages/extension/media/mission-template.png)
 
 ### 📚 Prompt Library
 Save and reuse task descriptions as prompt templates. Click a prompt to load it into the spawn form. Manage templates with per-item copy, edit, and delete actions.
 
-![Prompt Library](media/prompt-library.png)
+![Prompt Library](https://raw.githubusercontent.com/yyy110011/lumi-ops/main/packages/extension/media/prompt-library.png)
 
 - **Dual-Scope** — Global (`~/.lumi-ops/.prompts/`) + Project (`<repoRoot>/.prompts/`). Each prompt shows a **[G]** or **[P]** badge.
 - **Cross-Window Sync** — Prompts sync in real-time across Root and Clone windows.
@@ -74,7 +74,7 @@ When opened inside a Shadow Clone, the UI is fully unified with Root Mode — al
 ### 🗂️ Worktree Manager (Beta)
 A multi-repo dashboard to monitor all your worktrees from a single panel.
 
-![Worktree Manager](media/worktree-manager.png)
+![Worktree Manager](https://raw.githubusercontent.com/yyy110011/lumi-ops/main/packages/extension/media/worktree-manager.png)
 
 ### 🔍 Other Features
 - **Dropdown Search** — Branch inputs filter in real-time as you type.
