@@ -13,16 +13,20 @@ lumi-ops/
 ├── packages/
 │   ├── cli/                  # Core logic (TypeScript, published as @lumi-ops/cli)
 │   │   └── src/
-│   │       ├── commands/     # spawn, kill, list, merge (+tests side-by-side)
-│   │       ├── utils/git.ts  # GitUtils wrapper class
+│   │       ├── commands/     # spawn, kill, list, merge, migration (+tests side-by-side)
+│   │       ├── utils/git.ts  # GitUtils wrapper class (simple-git)
 │   │       ├── constants.ts  # SHADOW_CLONES_DIR, METADATA_FILE, ReviewStatus
 │   │       └── index.ts      # CLI entry + library exports
 │   ├── extension/            # VS Code Extension (depends on @lumi-ops/cli)
 │   │   └── src/
-│   │       ├── extension.ts           # Activation, command registration
-│   │       ├── ShadowTreeProvider.ts  # Tree view (Active Clones dashboard)
-│   │       └── ShadowCreatorProvider.ts # Webview (Spawn form)
-│   └── mcp-server/           # MCP server (in development)
+│   │       ├── extension.ts                  # Activation, command registration
+│   │       ├── ShadowTreeProvider.ts         # Tree view (Active Clones dashboard)
+│   │       ├── ShadowCreatorProvider.ts      # Webview (Spawn form)
+│   │       ├── PromptLibraryProvider.ts      # Prompt Library data (list, CRUD, copy)
+│   │       ├── PromptLibraryViewProvider.ts  # Prompt Library & Mission Template UI
+│   │       └── migrations.ts                # Settings migrations across versions
+│   └── mcp-server/           # MCP server (planned)
+├── .prompts/                 # Reusable task prompts (project scope)
 ├── doc/                      # Design documents and feature proposals
 ├── package.json              # Workspace root (pnpm monorepo)
 └── pnpm-workspace.yaml
@@ -33,9 +37,9 @@ lumi-ops/
 - **Language**: TypeScript (strict mode)
 - **Package Manager**: pnpm (workspace protocol)
 - **CLI Framework**: Commander.js
+- **Git Operations**: `simple-git` library, wrapped via `GitUtils` class
 - **Extension Bundler**: esbuild
-- **Test Framework**: Vitest (CLI), Mocha (Extension)
-- **Git Operations**: `child_process.execFile` wrapping git commands via `GitUtils`
+- **Test Framework**: Vitest
 
 ## Key Conventions
 
@@ -52,7 +56,16 @@ Tests sit next to their source: `spawn.ts` → `spawn.test.ts`. Run with `pnpm t
 All worktrees are created under `<repo>.worktrees/<branch-name>/`. This directory lives outside the source repository. Metadata for all clones is stored in `<repo>.worktrees/.lumi-metadata.json` (centralized, not per-clone).
 
 ### 5. Extension activation
-The extension auto-detects whether it's in a **root workspace** (shows Active Clones + Spawn form) or a **shadow clone** (opens MISSION.md automatically). Detection is done by checking for MISSION.md in the workspace root.
+The extension auto-detects whether it's in a **root workspace** (shows Active Clones + Spawn form + Prompt Library) or a **shadow clone** (opens MISSION.md automatically). Detection is done by checking for MISSION.md in the workspace root.
+
+### 6. Prompt Library & Mission Templates
+- Prompts and mission templates support **dual scope**: Project (`<repo>/.prompts/`) and Global (`~/.lumi-ops/.prompts/`).
+- Mission templates live in `_missions/` subdirectory within the prompts directory.
+- P and G scope items are **independent objects** — they are listed separately, can be copied cross-scope, and are never implicitly moved.
+- The active mission template is stored as `"name:scope"` format in `lumi-ops.activeMissionTemplate` workspace setting.
+
+### 7. Task prompts go in `.prompts/`
+When creating reusable task prompts for shadow clones, save them as `.md` files in the `.prompts/` directory at the project root. Use kebab-case naming (e.g., `fix-auth-bug.md`, `add-feature-x.md`). These prompts can be used by the Prompt Library to generate MISSION.md files for shadow clones.
 
 ## Common Tasks
 
@@ -70,6 +83,7 @@ The extension auto-detects whether it's in a **root workspace** (shows Active Cl
 ### Adding a new config setting
 1. Define in `packages/extension/package.json` under `contributes.configuration`
 2. Read with `vscode.workspace.getConfiguration('lumi-ops')`
+3. Use `ConfigurationTarget.Workspace` for project-specific settings (never Global for project state)
 
 ## Build & Test
 
@@ -78,16 +92,22 @@ The extension auto-detects whether it's in a **root workspace** (shows Active Cl
 pnpm install
 
 # Run all tests
-pnpm test
+pnpm -r test
 
 # Run CLI tests only
-cd packages/cli && pnpm test
+cd packages/cli && npx vitest run
+
+# Build CLI (required before extension build)
+cd packages/cli && npm run build
 
 # Build extension
-cd packages/extension && pnpm run build
+cd packages/extension && npm run package
+
+# Package extension as VSIX
+cd packages/extension && npx @vscode/vsce package --no-dependencies
 
 # Watch mode (extension)
-cd packages/extension && pnpm run watch
+cd packages/extension && npm run watch
 ```
 
 ## Debugging the Extension
@@ -102,6 +122,7 @@ cd packages/extension && pnpm run watch
 - **Current branch is protected**: The branch checked out in the main workspace cannot be killed or merged.
 - **Graceful failures**: All git operations should fail gracefully with user-friendly messages. Never `process.exit(1)` from library code (only from CLI entry point).
 - **Cross-platform**: Use `path.join` / `path.resolve` for all paths. Do not hardcode `/` or `\\`.
+- **Workspace-scoped settings**: Use `ConfigurationTarget.Workspace` for any project-specific state. Never `ConfigurationTarget.Global` for settings that should differ between projects.
 
 ## Release Process
 
@@ -123,10 +144,10 @@ Releases are triggered by **pushing a Git tag** (e.g., `git tag v0.2.6 && git pu
 - [VS Code Webview Guide](https://code.visualstudio.com/api/extension-guides/webview)
 - [Git Worktree Documentation](https://git-scm.com/docs/git-worktree)
 - [Commander.js](https://github.com/tj/commander.js)
+- [simple-git](https://github.com/steveukx/git-js)
 
 ### Testing
-- [Vitest](https://vitest.dev/) — CLI test framework
-- [VS Code Extension Testing](https://code.visualstudio.com/api/working-with-extensions/testing-extension)
+- [Vitest](https://vitest.dev/) — Test framework
 
 ### Project Resources
 - [GitHub Repository](https://github.com/yyy110011/lumi-ops)
