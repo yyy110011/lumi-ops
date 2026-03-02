@@ -27,6 +27,8 @@ beforeEach(async () => {
   // fs.realpathSync resolves macOS /tmp → /private/tmp symlink
   // This ensures paths match between getClonesDir() and git worktree list
   tmpDir = fs.realpathSync(await fs.mkdtemp(path.join(os.tmpdir(), 'lumi-ops-e2e-')));
+  // Isolate registry from real ~/.lumi-ops
+  process.env.LUMI_OPS_HOME = path.join(tmpDir, '.lumi-ops-test');
   git = simpleGit(tmpDir);
 
   await git.init();
@@ -47,6 +49,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   process.exit = originalExit;
+  delete process.env.LUMI_OPS_HOME;
   // Clean up: remove the temp directory, worktrees, and external storage
   try {
     await fs.remove(tmpDir);
@@ -408,12 +411,13 @@ describe('e2e: symlink resolution', () => {
     const git = new GitUtils(symlinkDir);
     const worktreesRaw = await git.listWorktrees();
 
-    // BUG: Using symlink path → parseWorktrees can't find clones
+    // With index-based detection, isShadow is correct regardless of symlink vs real path
     const clonesViaSym = parseWorktrees(worktreesRaw, symlinkDir);
     const shadowViaSym = clonesViaSym.filter(c => c.isShadow);
-    expect(shadowViaSym).toHaveLength(0); // proves the bug exists
+    expect(shadowViaSym).toHaveLength(1);
+    expect(shadowViaSym[0].branch).toBe('feat/symlink-test');
 
-    // FIX: Using realpathSync → parseWorktrees correctly identifies clones
+    // Real path also works identically
     const resolvedPath = fs.realpathSync(symlinkDir);
     const clonesViaReal = parseWorktrees(worktreesRaw, resolvedPath);
     const shadowViaReal = clonesViaReal.filter(c => c.isShadow);

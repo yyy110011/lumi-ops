@@ -4,16 +4,17 @@ import { GitUtils } from '../utils/git';
 import { getClonesDir, getRepoStorageDir, METADATA_FILE } from '../constants';
 import chalk from 'chalk';
 
-export async function kill(branchName: string, options: { root: string; keepBranch?: boolean }) {
+export async function kill(branchName: string, options: { root: string; keepBranch?: boolean; worktreePath?: string }) {
   const rootDir = path.resolve(options.root);
   const git = new GitUtils(rootDir);
-  const targetPath = path.join(getClonesDir(rootDir), branchName);
+  const targetPath = options.worktreePath || path.join(getClonesDir(rootDir), branchName);
 
   try {
     console.log(chalk.yellow(`🧨 Killing shadow clone: ${branchName}...`));
 
     // 1. Remove worktree
     await git.removeWorktree(targetPath, true);
+    await git.pruneWorktrees();
     console.log(chalk.gray('✓ Removed git worktree.'));
 
     // 2. Delete branch (unless keepBranch is set)
@@ -40,6 +41,6 @@ export async function kill(branchName: string, options: { root: string; keepBran
     console.log(chalk.green(`\n✅ Shadow clone ${branchName} successfully killed.`));
   } catch (error: any) {
     console.error(chalk.red(`\n❌ Failed to kill shadow clone: ${error.message}`));
-    process.exit(1);
+    throw error;
   }
 }

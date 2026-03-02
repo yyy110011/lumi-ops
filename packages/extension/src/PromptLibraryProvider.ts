@@ -109,30 +109,43 @@ export class PromptLibraryProvider {
     await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, 'utf-8'));
   }
 
-  /** Move a prompt between scopes (copy + delete). Safe against duplicate moves from other windows. */
-  async movePrompt(fileName: string, fromScope: PromptScope, toScope: PromptScope): Promise<void> {
+  /** Copy a prompt to the other scope (non-destructive). Returns whether a conflict exists. */
+  async copyPromptToScope(fileName: string, fromScope: PromptScope, toScope: PromptScope): Promise<{ conflict: boolean }> {
     const fromDir = this.getDir(fromScope);
     const toDir = this.getDir(toScope);
     await this.ensureDir(toDir);
     const srcUri = vscode.Uri.joinPath(fromDir, fileName);
     const destUri = vscode.Uri.joinPath(toDir, fileName);
 
-    // Check if source still exists (may have been moved by another window already)
-    let sourceExists = true;
-    try { await vscode.workspace.fs.stat(srcUri); } catch { sourceExists = false; }
+    let conflict = false;
+    try { await vscode.workspace.fs.stat(destUri); conflict = true; } catch { /* no conflict */ }
 
-    if (!sourceExists) {
-      // Source is gone — check if it already landed at the destination
-      try {
-        await vscode.workspace.fs.stat(destUri);
-        return; // Already moved, nothing to do
-      } catch {
-        throw new Error(`"${fileName}" no longer exists in either scope.`);
-      }
+    if (conflict) {
+      return { conflict: true };
     }
 
+    await vscode.workspace.fs.copy(srcUri, destUri, { overwrite: false });
+    return { conflict: false };
+  }
+
+  /** Force-copy a prompt to the other scope (overwrite). */
+  async copyPromptToScopeOverwrite(fileName: string, fromScope: PromptScope, toScope: PromptScope): Promise<void> {
+    const fromDir = this.getDir(fromScope);
+    const toDir = this.getDir(toScope);
+    await this.ensureDir(toDir);
+    const srcUri = vscode.Uri.joinPath(fromDir, fileName);
+    const destUri = vscode.Uri.joinPath(toDir, fileName);
     await vscode.workspace.fs.copy(srcUri, destUri, { overwrite: true });
-    await vscode.workspace.fs.delete(srcUri);
+  }
+
+  /** Copy a prompt to the other scope with a new name. */
+  async copyPromptToScopeRenamed(fileName: string, newFileName: string, fromScope: PromptScope, toScope: PromptScope): Promise<void> {
+    const fromDir = this.getDir(fromScope);
+    const toDir = this.getDir(toScope);
+    await this.ensureDir(toDir);
+    const srcUri = vscode.Uri.joinPath(fromDir, fileName);
+    const destUri = vscode.Uri.joinPath(toDir, newFileName);
+    await vscode.workspace.fs.copy(srcUri, destUri, { overwrite: false });
   }
 
   /** Get the URI for a prompt file. */

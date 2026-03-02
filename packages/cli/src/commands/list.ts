@@ -1,6 +1,5 @@
 import * as path from 'path';
 import { GitUtils } from '../utils/git';
-import { getClonesDir } from '../constants';
 import type { ReviewStatus } from '../constants';
 import chalk from 'chalk';
 
@@ -8,6 +7,7 @@ export interface ShadowClone {
   branch: string;
   path: string;
   isShadow: boolean;
+  isMain?: boolean;
   isDetached?: boolean;
   baseBranch?: string;
   reviewStatus?: ReviewStatus;
@@ -16,36 +16,42 @@ export interface ShadowClone {
 
 /**
  * Parse raw `git worktree list --porcelain` entries into ShadowClone objects.
+ *
+ * Detection is index-based: the first entry from `git worktree list --porcelain`
+ * is always the main worktree; all others are shadow clones.
+ *
  * Handles detached HEAD worktrees (e.g. during rebase conflict) by deriving
- * the branch name from the worktree path relative to the clones directory.
+ * the branch name from the last segment of the worktree path.
  */
-export function parseWorktrees(rawEntries: string[], rootDir: string): ShadowClone[] {
+export function parseWorktrees(rawEntries: string[], _rootDir: string): ShadowClone[] {
   const clones: ShadowClone[] = [];
-  const clonesDir = getClonesDir(rootDir);
 
-  for (const entry of rawEntries) {
+  for (let i = 0; i < rawEntries.length; i++) {
+    const entry = rawEntries[i];
     const lines = entry.split('\n');
     const wtLine = lines.find(l => l.startsWith('worktree '));
     const worktreePath = wtLine ? wtLine.substring('worktree '.length) : undefined;
     const branch = lines.find(l => l.startsWith('branch'))?.split(' ').pop();
+    const isMain = i === 0;
 
     if (worktreePath && branch) {
       clones.push({
         branch: branch.replace('refs/heads/', ''),
         path: worktreePath,
-        isShadow: worktreePath.startsWith(clonesDir),
+        isShadow: !isMain,
+        isMain,
       });
-    } else if (worktreePath && !branch && worktreePath.startsWith(clonesDir)) {
+    } else if (worktreePath && !branch) {
       // Detached HEAD (e.g. during rebase conflict) — derive branch from path
-      const relativePath = path.relative(clonesDir, worktreePath);
-      if (relativePath && !relativePath.startsWith('..')) {
-        clones.push({
-          branch: relativePath,
-          path: worktreePath,
-          isShadow: true,
-          isDetached: true,
-        });
-      }
+      const segments = worktreePath.split('/');
+      const derivedBranch = segments[segments.length - 1] || worktreePath;
+      clones.push({
+        branch: derivedBranch,
+        path: worktreePath,
+        isShadow: !isMain,
+        isMain,
+        isDetached: true,
+      });
     }
   }
 

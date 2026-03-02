@@ -8,9 +8,15 @@ import * as os from 'os';
 export const SHADOW_CLONES_DIR = '.shadow-clones';
 
 /**
- * Global directory for Lumi-Ops (used for global prompts).
+ * Get the global directory for Lumi-Ops.
+ * Supports `LUMI_OPS_HOME` env var override (used by tests for isolation).
  */
-export const LUMI_OPS_HOME = path.join(os.homedir(), '.lumi-ops');
+export function getLumiOpsHome(): string {
+  return process.env.LUMI_OPS_HOME || path.join(os.homedir(), '.lumi-ops');
+}
+
+/** @deprecated Use `getLumiOpsHome()` — this is evaluated once at import time and won't reflect env changes. */
+export const LUMI_OPS_HOME = getLumiOpsHome();
 
 /**
  * Name of the centralized metadata file.

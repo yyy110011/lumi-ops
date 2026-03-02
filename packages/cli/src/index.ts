@@ -14,6 +14,8 @@ export * from './commands/merge';
 export * from './commands/migration';
 export * from './utils/git';
 export * from './constants';
+export * from './registry';
+export * from './missionDefaults';
 
 
 

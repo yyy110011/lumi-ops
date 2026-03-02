@@ -42,6 +42,11 @@
           "id": "lumi-ops.creator",
           "name": "Create Shadow Clone",
           "type": "webview"
+        },
+        {
+          "id": "lumi-ops.promptLibrary",
+          "name": "Prompt Library",
+          "type": "webview"
         }
       ]
     },
@@ -89,6 +94,22 @@
       {
         "command": "lumi-ops.copyBranchName",
         "title": "Copy Branch Name"
+      },
+      {
+        "command": "lumi-ops.openWorktreeManager",
+        "title": "Open Worktree Manager (Beta)",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "lumi-ops.pickCopyFolders",
+        "title": "Pick Copy Folders",
+        "category": "Lumi-Ops"
+      },
+      {
+        "command": "lumi-ops.openSettings",
+        "title": "Open Lumi-Ops Settings",
+        "category": "Lumi-Ops",
+        "icon": "$(gear)"
       }
     ],
     "menus": {
@@ -100,37 +121,76 @@
         },
         {
           "command": "lumi-ops.spawn",
-          "when": "view == lumi-ops.activeClones && !lumi-ops.isShadowMode",
+          "when": "view == lumi-ops.activeClones",
+          "group": "navigation"
+        },
+        {
+          "command": "lumi-ops.openWorktreeManager",
+          "when": "view == lumi-ops.activeClones",
+          "group": "navigation"
+        },
+        {
+          "command": "lumi-ops.openSettings",
+          "when": "view == lumi-ops.activeClones",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
           "command": "lumi-ops.open",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone && !lumi-ops.isShadowMode",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "inline@1"
         },
         {
           "command": "lumi-ops.kill",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone && !lumi-ops.isShadowMode",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "inline@2"
         },
         {
           "command": "lumi-ops.copyBranchName",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone && !lumi-ops.isShadowMode",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "modification@0"
         },
         {
           "command": "lumi-ops.merge",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone && !lumi-ops.isShadowMode",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "modification@1"
         },
         {
           "command": "lumi-ops.kill",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone && !lumi-ops.isShadowMode",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "modification@3"
         }
       ]
+    },
+    "customEditors": [
+      {
+        "viewType": "lumi-ops.missionTemplateEditor",
+        "displayName": "Mission Template Editor",
+        "selector": [
+          {
+            "filenamePattern": "**/.prompts/_missions/*.md"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "configuration": {
+      "title": "Lumi-Ops",
+      "properties": {
+        "lumi-ops.activeMissionTemplate": {
+          "type": "string",
+          "default": "default",
+          "description": "Active mission template in 'name:scope' format (e.g. 'my-workflow:project'). Used when spawning new shadow clones."
+        },
+        "lumi-ops.copyOnSpawn": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "editPresentation": "multilineText",
+          "markdownDescription": "Folders and files to copy from root into shadow clones on spawn (one per line).\n\n[$(folder) Browse workspace folders...](command:lumi-ops.pickCopyFolders)"
+        }
+      }
     }
   },
   "scripts": {
@@ -141,7 +201,8 @@
     "lint": "eslint src --ext ts"
   },
   "dependencies": {
-    "@lumi-ops/cli": "workspace:*"
+    "@lumi-ops/cli": "workspace:*",
+    "@vscode/codicons": "^0.0.44"
   },
   "devDependencies": {
     "@types/glob": "^8.1.0",
@@ -155,6 +216,7 @@
     "eslint": "^8.56.0",
     "glob": "^10.3.10",
     "mocha": "^10.2.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^3.2.4"
   }
 }

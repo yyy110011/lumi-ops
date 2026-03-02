@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getClonesDir } from '../constants';
 
 // --- Mocks ---
 const mockGitUtils = {
@@ -23,11 +22,10 @@ vi.mock('chalk', () => ({
 const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
 const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-import { list } from './list';
+import { list, parseWorktrees } from './list';
 
 describe('list', () => {
   const rootDir = '/fake/root';
-  const clonesDir = getClonesDir(rootDir);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -36,7 +34,7 @@ describe('list', () => {
   it('should parse porcelain worktrees and identify shadow clones', async () => {
     mockGitUtils.listWorktrees.mockResolvedValue([
       'worktree /fake/root\nHEAD abc123\nbranch refs/heads/main',
-      `worktree ${clonesDir}/feat/test\nHEAD def456\nbranch refs/heads/feat/test`,
+      `worktree /some/other/path/feat/test\nHEAD def456\nbranch refs/heads/feat/test`,
     ]);
 
     await list({ root: rootDir, json: true });
@@ -47,11 +45,13 @@ describe('list', () => {
       branch: 'main',
       path: '/fake/root',
       isShadow: false,
+      isMain: true,
     });
     expect(output[1]).toEqual({
       branch: 'feat/test',
-      path: `${clonesDir}/feat/test`,
+      path: '/some/other/path/feat/test',
       isShadow: true,
+      isMain: false,
     });
   });
 
@@ -66,7 +66,7 @@ describe('list', () => {
     expect(output[0].branch).toBe('feature/deep/nested');
   });
 
-  it('should skip entries without worktree path or branch', async () => {
+  it('should skip entries without worktree path', async () => {
     mockGitUtils.listWorktrees.mockResolvedValue([
       'worktree /fake/root\nHEAD abc\nbranch refs/heads/main',
       'HEAD def456',
@@ -114,5 +114,59 @@ describe('list', () => {
     await list({ root: rootDir });
 
     expect(mockExit).toHaveBeenCalledWith(1);
+  });
+});
+
+describe('parseWorktrees', () => {
+  it('first entry is always isMain: true, isShadow: false', () => {
+    const result = parseWorktrees([
+      'worktree /any/path\nHEAD abc\nbranch refs/heads/main',
+    ], '/unused');
+
+    expect(result[0].isMain).toBe(true);
+    expect(result[0].isShadow).toBe(false);
+  });
+
+  it('non-first entries are isShadow: true regardless of path', () => {
+    const result = parseWorktrees([
+      'worktree /repo\nHEAD abc\nbranch refs/heads/main',
+      'worktree /completely/different/path\nHEAD def\nbranch refs/heads/feat/a',
+      'worktree /repo.worktrees/feat/b\nHEAD ghi\nbranch refs/heads/feat/b',
+    ], '/repo');
+
+    expect(result[0].isMain).toBe(true);
+    expect(result[0].isShadow).toBe(false);
+
+    expect(result[1].isMain).toBe(false);
+    expect(result[1].isShadow).toBe(true);
+
+    expect(result[2].isMain).toBe(false);
+    expect(result[2].isShadow).toBe(true);
+  });
+
+  it('detached HEAD entries at any path are included', () => {
+    const result = parseWorktrees([
+      'worktree /repo\nHEAD abc\nbranch refs/heads/main',
+      'worktree /random/location/feat-branch\nHEAD def\ndetached',
+    ], '/repo');
+
+    expect(result).toHaveLength(2);
+    expect(result[1]).toMatchObject({
+      branch: 'feat-branch',
+      path: '/random/location/feat-branch',
+      isShadow: true,
+      isMain: false,
+      isDetached: true,
+    });
+  });
+
+  it('detached HEAD at index 0 is isMain: true', () => {
+    const result = parseWorktrees([
+      'worktree /repo\nHEAD abc\ndetached',
+    ], '/repo');
+
+    expect(result[0].isMain).toBe(true);
+    expect(result[0].isShadow).toBe(false);
+    expect(result[0].isDetached).toBe(true);
   });
 });

@@ -6,6 +6,7 @@ const { mockGitUtils, mockFs } = vi.hoisted(() => ({
   mockGitUtils: {
     removeWorktree: vi.fn(),
     deleteBranch: vi.fn(),
+    pruneWorktrees: vi.fn(),
   },
   mockFs: {
     readJSON: vi.fn(),
@@ -102,19 +103,15 @@ describe('kill', () => {
     expect(mockExit).not.toHaveBeenCalled();
   });
 
-  it('should exit with code 1 when removeWorktree fails', async () => {
+  it('should throw when removeWorktree fails', async () => {
     mockGitUtils.removeWorktree.mockRejectedValue(new Error('worktree not found'));
 
-    await kill(branchName, { root: rootDir });
-
-    expect(mockExit).toHaveBeenCalledWith(1);
+    await expect(kill(branchName, { root: rootDir })).rejects.toThrow('worktree not found');
   });
 
-  it('should exit with code 1 when deleteBranch fails', async () => {
+  it('should throw when deleteBranch fails', async () => {
     mockGitUtils.deleteBranch.mockRejectedValue(new Error('branch not found'));
 
-    await kill(branchName, { root: rootDir });
-
-    expect(mockExit).toHaveBeenCalledWith(1);
+    await expect(kill(branchName, { root: rootDir })).rejects.toThrow('branch not found');
   });
 });

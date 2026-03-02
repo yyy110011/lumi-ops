@@ -7,8 +7,6 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
-    private readonly _isShadowMode: boolean = false,
-    private readonly _shadowBranchName?: string
   ) {}
 
   public resolveWebviewView(
@@ -17,9 +15,6 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
     _token: vscode.CancellationToken,
   ) {
     this._view = webviewView;
-    if (this._isShadowMode) {
-      webviewView.title = 'Prompt Library';
-    }
 
     webviewView.webview.options = {
       enableScripts: true,
@@ -41,41 +36,11 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         case 'getBranches':
           vscode.commands.executeCommand('lumi-ops.getBranches');
           break;
-        case 'getPrompts':
-          vscode.commands.executeCommand('lumi-ops._getPrompts', data.scopes);
-          break;
-        case 'selectPrompt':
-          if (this._isShadowMode) {
-            // In Shadow Mode, opening a prompt just opens the markdown file
-            vscode.commands.executeCommand('lumi-ops.openPromptFile', data.fileName, data.scope);
-          } else {
-            // In Root Mode, selecting a prompt loads its content into the webview textarea
-            vscode.commands.executeCommand('lumi-ops._selectPrompt', data.fileName, data.scope);
-          }
-          break;
-        case 'importFolder':
-          vscode.commands.executeCommand('lumi-ops._importFolder', data.scope);
-          break;
-        case 'addPrompt':
-          vscode.commands.executeCommand('lumi-ops._addPrompt', data.scope);
-          break;
-        case 'createPromptInline':
-          vscode.commands.executeCommand('lumi-ops._createPromptInline', data.name, data.scope);
-          break;
-        case 'deletePrompt':
-          vscode.commands.executeCommand('lumi-ops._deletePrompt', data.fileName, data.scope);
-          break;
         case 'returnToRoot':
           vscode.commands.executeCommand('lumi-ops.returnToRoot');
           break;
-        case 'movePrompt':
-          vscode.commands.executeCommand('lumi-ops._movePrompt', data.fileName, data.fromScope, data.toScope);
-          break;
         case 'saveAsPrompt':
           vscode.commands.executeCommand('lumi-ops.saveAsPrompt', data.content, data.scope);
-          break;
-        case 'getCloneBranches':
-          vscode.commands.executeCommand('lumi-ops._getCloneBranches');
           break;
       }
     });
@@ -100,15 +65,9 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  public updatePrompts(prompts: { name: string; fileName: string; preview: string; scope: string }[]) {
+  public setBranchName(name: string) {
     if (this._view) {
-      this._view.webview.postMessage({ command: 'setPrompts', prompts });
-    }
-  }
-
-  public updateCloneBranches(cloneBranches: string[]) {
-    if (this._view) {
-      this._view.webview.postMessage({ command: 'setCloneBranches', cloneBranches });
+      this._view.webview.postMessage({ command: 'setBranchName', name });
     }
   }
 
@@ -124,19 +83,6 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <style>
-        ${this._isShadowMode ? `
-          .form-group:not(.prompts-section), #spawnBtn { display: none !important; }
-          .desc-label-row { display: none !important; }
-          .desc-container { display: none !important; }
-          .prompts-dropdown {
-            display: flex !important;
-            position: relative !important;
-            height: 100% !important;
-            border: none !important;
-            background: transparent !important;
-          }
-        ` : ''}
-
         html, body {
           height: 100%;
           margin: 0;
@@ -152,6 +98,23 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         }
         .form-group {
           margin-bottom: 8px;
+        }
+        .branch-row {
+          display: flex;
+          align-items: flex-end;
+          gap: 6px;
+          margin-bottom: 8px;
+        }
+        .branch-row .form-group {
+          flex: 1;
+          margin-bottom: 0;
+          min-width: 0;
+        }
+        .branch-row-arrow {
+          font-size: 11px;
+          color: var(--vscode-descriptionForeground);
+          padding-bottom: 5px;
+          flex-shrink: 0;
         }
         label {
           display: block;
@@ -244,165 +207,13 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           background: var(--vscode-button-hoverBackground);
         }
 
-        /* -- Prompts Section (integrated with Task Description) -- */
-        .prompts-section {
-          position: relative;
+        /* -- Textarea area -- */
+        .desc-section {
           flex: 1;
           display: flex;
           flex-direction: column;
           min-height: 0;
         }
-        .desc-label-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 4px;
-        }
-        .desc-label-row label {
-          margin-bottom: 0;
-        }
-        .prompts-trigger {
-          display: inline-flex;
-          align-items: center;
-          gap: 3px;
-          padding: 2px 6px;
-          font-size: 10px;
-          color: var(--vscode-descriptionForeground);
-          cursor: pointer;
-          user-select: none;
-          border-radius: 3px;
-          transition: all 0.15s;
-        }
-        .prompts-trigger:hover {
-          color: var(--vscode-foreground);
-          background: var(--vscode-list-hoverBackground);
-        }
-        .prompts-trigger svg {
-          transition: transform 0.15s;
-        }
-        .desc-panel-wrapper {
-          position: relative;
-          flex: 1;
-          min-height: 0;
-        }
-        .prompts-dropdown {
-          display: none;
-          position: absolute;
-          inset: 0;
-          flex-direction: column;
-          box-sizing: border-box;
-          border: 1px solid var(--vscode-input-border);
-          border-radius: 3px;
-          overflow: hidden;
-          background: var(--vscode-input-background);
-          z-index: 1;
-        }
-        .prompts-dropdown.show {
-          display: flex;
-        }
-        .scope-filter-bar {
-          display: flex;
-          gap: 4px;
-          padding: 4px 8px;
-          border-bottom: 1px solid var(--vscode-input-border);
-          flex-wrap: nowrap;
-          overflow: hidden;
-          align-items: center;
-        }
-        .scope-toggle {
-          font-size: 10px;
-          padding: 2px 8px;
-          border: 1px solid var(--vscode-input-border);
-          border-radius: 10px;
-          background: transparent;
-          color: var(--vscode-descriptionForeground);
-          cursor: pointer;
-          user-select: none;
-          transition: all 0.15s;
-        }
-        .scope-toggle.active {
-          background: var(--vscode-badge-background);
-          color: var(--vscode-badge-foreground);
-          border-color: var(--vscode-badge-background);
-        }
-        .scope-toggle:hover:not(.active) {
-          border-color: var(--vscode-focusBorder);
-          color: var(--vscode-foreground);
-        }
-        .prompt-scope-badge {
-          flex-shrink: 0;
-          font-size: 9px;
-          padding: 0 4px;
-          border-radius: 3px;
-          cursor: pointer;
-          transition: opacity 0.15s;
-          font-weight: 600;
-        }
-        .prompt-scope-badge:hover {
-          opacity: 1 !important;
-        }
-        .prompt-scope-badge.scope-project {
-          background: var(--vscode-badge-background);
-          color: var(--vscode-badge-foreground);
-          opacity: 0.6;
-        }
-        .prompt-scope-badge.scope-global {
-          background: #e8a317;
-          color: #1e1e1e;
-          opacity: 0.85;
-        }
-        .prompt-item {
-          display: flex;
-          align-items: center;
-          padding: 4px 8px;
-          cursor: pointer;
-          font-size: 11px;
-          gap: 5px;
-          min-width: 0;
-          overflow: hidden;
-        }
-        .prompt-item:hover {
-          background: var(--vscode-list-hoverBackground);
-        }
-        .prompt-item.selected {
-          background: var(--vscode-list-activeSelectionBackground);
-          color: var(--vscode-list-activeSelectionForeground);
-        }
-        .prompt-item-name {
-          flex: 1;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .prompt-item-indicator {
-          flex-shrink: 0;
-          font-size: 10px;
-          color: var(--vscode-charts-green, #89d185);
-        }
-        .prompt-item-delete {
-          flex-shrink: 0;
-          opacity: 0;
-          cursor: pointer;
-          font-size: 10px;
-          padding: 2px;
-          color: var(--vscode-descriptionForeground);
-        }
-        .prompt-item:hover .prompt-item-delete {
-          opacity: 0.6;
-        }
-        .prompt-item-delete:hover {
-          opacity: 1 !important;
-          color: var(--vscode-errorForeground);
-        }
-        .prompts-empty {
-          padding: 8px;
-          font-size: 10px;
-          color: var(--vscode-descriptionForeground);
-          font-style: italic;
-          text-align: center;
-        }
-
-        /* -- Textarea + seamless Save as Template -- */
         .desc-container {
           border: 1px solid var(--vscode-input-border);
           border-radius: 3px;
@@ -410,7 +221,8 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           box-sizing: border-box;
           display: flex;
           flex-direction: column;
-          height: 100%;
+          flex: 1;
+          min-height: 0;
         }
         .desc-container textarea {
           border: none;
@@ -421,6 +233,10 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         }
         .desc-container textarea:focus {
           outline: none;
+        }
+        .save-template-row {
+          display: flex;
+          align-items: center;
         }
         .save-template-btn {
           display: flex;
@@ -433,7 +249,6 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           font-size: 11px;
           color: var(--vscode-descriptionForeground);
           user-select: none;
-          width: 100%;
         }
         .save-template-btn:hover {
           color: var(--vscode-foreground);
@@ -442,55 +257,90 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         .save-template-btn svg {
           flex-shrink: 0;
         }
+        .scope-pill {
+          font-size: 9px;
+          padding: 1px 6px;
+          border-radius: 8px;
+          cursor: pointer;
+          user-select: none;
+          font-weight: 600;
+          margin-right: 4px;
+          transition: all 0.15s;
+        }
+        .scope-pill.scope-project {
+          background: var(--vscode-badge-background);
+          color: var(--vscode-badge-foreground);
+        }
+        .scope-pill.scope-global {
+          background: #e8a317;
+          color: #1e1e1e;
+        }
 
-        /* -- SVG icon base -- */
-        .icon-btn svg {
-          width: 14px;
-          height: 14px;
-          vertical-align: middle;
+        /* -- Input clear button -- */
+        .input-with-clear {
+          position: relative;
+        }
+        .input-with-clear input {
+          padding-right: 22px;
+        }
+        .input-clear-btn {
+          position: absolute;
+          right: 4px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: var(--vscode-descriptionForeground);
+          font-size: 12px;
+          padding: 0 2px;
+          line-height: 1;
+          display: none;
+          z-index: 1;
+        }
+        .input-clear-btn:hover {
+          color: var(--vscode-foreground);
+        }
+        .input-with-clear input:not(:placeholder-shown) ~ .input-clear-btn {
+          display: block;
         }
 
       </style>
     </head>
     <body>
 
-      <!-- Branch Name -->
-      <div class="form-group">
-        <label for="branch">Branch Name</label>
-        <div class="branch-wrapper">
-          <input type="text" id="branch" placeholder="feature/new-task">
-          <div class="branch-dropdown" id="branchDropdown"></div>
+      <!-- Branch Row: [Base ▾] → [Create Branch] -->
+      <div class="branch-row">
+        <div class="form-group" id="baseBranchGroup">
+          <label for="baseBranchInput">Base</label>
+          <div class="branch-wrapper input-with-clear">
+            <input type="text" id="baseBranchInput" placeholder="loading...">
+            <span class="input-clear-btn" id="baseBranchClear">✕</span>
+            <div class="branch-dropdown" id="baseBranchDropdown"></div>
+          </div>
+        </div>
+        <span class="branch-row-arrow">→</span>
+        <div class="form-group">
+          <label for="branch" id="branchLabel">Create Branch</label>
+          <div class="branch-wrapper input-with-clear">
+            <input type="text" id="branch" placeholder="feature/new-task">
+            <span class="input-clear-btn" id="branchClear">✕</span>
+            <div class="branch-dropdown" id="branchDropdown"></div>
+          </div>
         </div>
       </div>
 
-      <!-- Base Branch -->
-      <div class="form-group" id="baseBranchGroup">
-        <label for="baseBranchInput">Base Branch</label>
-        <div class="branch-wrapper">
-          <input type="text" id="baseBranchInput" placeholder="loading...">
-          <div class="branch-dropdown" id="baseBranchDropdown"></div>
-        </div>
-      </div>
-
-      <!-- Task Description + Prompts -->
-      <div class="form-group prompts-section">
-        <div class="desc-label-row">
-          <label for="description">Task Description</label>
-          <span class="prompts-trigger" id="promptsHeader">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h12M2 4l2-2h4l2 2M2 4v9a1 1 0 001 1h10a1 1 0 001-1V4"/></svg>
-            <span>Prompts</span>
-            <span id="promptsCount" style="font-size:10px; color:var(--vscode-descriptionForeground);"></span>
-            <span id="promptsChevron"><svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor"><path d="M4 6l4 4 4-4"/></svg></span>
-          </span>
-        </div>
-        <div class="desc-panel-wrapper">
-          <div class="prompts-dropdown" id="promptsDropdown"></div>
-          <div class="desc-container">
-            <textarea id="description" placeholder="Describe the objective for the AI Agent..."></textarea>
+      <!-- Task Description -->
+      <div class="form-group desc-section">
+        <label for="description">Task Description</label>
+        <div class="desc-container">
+          <textarea id="description" placeholder="Describe the objective for the AI Agent..."></textarea>
+          <div class="save-template-row">
             <button class="save-template-btn" id="saveAsTemplateBtn" title="Save as Template">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 1h8l3 3v9a2 2 0 01-2 2H3a2 2 0 01-2-2V3a2 2 0 012-2z"/><path d="M5 1v4h6V1"/><circle cx="8" cy="10" r="2"/></svg>
               Save as Template
             </button>
+            <span class="scope-pill scope-project" id="scopePill" title="Click to toggle scope">P</span>
           </div>
         </div>
       </div>
@@ -503,245 +353,46 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         let currentBranch = '';
         let selectedBaseBranch = '';
         let worktreeBranches = [];
-        let prompts = [];
-        let cloneBranches = [];  // branches that already have active clones
-        let selectedPromptFileName = null;
-        let selectedPromptScope = null;
-        let showGlobal = true;
-        let showProject = true;
+        let saveScope = 'project';
 
         const branchInput = document.getElementById('branch');
         const dropdown = document.getElementById('branchDropdown');
+        const branchClear = document.getElementById('branchClear');
 
         const baseBranchInput = document.getElementById('baseBranchInput');
         const baseDropdown = document.getElementById('baseBranchDropdown');
+        const baseBranchClear = document.getElementById('baseBranchClear');
 
         const baseBranchGroup = document.getElementById('baseBranchGroup');
+        const branchRowArrow = document.querySelector('.branch-row-arrow');
         const descriptionEl = document.getElementById('description');
         const spawnBtn = document.getElementById('spawnBtn');
+        const scopePill = document.getElementById('scopePill');
 
-        // === Prompts Dropdown ===
-        const promptsHeader = document.getElementById('promptsHeader');
-        const promptsDropdown = document.getElementById('promptsDropdown');
-        const promptsChevron = document.getElementById('promptsChevron');
-        const promptsCount = document.getElementById('promptsCount');
-
+        // === Clear buttons ===
+        branchClear.addEventListener('click', () => {
+          branchInput.value = '';
+          branchInput.focus();
+          updateBaseBranchVisibility();
+          updateSpawnBtnText();
+        });
+        baseBranchClear.addEventListener('click', () => {
+          baseBranchInput.value = '';
+          selectedBaseBranch = '';
+          baseBranchInput.focus();
+          showBaseDropdown();
+        });
 
         // Request data on load
         vscode.postMessage({ command: 'getBranches' });
-        vscode.postMessage({ command: 'getPrompts', scopes: getActiveScopes() });
-        vscode.postMessage({ command: 'getCloneBranches' });
 
-        function getActiveScopes() {
-          const s = [];
-          if (showGlobal) s.push('global');
-          if (showProject) s.push('project');
-          return s.length > 0 ? s : ['project'];
-        }
-
-        function showPromptsDropdown() {
-          renderPrompts();
-          promptsDropdown.classList.add('show');
-          promptsChevron.style.transform = 'rotate(180deg)';
-          // Close other dropdowns
-          hideDropdown();
-          hideBaseDropdown();
-        }
-
-        function hidePromptsDropdown() {
-          promptsDropdown.classList.remove('show');
-          promptsChevron.style.transform = '';
-        }
-
-        // === Prompts toggle ===
-        promptsHeader.addEventListener('click', (e) => {
-          if (promptsDropdown.classList.contains('show')) {
-            hidePromptsDropdown();
-          } else {
-            showPromptsDropdown();
-          }
+        // === Scope pill toggle ===
+        scopePill.addEventListener('click', () => {
+          saveScope = saveScope === 'project' ? 'global' : 'project';
+          scopePill.textContent = saveScope === 'project' ? 'P' : 'G';
+          scopePill.className = 'scope-pill scope-' + saveScope;
+          scopePill.title = saveScope === 'project' ? 'Saving to Project' : 'Saving to Global';
         });
-
-        function deriveBranch(fileName) {
-          // phase-1-auth.md → feat/phase-1-auth
-          const name = fileName.replace(/\\.md$/, '');
-          return 'feat/' + name;
-        }
-
-        function renderPrompts() {
-          promptsDropdown.innerHTML = '';
-
-          // -- Filter bar --
-          const filterBar = document.createElement('div');
-          filterBar.className = 'scope-filter-bar';
-          ['project', 'global'].forEach(scope => {
-            const btn = document.createElement('button');
-            btn.className = 'scope-toggle' + ((scope === 'project' ? showProject : showGlobal) ? ' active' : '');
-            btn.textContent = scope.charAt(0).toUpperCase() + scope.slice(1);
-            btn.addEventListener('click', (e) => {
-              e.stopPropagation();
-              if (scope === 'project') showProject = !showProject;
-              else showGlobal = !showGlobal;
-              // Ensure at least one is active
-              if (!showProject && !showGlobal) {
-                if (scope === 'project') showGlobal = true;
-                else showProject = true;
-              }
-              vscode.postMessage({ command: 'getPrompts', scopes: getActiveScopes() });
-            });
-            filterBar.appendChild(btn);
-          });
-          promptsDropdown.appendChild(filterBar);
-
-          // -- Action buttons in filter bar --
-          const spacer = document.createElement('span');
-          spacer.style.flex = '1';
-          filterBar.appendChild(spacer);
-
-          const importBtn = document.createElement('button');
-          importBtn.className = 'scope-toggle';
-          importBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M5 7l3 3 3-3"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>';
-          importBtn.title = 'Import prompts';
-          importBtn.style.padding = '2px 5px';
-          importBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            vscode.postMessage({ command: 'importFolder', scope: showProject ? 'project' : 'global' });
-          });
-          filterBar.appendChild(importBtn);
-
-          // -- Prompt list container --
-          const listContainer = document.createElement('div');
-          listContainer.style.flex = '1';
-          listContainer.style.overflowY = 'auto';
-
-          const filtered = prompts.filter(p => {
-            if (p.scope === 'project' && showProject) return true;
-            if (p.scope === 'global' && showGlobal) return true;
-            return false;
-          });
-
-          promptsCount.textContent = filtered.length > 0 ? '(' + filtered.length + ')' : '';
-
-          if (filtered.length === 0) {
-            const empty = document.createElement('div');
-            empty.className = 'prompts-empty';
-            empty.textContent = 'No prompts yet \u2014 import a folder or add one';
-            listContainer.appendChild(empty);
-            promptsDropdown.appendChild(listContainer);
-            return;
-          }
-
-          const cloneSet = new Set(cloneBranches);
-
-          filtered.forEach(p => {
-            const item = document.createElement('div');
-            item.className = 'prompt-item' + (selectedPromptFileName === p.fileName && selectedPromptScope === p.scope ? ' selected' : '');
-
-            // Indicator
-            const derived = deriveBranch(p.fileName);
-            const hasClone = cloneSet.has(derived) || cloneSet.has(p.name);
-            const indicator = document.createElement('span');
-            indicator.className = 'prompt-item-indicator';
-            indicator.textContent = hasClone ? '\u2726' : '';
-            indicator.title = hasClone ? 'Clone exists for this prompt' : '';
-
-            const nameSpan = document.createElement('span');
-            nameSpan.className = 'prompt-item-name';
-            nameSpan.textContent = p.name;
-            nameSpan.title = p.preview || p.name;
-
-            // Scope badge — click to move between scopes
-            const badge = document.createElement('span');
-            badge.className = 'prompt-scope-badge scope-' + p.scope;
-            badge.textContent = p.scope === 'global' ? 'G' : 'P';
-            const targetScope = p.scope === 'global' ? 'project' : 'global';
-            badge.title = 'Move to ' + targetScope;
-            badge.addEventListener('click', (e) => {
-              e.stopPropagation();
-              vscode.postMessage({ command: 'movePrompt', fileName: p.fileName, fromScope: p.scope, toScope: targetScope });
-            });
-
-            const deleteBtn = document.createElement('span');
-            deleteBtn.className = 'prompt-item-delete';
-            deleteBtn.textContent = '\u2715';
-            deleteBtn.title = 'Delete prompt';
-            deleteBtn.addEventListener('click', (e) => {
-              e.stopPropagation();
-              vscode.postMessage({ command: 'deletePrompt', fileName: p.fileName, scope: p.scope });
-            });
-
-            item.appendChild(indicator);
-            item.appendChild(nameSpan);
-            item.appendChild(badge);
-            item.appendChild(deleteBtn);
-
-            item.addEventListener('click', () => {
-              selectedPromptFileName = p.fileName;
-              selectedPromptScope = p.scope;
-              vscode.postMessage({ command: 'selectPrompt', fileName: p.fileName, scope: p.scope });
-              branchInput.value = deriveBranch(p.fileName);
-              updateBaseBranchVisibility();
-              hidePromptsDropdown();
-            });
-
-            listContainer.appendChild(item);
-          });
-          
-          // Double-click to create inline prompt
-          listContainer.addEventListener('dblclick', (e) => {
-            if (e.target !== listContainer && document.activeElement?.tagName !== 'INPUT') return;
-            
-            // Check if there's already an active inline input
-            if (listContainer.querySelector('.prompt-inline-input')) return;
-
-            const inlineWrapper = document.createElement('div');
-            inlineWrapper.className = 'prompt-item inline-create-item';
-            
-            const icon = document.createElement('span');
-            icon.className = 'prompt-item-indicator';
-            icon.textContent = '📄';
-            
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.className = 'prompt-inline-input';
-            input.value = 'prompt';
-            input.style.flex = '1';
-            input.style.padding = '2px 4px';
-            input.style.fontSize = '11px';
-            input.style.border = '1px solid var(--vscode-focusBorder)';
-            input.style.borderRadius = '2px';
-            input.style.background = 'var(--vscode-input-background)';
-            input.style.color = 'var(--vscode-input-foreground)';
-            
-            inlineWrapper.appendChild(icon);
-            inlineWrapper.appendChild(input);
-            
-            // Insert at the bottom
-            listContainer.appendChild(inlineWrapper);
-            
-            // Scroll to bottom so the user can see it
-            listContainer.scrollTop = listContainer.scrollHeight;
-            
-            input.select();
-            
-            const submitInline = () => {
-              const val = input.value.trim();
-              if (val) {
-                vscode.postMessage({ command: 'createPromptInline', name: val, scope: showProject ? 'project' : 'global' });
-              }
-              renderPrompts(); // re-render to remove the input
-            };
-            
-            input.addEventListener('keydown', (e) => {
-              if (e.key === 'Enter') submitInline();
-              if (e.key === 'Escape') renderPrompts();
-            });
-            
-            input.addEventListener('blur', submitInline);
-          });
-          
-          promptsDropdown.appendChild(listContainer);
-        }
 
         // === Message handler ===
         window.addEventListener('message', event => {
@@ -755,7 +406,6 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
                 currentBranch = newCurrent;
                 selectedBaseBranch = currentBranch;
                 baseBranchInput.value = selectedBaseBranch;
-                
               }
               currentBranch = newCurrent;
               updateBaseBranchVisibility();
@@ -763,31 +413,24 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
               if (baseDropdown.classList.contains('show')) showBaseDropdown();
               break;
 
-            case 'setPrompts':
-              prompts = msg.prompts || [];
-              renderPrompts();
-              break;
-
-            case 'setCloneBranches':
-              cloneBranches = msg.cloneBranches || [];
-              renderPrompts();
-              break;
-
             case 'resetForm':
               branchInput.value = '';
               descriptionEl.value = '';
-              selectedPromptFileName = null;
               spawnBtn.textContent = 'Create Clone Only';
               selectedBaseBranch = currentBranch;
               baseBranchInput.value = selectedBaseBranch;
               updateBaseBranchVisibility();
               vscode.postMessage({ command: 'getBranches' });
-              vscode.postMessage({ command: 'getCloneBranches' });
               break;
 
             case 'loadPrompt':
               descriptionEl.value = msg.content;
               updateSpawnBtnText();
+              break;
+
+            case 'setBranchName':
+              branchInput.value = msg.name;
+              updateBaseBranchVisibility();
               break;
           }
         });
@@ -800,7 +443,11 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         }
 
         function updateBaseBranchVisibility() {
-          baseBranchGroup.style.display = isNewBranch() ? '' : 'none';
+          const show = isNewBranch();
+          baseBranchGroup.style.display = show ? '' : 'none';
+          if (branchRowArrow) branchRowArrow.style.display = show ? '' : 'none';
+          const branchLabelEl = document.getElementById('branchLabel');
+          if (branchLabelEl) branchLabelEl.textContent = show ? 'Create Branch' : 'Branch Name';
         }
 
         function renderBranchItems() {
@@ -867,7 +514,6 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
 
         branchInput.addEventListener('mousedown', () => {
           hideBaseDropdown();
-          hidePromptsDropdown();
           if (!dropdown.classList.contains('show')) {
             vscode.postMessage({ command: 'getBranches' });
             showDropdown();
@@ -941,28 +587,23 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           baseDropdown.classList.remove('show');
         }
 
-        // Close dropdowns when clicking outside (replaces overlay pattern)
+        // Close dropdowns when clicking outside
         document.addEventListener('mousedown', (e) => {
           const target = e.target;
           const inBranch = branchInput.contains(target) || dropdown.contains(target);
           const inBase = baseBranchInput.contains(target) || baseDropdown.contains(target);
-          const inPrompts = promptsHeader.contains(target) || promptsDropdown.contains(target);
           if (!inBranch && dropdown.classList.contains('show')) {
             hideDropdown();
           }
           if (!inBase && baseDropdown.classList.contains('show')) {
             hideBaseDropdown();
           }
-          if (!inPrompts && promptsDropdown.classList.contains('show')) {
-            hidePromptsDropdown();
-          }
         });
 
-        // Close dropdowns when webview loses focus (click outside webview iframe)
+        // Close dropdowns when webview loses focus
         window.addEventListener('blur', () => {
           hideDropdown();
           hideBaseDropdown();
-          hidePromptsDropdown();
         });
 
         // Close dropdowns on Escape key
@@ -970,7 +611,6 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           if (e.key === 'Escape') {
             hideDropdown();
             hideBaseDropdown();
-            hidePromptsDropdown();
           }
         });
 
@@ -980,7 +620,6 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
 
         baseBranchInput.addEventListener('mousedown', () => {
           hideDropdown();
-          hidePromptsDropdown();
           if (!baseDropdown.classList.contains('show')) {
             vscode.postMessage({ command: 'getBranches' });
             showBaseDropdown();
@@ -1001,7 +640,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         document.getElementById('saveAsTemplateBtn').addEventListener('click', () => {
           const content = descriptionEl.value.trim();
           if (content) {
-            vscode.postMessage({ command: 'saveAsPrompt', content, scope: showProject ? 'project' : 'global' });
+            vscode.postMessage({ command: 'saveAsPrompt', content, scope: saveScope });
           }
         });
 
@@ -1022,5 +661,5 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
       </script>
     </body>
     </html>`;
-  }
+}
 }

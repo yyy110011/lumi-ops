@@ -342,4 +342,37 @@ describe('GitUtils', () => {
       expect(await gitUtils.hasConflicts()).toBe(false);
     });
   });
+
+  describe('listUntrackedEntries', () => {
+    it('should return unique top-level directory names from nested paths', async () => {
+      mockGit.raw.mockResolvedValue('.agent/foo/bar.ts\n.agent/baz.ts\n.cursor/settings.json\n');
+      const result = await gitUtils.listUntrackedEntries();
+      expect(result).toEqual(['.agent', '.cursor']);
+      expect(mockGit.raw).toHaveBeenCalledWith(['ls-files', '--others', '--ignored', '--exclude-standard']);
+    });
+
+    it('should return top-level file names (no slash)', async () => {
+      mockGit.raw.mockResolvedValue('.env\n.env.local\n');
+      const result = await gitUtils.listUntrackedEntries();
+      expect(result).toEqual(['.env', '.env.local']);
+    });
+
+    it('should handle mixed files and directories', async () => {
+      mockGit.raw.mockResolvedValue('.agent/config.json\n.env\nnode_modules/lodash/index.js\n');
+      const result = await gitUtils.listUntrackedEntries();
+      expect(result).toEqual(['.agent', '.env', 'node_modules']);
+    });
+
+    it('should return empty array for empty output', async () => {
+      mockGit.raw.mockResolvedValue('');
+      const result = await gitUtils.listUntrackedEntries();
+      expect(result).toEqual([]);
+    });
+
+    it('should handle output with trailing newlines and whitespace', async () => {
+      mockGit.raw.mockResolvedValue('  .agent/foo.ts  \n\n  .env  \n\n');
+      const result = await gitUtils.listUntrackedEntries();
+      expect(result).toEqual(['.agent', '.env']);
+    });
+  });
 });

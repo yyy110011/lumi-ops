@@ -3,10 +3,15 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { ShadowTreeProvider } from './ShadowTreeProvider';
 import { ShadowCreatorProvider } from './ShadowCreatorProvider';
+import { PromptLibraryViewProvider } from './PromptLibraryViewProvider';
 import { PromptLibraryProvider, PromptScope } from './PromptLibraryProvider';
+import { MissionTemplateProvider } from './MissionTemplateProvider';
+import { MissionTemplateEditorProvider } from './MissionTemplateEditorProvider';
+import { WorktreeManagerPanel } from './WorktreeManagerPanel';
+import { StatusEventBus } from './StatusEventBus';
 import { runMigrations } from './migrations';
 
-import { spawn, kill, merge, GitUtils, getClonesDir, getRepoStorageDir, LUMI_OPS_HOME, METADATA_FILE } from '@lumi-ops/cli';
+import { spawn, kill, merge, GitUtils, getClonesDir, getRepoStorageDir, LUMI_OPS_HOME, METADATA_FILE, registerRepo } from '@lumi-ops/cli';
 
 export async function activate(context: vscode.ExtensionContext) {
 
@@ -67,55 +72,66 @@ export async function activate(context: vscode.ExtensionContext) {
     try { rootPath = fs.realpathSync(rootPath); } catch { /* keep original if resolve fails */ }
   }
 
-  let isShadowMode = false;
   let shadowBranchName: string | undefined = undefined;
-  let originalWorkspacePath: string | undefined = undefined;
+  let currentWorkspacePath: string | undefined = undefined;
 
-  // Detect if we are in a Git Worktree (Shadow Mode) by checking the path convention
-  // This helps us accurately determine the branch name even with slashes (e.g. feat/task)
+  // Detect if we are inside a .worktrees/ directory to resolve back to the repo root
   if (rootPath) {
-    // First check if the path itself sits inside a .worktrees directory
     const worktreesMatch = rootPath.match(/^(.+)\.worktrees[\\\/]/);
     
     if (worktreesMatch && worktreesMatch[1]) {
-      isShadowMode = true;
-      originalWorkspacePath = rootPath;
+      currentWorkspacePath = rootPath;
       rootPath = worktreesMatch[1]; // Resolve back to the main repository root
       
       try {
-        // Use GitUtils in the original workspace folder (the worktree)
-        // to correctly resolve the branch name, e.g. feat/shadow-mode-ui
-        const git = new GitUtils(originalWorkspacePath);
+        const git = new GitUtils(currentWorkspacePath);
         shadowBranchName = await git.getCurrentBranch();
       } catch (e) {
         console.error("Failed to get worktree branch name via GitUtils:", e);
       }
-      
-      vscode.commands.executeCommand('setContext', 'lumi-ops.isShadowMode', true);
-    } else {
-      vscode.commands.executeCommand('setContext', 'lumi-ops.isShadowMode', false);
     }
   }
 
   // Run all one-time migrations
   await runMigrations(context, rootPath);
 
-  const shadowTreeProvider = new ShadowTreeProvider(rootPath, context.extensionPath, isShadowMode, shadowBranchName, originalWorkspacePath);
+  const statusBus = new StatusEventBus();
+  context.subscriptions.push({ dispose: () => statusBus.dispose() });
+
+  const shadowTreeProvider = new ShadowTreeProvider(rootPath, context.extensionPath, statusBus, shadowBranchName, currentWorkspacePath);
   const activeClonesView = vscode.window.createTreeView('lumi-ops.activeClones', { treeDataProvider: shadowTreeProvider });
-  if (isShadowMode) {
-    activeClonesView.title = 'Shadow Clone Status';
-  }
   context.subscriptions.push(activeClonesView);
 
-  const creatorProvider = new ShadowCreatorProvider(context.extensionUri, isShadowMode, shadowBranchName);
+  const creatorProvider = new ShadowCreatorProvider(context.extensionUri);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('lumi-ops.creator', creatorProvider)
+  );
+
+  const promptLibraryViewProvider = new PromptLibraryViewProvider(context.extensionUri);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider('lumi-ops.promptLibrary', promptLibraryViewProvider)
   );
 
   const promptLibraryProvider = new PromptLibraryProvider();
   if (rootPath) {
     promptLibraryProvider.setProjectRoot(vscode.Uri.file(rootPath));
   }
+
+  // -- Mission Template Provider --
+  const missionTemplateProvider = new MissionTemplateProvider();
+  if (rootPath) {
+    missionTemplateProvider.setProjectRoot(vscode.Uri.file(rootPath));
+  }
+
+  // -- Mission Template Custom Editor --
+  const missionEditorProvider = new MissionTemplateEditorProvider(context.extensionUri);
+  context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider(
+      MissionTemplateEditorProvider.viewType,
+      missionEditorProvider,
+      { supportsMultipleEditorsPerDocument: false },
+    )
+  );
 
   // -- fs.watch for instant cross-window prompt refresh --
   const refreshPromptsNow = () => {
@@ -150,6 +166,25 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   }
 
+  // -- fs.watch for instant cross-window metadata (status) refresh --
+  if (rootPath) {
+    const metadataDir = getClonesDir(rootPath);
+    try {
+      if (!fs.existsSync(metadataDir)) {
+        fs.mkdirSync(metadataDir, { recursive: true });
+      }
+      let metaDebounce: ReturnType<typeof setTimeout> | null = null;
+      const metadataWatcher = fs.watch(metadataDir, (_, filename) => {
+        if (filename && filename !== METADATA_FILE) return;
+        if (metaDebounce) clearTimeout(metaDebounce);
+        metaDebounce = setTimeout(() => { statusBus.fire('*'); }, 150);
+      });
+      context.subscriptions.push({ dispose: () => metadataWatcher.close() });
+    } catch (e) {
+      console.error('[lumi-ops] \u274c Failed to watch metadata:', e);
+    }
+  }
+
   // -- Polling for live updates + branch change detection (fallback) --
   let lastKnownBranch: string | undefined;
   const pollInterval = setInterval(async () => {
@@ -175,7 +210,93 @@ export async function activate(context: vscode.ExtensionContext) {
     dispose: () => clearInterval(pollInterval)
   });
 
+  // -- Worktree Manager Panel --
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.openWorktreeManager', () => {
+      WorktreeManagerPanel.createOrShow(context.extensionUri);
+    })
+  );
+
+  // Restore Worktree Manager panel on reload
+  vscode.window.registerWebviewPanelSerializer(WorktreeManagerPanel.viewType, {
+    async deserializeWebviewPanel(panel: vscode.WebviewPanel, _state: any) {
+      panel.webview.options = {
+        enableScripts: true,
+        localResourceRoots: [context.extensionUri],
+      };
+      WorktreeManagerPanel.revive(panel, context.extensionUri);
+    },
+  });
+
+  // Auto-register current workspace repo in the global registry
+  if (rootPath) {
+    try {
+      registerRepo(path.basename(rootPath), rootPath);
+    } catch { /* non-fatal */ }
+  }
+
   // -- Commands --
+
+  // Open Settings command (gear button in sidebar title) — directly opens QuickPick
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.openSettings', () => {
+      vscode.commands.executeCommand('workbench.action.openWorkspaceSettings', 'lumi-ops.copyOnSpawn');
+    })
+  );
+
+  // Pick Copy Folders command (triggered from settings command-link)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops.pickCopyFolders', async () => {
+      if (!rootPath) {
+        vscode.window.showErrorMessage('No workspace folder open.');
+        return;
+      }
+
+      try {
+        const git = new GitUtils(rootPath);
+        const untrackedEntries = await git.listUntrackedEntries();
+
+        if (untrackedEntries.length === 0) {
+          vscode.window.showInformationMessage('No untracked/gitignored files found in workspace root.');
+          return;
+        }
+
+        const config = vscode.workspace.getConfiguration('lumi-ops');
+        const currentStr = config.get<string>('copyOnSpawn') || '';
+        const current = currentStr.split('\n').map(s => s.trim()).filter(Boolean);
+        const currentSet = new Set(current);
+
+        // Check each entry to determine if it's a file or directory
+        const items: vscode.QuickPickItem[] = [];
+        for (const name of untrackedEntries) {
+          const entryUri = vscode.Uri.file(path.join(rootPath, name));
+          let isDir = false;
+          try {
+            const stat = await vscode.workspace.fs.stat(entryUri);
+            isDir = (stat.type & vscode.FileType.Directory) !== 0;
+          } catch { /* skip if can't stat */ }
+          items.push({
+            label: isDir ? `$(folder) ${name}` : `$(file) ${name}`,
+            description: name,
+            picked: currentSet.has(name),
+          });
+        }
+
+        const selected = await vscode.window.showQuickPick(items, {
+          canPickMany: true,
+          placeHolder: 'Select untracked/gitignored items to copy into shadow clones on spawn',
+        });
+
+        if (selected !== undefined) {
+          const selectedNames = selected.map(item => item.description!);
+          await config.update('copyOnSpawn', selectedNames.join('\n'), vscode.ConfigurationTarget.Workspace);
+          vscode.window.showInformationMessage(`Copy on Spawn: ${selectedNames.length} item(s) configured.`);
+        }
+      } catch (error: any) {
+        vscode.window.showErrorMessage(`Failed to list workspace entries: ${error.message}`);
+      }
+    })
+  );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('lumi-ops.refresh', () => {
@@ -215,7 +336,7 @@ export async function activate(context: vscode.ExtensionContext) {
             location: vscode.ProgressLocation.Notification,
             title: `Spawning shadow clone: ${branchName}`,
             cancellable: false
-          }, async () => {
+          }, async (progress) => {
             const git = new GitUtils(rootPath);
 
             // If the target branch doesn't exist locally, fetch it from remote (no checkout)
@@ -250,7 +371,19 @@ export async function activate(context: vscode.ExtensionContext) {
               }
             }
 
-            await spawn(branchName, { root: rootPath, description, baseBranch, templates: args?.templates });
+            await spawn(branchName, { root: rootPath, description, baseBranch, templates: args?.templates,
+              copyFolders: (vscode.workspace.getConfiguration('lumi-ops').get<string>('copyOnSpawn') || '').split('\n').map(s => s.trim()).filter(Boolean),
+              onProgress: (message) => progress.report({ message }),
+              missionTemplate: await (async () => {
+                try {
+                  const active = await missionTemplateProvider.getActiveTemplate();
+                  if (active.name !== 'default' || active.rules || active.instructions) {
+                    return { task: active.task, rules: active.rules, instructions: active.instructions };
+                  }
+                } catch { /* fallback to default */ }
+                return undefined;
+              })()
+            });
 
           });
 
@@ -258,8 +391,6 @@ export async function activate(context: vscode.ExtensionContext) {
           vscode.window.showInformationMessage(`Shadow clone ${branchName} created successfully.`);
           shadowTreeProvider.refresh();
           creatorProvider.resetForm();
-          // Notify webview to update ✦ indicators
-          notifyCloneBranches();
         } catch (error: any) {
           vscode.window.showErrorMessage(`Failed to spawn shadow clone: ${error.message}`);
         }
@@ -299,7 +430,6 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.window.showInformationMessage(msg);
             shadowTreeProvider.refresh();
             creatorProvider.resetForm();
-            notifyCloneBranches();
           } catch (error: any) {
             vscode.window.showErrorMessage(`Failed to kill shadow clone: ${error.message}`);
           }
@@ -499,11 +629,9 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('lumi-ops.cycleReviewStatus', async (item: any) => {
-      const branchName = item?.clone?.branch;
-      const currentStatus = item?.clone?.reviewStatus;
+    vscode.commands.registerCommand('lumi-ops.cycleReviewStatus', async (branchName: string) => {
       if (!branchName) return;
-      await shadowTreeProvider.cycleReviewStatus(branchName, currentStatus);
+      shadowTreeProvider.cycleReviewStatus(branchName);
     })
   );
 
@@ -585,20 +713,23 @@ export async function activate(context: vscode.ExtensionContext) {
           return match ? match[1] : null;
         })
         .filter(Boolean) as string[];
-      creatorProvider.updateCloneBranches(cloneBranches);
+      promptLibraryViewProvider.updateCloneBranches(cloneBranches);
     } catch {
       // ignore
     }
   }
+
+  // Auto-refresh prompt library ✦ indicators on worktree changes
+  context.subscriptions.push(statusBus.onDidChange(() => { notifyCloneBranches(); }));
 
   context.subscriptions.push(
     vscode.commands.registerCommand('lumi-ops._getPrompts', async (scopes?: PromptScope[]) => {
       try {
         const activeScopes = scopes || ['global', 'project'];
         const items = await promptLibraryProvider.listPrompts(activeScopes);
-        creatorProvider.updatePrompts(items);
+        promptLibraryViewProvider.updatePrompts(items);
       } catch {
-        creatorProvider.updatePrompts([]);
+        promptLibraryViewProvider.updatePrompts([]);
       }
     })
   );
@@ -609,7 +740,9 @@ export async function activate(context: vscode.ExtensionContext) {
       try {
         const content = await promptLibraryProvider.getPromptContent(fileName, scope || 'project');
         const name = fileName.replace(/\.md$/, '');
+        const branch = 'feat/' + name;
         creatorProvider.loadPrompt(name, content);
+        creatorProvider.setBranchName(branch);
       } catch (error: any) {
         vscode.window.showErrorMessage(`Failed to load prompt: ${error.message}`);
       }
@@ -754,13 +887,47 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('lumi-ops._movePrompt', async (fileName: string, fromScope: PromptScope, toScope: PromptScope) => {
+    vscode.commands.registerCommand('lumi-ops._copyPromptScope', async (fileName: string, fromScope: PromptScope, toScope: PromptScope) => {
       if (!fileName || !fromScope || !toScope) return;
       try {
-        await promptLibraryProvider.movePrompt(fileName, fromScope, toScope);
+        const { conflict } = await promptLibraryProvider.copyPromptToScope(fileName, fromScope, toScope);
+        if (conflict) {
+          const choice = await vscode.window.showQuickPick(
+            ['Overwrite', 'Rename', 'Cancel'],
+            { placeHolder: `A prompt with this name already exists in ${toScope}. Overwrite or Rename?` }
+          );
+          if (choice === 'Overwrite') {
+            await promptLibraryProvider.copyPromptToScopeOverwrite(fileName, fromScope, toScope);
+          } else if (choice === 'Rename') {
+            const newName = await vscode.window.showInputBox({
+              prompt: 'Enter new name for the copied prompt',
+              value: fileName.replace(/\.md$/, '') + '-copy',
+              validateInput: (v) => (!v?.trim() ? 'Name cannot be empty' : null),
+            });
+            if (newName) {
+              const newFileName = newName.endsWith('.md') ? newName : `${newName}.md`;
+              await promptLibraryProvider.copyPromptToScopeRenamed(fileName, newFileName, fromScope, toScope);
+            }
+          }
+          // Cancel — do nothing
+        }
         vscode.commands.executeCommand('lumi-ops._getPrompts');
       } catch (error: any) {
-        vscode.window.showErrorMessage(`Failed to move prompt: ${error.message}`);
+        vscode.window.showErrorMessage(`Failed to copy prompt: ${error.message}`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops._editPrompt', async (fileName: string, scope?: PromptScope) => {
+      if (!fileName) return;
+      const targetScope = scope || 'project';
+      try {
+        const fileUri = promptLibraryProvider.getPromptFileUri(fileName, targetScope);
+        const doc = await vscode.workspace.openTextDocument(fileUri);
+        await vscode.window.showTextDocument(doc);
+      } catch (error: any) {
+        vscode.window.showErrorMessage(`Failed to open prompt: ${error.message}`);
       }
     })
   );
@@ -768,6 +935,154 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('lumi-ops._getCloneBranches', async () => {
       await notifyCloneBranches();
+    })
+  );
+
+  // -- Mission Template Commands --
+
+  /** Refresh the mission template row in the prompt library webview. */
+  async function notifyMissionTemplates() {
+    try {
+      const templates = await missionTemplateProvider.listTemplates();
+      const active = await missionTemplateProvider.getActiveTemplateName();
+      // Validate: active template must exist in the expected scope
+      let activeKey = active.name === 'default' ? 'default' : `${active.name}:${active.scope}`;
+      if (active.name !== 'default') {
+        const match = templates.some(t => t.name === active.name && (active.scope === null || t.scope === active.scope));
+        if (!match) {
+          activeKey = 'default';
+        }
+      }
+      promptLibraryViewProvider.updateMissionTemplate(activeKey, templates);
+    } catch {
+      promptLibraryViewProvider.updateMissionTemplate('default', []);
+    }
+  }
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops._getMissionTemplates', async () => {
+      await notifyMissionTemplates();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops._switchMission', async (name: string, scope?: string) => {
+      if (!name) return;
+      await missionTemplateProvider.setActiveTemplate(name, scope as any);
+      await notifyMissionTemplates();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops._editMission', async () => {
+      const active = await missionTemplateProvider.getActiveTemplateName();
+      if (active.name === 'default') {
+        vscode.window.showInformationMessage('Default mission template cannot be edited. Use "+" to fork it first.');
+        return;
+      }
+      // Find the template file and open it (the custom editor will handle rendering)
+      const templates = await missionTemplateProvider.listTemplates();
+      const match = templates.find(t => t.name === active.name && (active.scope === null || t.scope === active.scope));
+      if (match) {
+        const fileUri = missionTemplateProvider.getTemplateFileUri(match.fileName, match.scope as any);
+        await vscode.commands.executeCommand('vscode.openWith', fileUri, MissionTemplateEditorProvider.viewType);
+      } else {
+        vscode.window.showErrorMessage(`Mission template "${active.name}" not found.`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops._forkMission', async () => {
+      const name = await vscode.window.showInputBox({
+        prompt: 'Name for your new mission template',
+        placeHolder: 'e.g. my-workflow',
+        validateInput: (value) => {
+          if (!value || !value.trim()) return 'Name cannot be empty';
+          if (!/^[a-zA-Z0-9_-]+$/.test(value.trim())) return 'Only letters, numbers, hyphens, and underscores';
+          return null;
+        }
+      });
+      if (!name) return;
+
+      const scope = rootPath ? 'project' : 'global';
+      try {
+        const fileUri = await missionTemplateProvider.forkDefault(name.trim(), scope);
+        await missionTemplateProvider.setActiveTemplate(name.trim(), scope);
+        await notifyMissionTemplates();
+        // Open the new template with custom editor
+        await vscode.commands.executeCommand('vscode.openWith', fileUri, MissionTemplateEditorProvider.viewType);
+        vscode.window.showInformationMessage(`Mission template "${name}" created and activated.`);
+      } catch (error: any) {
+        vscode.window.showErrorMessage(`Failed to create mission template: ${error.message}`);
+      }
+    })
+  );
+
+  // Copy mission template to other scope from dropdown
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops._copyMissionScope', async (templateName: string, fromScope: string, toScope: string) => {
+      if (!templateName || !fromScope || !toScope) return;
+      try {
+        const { conflict } = await missionTemplateProvider.copyToScope(`${templateName}.md`, fromScope as any, toScope as any);
+        if (conflict) {
+          const choice = await vscode.window.showQuickPick(
+            ['Overwrite', 'Rename', 'Cancel'],
+            { placeHolder: `A template with this name already exists in ${toScope}. Overwrite or Rename?` }
+          );
+          if (choice === 'Overwrite') {
+            await missionTemplateProvider.copyToScopeOverwrite(`${templateName}.md`, fromScope as any, toScope as any);
+          } else if (choice === 'Rename') {
+            const newName = await vscode.window.showInputBox({
+              prompt: 'Enter new name for the copied template',
+              value: templateName + '-copy',
+              validateInput: (v) => (!v?.trim() ? 'Name cannot be empty' : null),
+            });
+            if (newName) {
+              const newFileName = newName.endsWith('.md') ? newName : `${newName}.md`;
+              await missionTemplateProvider.copyToScopeRenamed(`${templateName}.md`, newFileName, fromScope as any, toScope as any);
+            }
+          }
+        }
+        await notifyMissionTemplates();
+      } catch (error: any) {
+        vscode.window.showErrorMessage(`Failed to copy template: ${error.message}`);
+      }
+    })
+  );
+
+  // Edit a specific mission template by name+scope
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops._editMissionByName', async (name: string, scope: string) => {
+      if (!name || !scope) return;
+      try {
+        const fileUri = missionTemplateProvider.getTemplateFileUri(`${name}.md`, scope as any);
+        await vscode.commands.executeCommand('vscode.openWith', fileUri, MissionTemplateEditorProvider.viewType);
+      } catch (error: any) {
+        vscode.window.showErrorMessage(`Failed to open template: ${error.message}`);
+      }
+    })
+  );
+
+  // Delete a mission template
+  context.subscriptions.push(
+    vscode.commands.registerCommand('lumi-ops._deleteMission', async (name: string, scope: string) => {
+      if (!name || !scope) return;
+      const confirm = await vscode.window.showWarningMessage(
+        `Delete mission template "${name}" (${scope})?`, { modal: true }, 'Delete'
+      );
+      if (confirm !== 'Delete') return;
+      try {
+        await missionTemplateProvider.deleteTemplate(`${name}.md`, scope as any);
+        // If deleting the active template, reset to default
+        const active = await missionTemplateProvider.getActiveTemplateName();
+        if (active.name === name && (active.scope === null || active.scope === scope)) {
+          await missionTemplateProvider.setActiveTemplate('default');
+        }
+        await notifyMissionTemplates();
+      } catch (error: any) {
+        vscode.window.showErrorMessage(`Failed to delete template: ${error.message}`);
+      }
     })
   );
 }

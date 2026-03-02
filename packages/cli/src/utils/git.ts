@@ -113,4 +113,31 @@ export class GitUtils {
     }
   }
 
+  /**
+   * Prune stale worktree references (e.g. after manual deletion of worktree directories).
+   */
+  async pruneWorktrees(): Promise<void> {
+    await this.git.raw(['worktree', 'prune']);
+  }
+
+  /**
+   * List untracked and gitignored top-level entries (files/directories).
+   * Uses `git ls-files --others --ignored --exclude-standard` and collapses
+   * nested paths to their top-level parent directory.
+   */
+  async listUntrackedEntries(): Promise<string[]> {
+    const output = await this.git.raw([
+      'ls-files', '--others', '--ignored', '--exclude-standard',
+    ]);
+    // Extract unique top-level names (e.g. ".agent/foo/bar.ts" → ".agent")
+    const topLevel = new Set<string>();
+    for (const line of output.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const firstSlash = trimmed.indexOf('/');
+      topLevel.add(firstSlash > 0 ? trimmed.substring(0, firstSlash) : trimmed);
+    }
+    return [...topLevel].sort();
+  }
+
 }

@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { parseWorktrees, ShadowClone, GitUtils, getRepoStorageDir, METADATA_FILE } from '@lumi-ops/cli';
 import type { ReviewStatus } from '@lumi-ops/cli';
+import type { StatusEventBus } from './StatusEventBus';
 
 const STATUS_SVG: Partial<Record<ReviewStatus, string>> = {
   todo:   'status-todo.svg',
@@ -35,15 +36,30 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
   constructor(
     private workspaceRoot: string | undefined,
     private extensionPath: string,
-    private isShadowMode: boolean = false,
+    private statusBus: StatusEventBus,
     private shadowBranchName?: string,
     private currentWorkspacePath?: string
-  ) {}
+  ) {
+    // Subscribe to status changes (from file watcher via bus)
+    let busRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+    this._busDisposable = statusBus.onDidChange(() => {
+      if (busRefreshTimer) clearTimeout(busRefreshTimer);
+      busRefreshTimer = setTimeout(() => {
+        // If we have a pending flush, our cache IS the source of truth — skip.
+        // Only sync from disk when idle (external changes).
+        if (this.diskWriteTimer) return;
+        this._syncCacheFromDisk();
+        this.itemCache.clear();
+        this._onDidChangeTreeData.fire();
+      }, 100);
+    });
+  }
+
+  private _busDisposable: vscode.Disposable;
 
   /** Full refresh: clears item cache, re-fetches from git */
   refresh(): void {
     this.itemCache.clear();
-    this.lastFocusedBranch = null;
     this._onDidChangeTreeData.fire();
   }
 
@@ -65,7 +81,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
         const items: ShadowItem[] = [];
 
         // 1. Find current workspace worktree (non-shadow) and show it first
-        const currentWorktree = clones.find(c => !c.isShadow);
+        const currentWorktree = clones.find(c => c.isMain);
         if (currentWorktree) {
           items.push(new ShadowItem(
             currentWorktree.branch,
@@ -73,7 +89,6 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
             currentWorktree,
             'currentBranch',
             this.extensionPath,
-            this.isShadowMode,
             this.currentWorkspacePath
           ));
         }
@@ -92,7 +107,6 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
             clone,
             'shadowClone',
             this.extensionPath,
-            this.isShadowMode,
             this.currentWorkspacePath
           );
           // Store live reference for partial updates
@@ -178,6 +192,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
     }
     this.diskWriteTimer = setTimeout(() => {
       this.flushStatusToDisk();
+      this.diskWriteTimer = null;
     }, 300);
   }
 
@@ -202,8 +217,31 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
         metadata[branch].reviewStatus = status;
       }
       fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+      // File watcher will detect this write and fire bus for other consumers
     } catch {
       // Disk write failed — cache still has the correct state
+    }
+  }
+
+  /**
+   * Sync statusCache from disk metadata (called by bus handler).
+   * Unlike clear(), this ensures cycleReviewStatus always has
+   * the correct current status to cycle from.
+   */
+  private _syncCacheFromDisk(): void {
+    if (!this.workspaceRoot) return;
+    const metadataPath = path.join(getRepoStorageDir(this.workspaceRoot), METADATA_FILE);
+    try {
+      const raw = fs.readFileSync(metadataPath, 'utf-8');
+      const metadata = JSON.parse(raw);
+      for (const [branch, data] of Object.entries(metadata)) {
+        const status = (data as any)?.reviewStatus;
+        if (status) {
+          this.statusCache.set(branch, status as ReviewStatus);
+        }
+      }
+    } catch {
+      // No metadata file — leave cache as-is
     }
   }
 
@@ -226,14 +264,13 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
   }
 }
 
-class ShadowItem extends vscode.TreeItem {
+export class ShadowItem extends vscode.TreeItem {
   constructor(
     public readonly label: string,
     public readonly collapsibleState: vscode.TreeItemCollapsibleState,
     public readonly clone: ShadowClone,
     public readonly role: 'currentBranch' | 'shadowClone',
     private extensionPath?: string,
-    private isShadowMode: boolean = false,
     private currentWorkspacePath?: string
   ) {
     super(label, collapsibleState);
@@ -245,45 +282,31 @@ class ShadowItem extends vscode.TreeItem {
 
     if (role === 'currentBranch') {
       this.tooltip = `Current workspace: ${this.clone.path}`;
-      if (this.isShadowMode) {
-        this.description = `${conflictPrefix}Root Branch`;
-        // Click = navigate to root workspace
-        this.command = {
-          command: 'lumi-ops.returnToRoot',
-          title: 'Return to Root',
-        };
-      } else {
-        this.description = `${conflictPrefix}Current Branch · ★`;
-      }
+      const isAtRoot = !this.currentWorkspacePath;
+      this.description = isAtRoot
+        ? `${conflictPrefix}Worktree Root · ★`
+        : `${conflictPrefix}Worktree Root`;
       this.iconPath = new vscode.ThemeIcon('home');
+      // Click = navigate to root (no-op if already at root)
+      this.command = {
+        command: 'lumi-ops.returnToRoot',
+        title: 'Return to Root',
+      };
     } else {
       const status: ReviewStatus = this.clone.reviewStatus || 'todo';
       this.applyStatus(status);
       const detachedPrefix = this.clone.isDetached ? '🔀 rebasing · ' : '';
-
-      if (this.isShadowMode) {
-        // Shadow Mode: check if this clone is the current workspace
-        const isCurrent = this.currentWorkspacePath && this.clone.path === this.currentWorkspacePath;
-        const baseDesc = this.clone.baseBranch ? `← ${this.clone.baseBranch}` : 'Shadow Clone';
-        this.description = isCurrent
-          ? `${conflictPrefix}${detachedPrefix}${baseDesc} · ★`
-          : `${conflictPrefix}${detachedPrefix}${baseDesc}`;
-        // Click = navigate to that workspace
-        this.command = {
-          command: 'vscode.openFolder',
-          title: 'Open Workspace',
-          arguments: [vscode.Uri.file(this.clone.path), { forceNewWindow: true }]
-        };
-      } else {
-        // Root Mode: click = focus-then-cycle status
-        const baseDesc = this.clone.baseBranch ? `← ${this.clone.baseBranch}` : 'Shadow Clone';
-        this.description = `${conflictPrefix}${detachedPrefix}${baseDesc}`;
-        this.command = {
-          command: 'lumi-ops.cycleReviewStatus',
-          title: 'Cycle Status',
-          arguments: [this]
-        };
-      }
+      const isCurrent = this.currentWorkspacePath && this.clone.path === this.currentWorkspacePath;
+      const baseDesc = this.clone.baseBranch ? `← ${this.clone.baseBranch}` : 'Shadow Clone';
+      this.description = isCurrent
+        ? `${conflictPrefix}${detachedPrefix}${baseDesc} · ★`
+        : `${conflictPrefix}${detachedPrefix}${baseDesc}`;
+      // Click = focus-then-cycle status
+      this.command = {
+        command: 'lumi-ops.cycleReviewStatus',
+        title: 'Cycle Status',
+        arguments: [clone.branch]
+      };
     }
   }
 

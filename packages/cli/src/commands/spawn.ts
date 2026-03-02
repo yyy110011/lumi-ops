@@ -2,9 +2,11 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import { GitUtils } from '../utils/git';
 import { getClonesDir, getRepoStorageDir, METADATA_FILE } from '../constants';
+import { registerRepo } from '../registry';
 import chalk from 'chalk';
+import { DEFAULT_MISSION_TEMPLATE } from '../missionDefaults';
 
-export async function spawn(branchName: string, options: { root: string; description?: string; baseBranch?: string; templates?: { name: string; content: string }[] }) {
+export async function spawn(branchName: string, options: { root: string; description?: string; baseBranch?: string; templates?: { name: string; content: string }[]; missionTemplate?: { task?: string; rules: string; instructions: string }; copyFolders?: string[]; onProgress?: (message: string) => void }) {
   const rootDir = path.resolve(options.root);
   const git = new GitUtils(rootDir);
   try {
@@ -16,7 +18,7 @@ export async function spawn(branchName: string, options: { root: string; descrip
       throw new Error('Repository has no commits. Please make an initial commit before creating a Shadow Clone.');
     }
 
-    // 0. Ensure Repo Storage ID is initialized (needed for metadata storage in ~/.lumi-ops/)    const { getClonesDir } = await import('../constants');
+    // 0. Resolve clones directory
 
     const clonesDir = getClonesDir(rootDir);
     const targetPath = path.join(clonesDir, branchName);
@@ -61,10 +63,24 @@ export async function spawn(branchName: string, options: { root: string; descrip
       console.log(chalk.gray('✓ Copied .env to shadow clone.'));
     }
 
+    // 4b. Copy configured folders/files from root to worktree
+    if (options.copyFolders && options.copyFolders.length > 0) {
+      for (const item of options.copyFolders) {
+        const source = path.join(rootDir, item);
+        const dest = path.join(targetPath, item);
+        if (await fs.pathExists(source)) {
+          options.onProgress?.(`Copying ${item}...`);
+          await fs.copy(source, dest);
+          console.log(chalk.gray(`✓ Copied ${item} to shadow clone.`));
+        }
+      }
+    }
+
     // 5. Create MISSION.md (AI Agent Context - only when description is provided)
     if (options.description) {
       const contextFile = path.join(targetPath, 'MISSION.md');
       const templates = options.templates || [];
+      const mission = options.missionTemplate;
 
       // Build objective section — numbered sub-sections when templates are attached
       let objectiveSection: string;
@@ -82,30 +98,31 @@ export async function spawn(branchName: string, options: { root: string; descrip
         objectiveSection = options.description;
       }
 
+      // Use custom mission template or fallback to default
+      const rules = mission?.rules ?? DEFAULT_MISSION_TEMPLATE.rules;
+      const instructions = mission?.instructions ?? DEFAULT_MISSION_TEMPLATE.instructions;
+
       const contextContent = `# 🤖 Agent Mission: ${branchName}
 
-## 🎯 Objective
+## Task
 ${objectiveSection}
 
-## 📂 Environment
+## Environment
 - You are working in an isolated Git Worktree.
 - Path: \`${targetPath}\`
 
-## ⚠️ Important Rules
-- This worktree directory IS your workspace. Run all commands directly from here. Do NOT use the scratch directory.
+## Rules
+${rules}
 
-## ⚡ Instructions
-1. Analyze the objective.
-2. Implement the changes in this directory.
-3. Run tests before committing.
-4. When finished, provide a **commit message** following Conventional Commits format:
-   - Example: \`feat: add OAuth login with Google provider\`
-   - Example: \`fix: resolve race condition in data fetching\`
-   - Include a brief summary of all changes made.
+## Instructions
+${instructions}
 `;
       await fs.writeFile(contextFile, contextContent);
       console.log(chalk.gray('✓ Generated MISSION.md.'));
     }
+
+    // 6. Register repo in global registry for Worktree Manager
+    registerRepo(path.basename(rootDir), rootDir);
 
     console.log(chalk.green(`\n✨ Shadow clone ready at: ${targetPath}`));
   } catch (error: any) {
