@@ -15,7 +15,9 @@ lumi-ops/
 │   │   └── src/
 │   │       ├── commands/     # spawn, kill, list, merge, migration (+tests side-by-side)
 │   │       ├── utils/git.ts  # GitUtils wrapper class (simple-git)
-│   │       ├── constants.ts  # SHADOW_CLONES_DIR, METADATA_FILE, ReviewStatus
+│   │       ├── constants.ts  # SHADOW_CLONES_DIR, METADATA_FILE, ReviewStatus, getClonesDir
+│   │       ├── registry.ts   # Global repo registry (~/.lumi-ops/.registry.json)
+│   │       ├── missionDefaults.ts # Default mission template (single source of truth)
 │   │       └── index.ts      # CLI entry + library exports
 │   ├── extension/            # VS Code Extension (depends on @lumi-ops/cli)
 │   │   └── src/
@@ -24,9 +26,15 @@ lumi-ops/
 │   │       ├── ShadowCreatorProvider.ts      # Webview (Spawn form)
 │   │       ├── PromptLibraryProvider.ts      # Prompt Library data (list, CRUD, copy)
 │   │       ├── PromptLibraryViewProvider.ts  # Prompt Library & Mission Template UI
+│   │       ├── MissionTemplateProvider.ts    # Mission template data (dual-scope CRUD)
+│   │       ├── MissionTemplateEditorProvider.ts # Custom text editor for mission templates
+│   │       ├── missionTemplateUtils.ts       # Shared parse/serialize for mission files
+│   │       ├── WorktreeManagerPanel.ts       # Multi-repo worktree dashboard (Beta)
+│   │       ├── StatusEventBus.ts             # Centralized event bus for cross-view sync
 │   │       └── migrations.ts                # Settings migrations across versions
 │   └── mcp-server/           # MCP server (planned)
 ├── .prompts/                 # Reusable task prompts (project scope)
+│   └── _missions/            # Mission templates (project scope)
 ├── doc/                      # Design documents and feature proposals
 ├── package.json              # Workspace root (pnpm monorepo)
 └── pnpm-workspace.yaml
@@ -63,6 +71,18 @@ The extension auto-detects whether it's in a **root workspace** (shows Active Cl
 - Mission templates live in `_missions/` subdirectory within the prompts directory.
 - P and G scope items are **independent objects** — they are listed separately, can be copied cross-scope, and are never implicitly moved.
 - The active mission template is stored as `"name:scope"` format in `lumi-ops.activeMissionTemplate` workspace setting.
+- Default mission template content is defined in `missionDefaults.ts` (CLI package) — single source of truth.
+- Mission template files use a structured markdown format parsed by `missionTemplateUtils.ts`.
+
+### 8. StatusEventBus
+- `StatusEventBus` provides centralized event dispatch for metadata changes.
+- All UI components (sidebar, Worktree Manager, prompt library) subscribe to `StatusEventBus.onDidChange` for synchronization.
+- Fire events with a specific branch name or `'*'` for broad refresh.
+
+### 9. Global Repo Registry
+- `registry.ts` maintains a global registry at `~/.lumi-ops/.registry.json` mapping repo names to root paths.
+- `registerRepo()` is called automatically on spawn — no manual registration needed.
+- Used by `WorktreeManagerPanel` to show worktrees from all registered repos.
 
 ### 7. Task prompts go in `.prompts/`
 When creating reusable task prompts for shadow clones, save them as `.md` files in the `.prompts/` directory at the project root. Use kebab-case naming (e.g., `fix-auth-bug.md`, `add-feature-x.md`). These prompts can be used by the Prompt Library to generate MISSION.md files for shadow clones.

@@ -2,17 +2,21 @@
 
 > Based on current feature status, design documents, and recent refactoring.
 
-## Current (v0.3.4)
+## Current (v0.3.8)
 
 ✅ Spawn / Kill / Merge — Full lifecycle management
 ✅ Review Status Tracking & Metadata Management
 ✅ Conflict Auto-Detection
-✅ **Prompt Library** (Global & Project dual-scope, cross-window sync, inline creation)
+✅ **Prompt Library** (Global & Project dual-scope, cross-window sync, inline creation, per-item actions)
+✅ **Mission Template System** (Custom editor, dual-scope, fork/edit/delete/copy, structured Task/Rules/Instructions)
 ✅ **Clone Path Convention** (Standardized `.worktrees/` directory, compatible with native VS Code Git)
-✅ **Shadow Mode UI** (Clone workspace auto-switches to focused Prompt Library with clone navigation)
+✅ **Shadow Mode UI** (Unified layout with Root Mode — full functionality inside clones, current clone marked with ★)
 ✅ **Return to Root** (🏠 Instant navigation back to main repo)
 ✅ **Copy Branch Name** (Right-click to copy branch name)
 ✅ **Migration Module** (Auto-migrate legacy worktrees / global prompts / project prompts)
+✅ **Worktree Manager (Beta)** (Multi-repo dashboard with global repo registry)
+✅ **Copy on Spawn** (Configurable folders/files to copy from root to clone)
+✅ **StatusEventBus** (Centralized cross-view sync for metadata changes)
 ✅ Initial MCP Server
 
 ---
@@ -66,6 +70,6 @@
 
 - [ ] Reveal in Finder + Copy Path
 - [ ] Post-create command (e.g., auto-run `install` after spawn)
-- [ ] File copy patterns (configurable files to copy from Root to clone, e.g., `.env.local`)
+- [x] ~~File copy patterns~~ → Implemented as `lumi-ops.copyOnSpawn` setting
 - [ ] Quick switch (Telescope / fuzzy search for clone directories)
 - [ ] i18n support

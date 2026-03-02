@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.8] - 2026-03-02
+
+### ✨ New Features
+- **Mission Template System** — Define custom MISSION.md templates with structured Task / Rules / Instructions fields. Templates live in `.prompts/_missions/` with dual-scope (Global + Project) support. Fork, edit, delete, and copy templates across scopes. Active template is stored per-workspace in `lumi-ops.activeMissionTemplate` setting.
+- **Mission Template Custom Editor** — Opening any `.prompts/_missions/*.md` file renders a structured form editor instead of raw markdown. Changes are synced in real-time with VS Code's native dirty-state handling.
+- **Worktree Manager (Beta)** — A multi-repo dashboard (`Open Worktree Manager` button in sidebar) that shows all registered repos and their worktrees in one panel. Supports review status cycling, inline notes, and cross-repo overview via a global repo registry (`~/.lumi-ops/.registry.json`).
+- **Copy on Spawn** — Configure folders/files to automatically copy from root into shadow clones on spawn. Set via `lumi-ops.copyOnSpawn` (multiline text, one path per line) or the `Browse workspace folders` command link in settings.
+
+### 🔧 Improvements
+- **Prompt Library Redesign** — New dedicated `PromptLibraryViewProvider` with per-item action icons (copy scope, edit, delete), scope filter toggles, and an integrated Mission Template dropdown with inline template management.
+- **StatusEventBus** — Centralized event bus for cross-view metadata synchronization. All subscribers (sidebar, Worktree Manager, prompt library) react to a single event source for consistent state updates.
+- **Default Mission Template** — Extracted into `missionDefaults.ts` as the single source of truth, shared by both CLI and Extension.
+- **Global Repo Registry** — New `registry.ts` module auto-registers repos on spawn for use by the Worktree Manager multi-repo dashboard.
+- **ShadowCreatorProvider Refactor** — Simplified spawn form, reduced file size by ~400 lines through extraction of prompt library and mission template logic into dedicated providers.
+- **ShadowTreeProvider Unit Tests** — Added Vitest-based unit tests for the sidebar tree provider.
+
 ## [0.3.7] - 2026-02-28
 
 ### 🐛 Bug Fixes

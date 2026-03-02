@@ -12,12 +12,19 @@
 
 Spawn isolated **Git Worktrees** ("Shadow Clones") so multiple AI Agents can work on different features simultaneously — without interfering with your main development environment.
 
+### 🆕 v0.3.8 — Mission Templates & Worktree Manager
+- **Mission Template System** — Custom MISSION.md templates with structured fields (Task/Rules/Instructions), dual-scope, and a built-in form editor.
+- **Worktree Manager (Beta)** — Multi-repo dashboard to monitor all worktrees across projects in one panel.
+- **Copy on Spawn** — Auto-copy configured folders/files from root into new clones.
+- **Prompt Library Redesign** — Per-item actions (copy scope, edit, delete) and integrated mission template dropdown.
+
 ## 📦 Monorepo Structure
 
 ```
 packages/
 ├── cli/         # Core logic & CLI (spawn, kill, list, merge)
-└── extension/   # VS Code / Antigravity Extension UI
+├── extension/   # VS Code / Antigravity Extension UI
+└── mcp-server/  # MCP Server (planned)
 ```
 
 ## 🚀 Getting Started (Development)
@@ -33,11 +40,14 @@ Press **F5** in VS Code / Antigravity to launch the Extension Development Host.
 
 - **Spawn Shadow Clones** — Create a new branch + worktree instantly from the sidebar.
 - **Agent Context** — Auto-generates `MISSION.md` with the task objective for your AI Agent.
-- **Shadow Mode UI** — When opened inside a Shadow Clone, the sidebar shows all clones (click to navigate) while hiding management actions. The Webview displays a focused Prompt Library instead of the Spawn form.
-- **Prompt Library** — Save and reuse task descriptions as templates. Dual-scope storage (Global `~/.lumi-ops/.prompts/` + Project `<repoRoot>/.prompts/`). Cross-window sync keeps prompts in sync across Root and Clone windows.
+- **Mission Templates** — Define reusable MISSION.md templates with Task / Rules / Instructions fields. Dual-scope (Global + Project), custom editor, fork & copy across scopes.
+- **Shadow Mode UI** — When opened inside a Shadow Clone, the UI is fully unified with Root Mode. All operations (Spawn, Kill, Merge) are available. Your current clone is marked with `★`.
+- **Prompt Library** — Save and reuse task descriptions as templates. Dual-scope storage (Global `~/.lumi-ops/.prompts/` + Project `<repoRoot>/.prompts/`). Per-item scope badges, edit, copy, and delete actions. Cross-window sync.
+- **Worktree Manager (Beta)** — Multi-repo dashboard showing all registered repos and worktrees in one panel. Review status cycling and inline notes.
 - **Non-Blocking** — Main window stays on your current branch. Spawn as many agents as you want.
 - **Squash & Merge** — Select a target branch and merge with one click. Base branch shown as `← recommended`.
 - **Conflict Detection** — Unresolved merge conflicts are detected and shown with ⚠️ in the sidebar.
+- **Copy on Spawn** — Configure folders/files to auto-copy from root to clone via `lumi-ops.copyOnSpawn` setting.
 - **Dropdown Search** — Branch Name and Base Branch inputs filter branches in real-time as you type. Press Esc to dismiss.
 - **Copy Branch Name** — Right-click any clone to copy its branch name to the clipboard.
 - **Current Branch Protection** — Your active branch cannot be accidentally killed from the sidebar.
