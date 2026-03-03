@@ -23,7 +23,16 @@ import type { ReviewStatus, ShadowClone } from '@lumi-ops/cli';
 // Helpers
 // ---------------------------------------------------------------------------
 
-const rootDir = process.cwd();
+/** Auto-detect git repo root. Falls back to cwd if not inside a git repo. */
+function detectRootDir(): string {
+  try {
+    return execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
+  } catch {
+    return process.cwd();
+  }
+}
+
+const rootDir = detectRootDir();
 
 /**
  * Redirect console.log to stderr while executing fn.
