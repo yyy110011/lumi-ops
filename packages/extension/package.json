@@ -2,7 +2,7 @@
   "name": "lumi-ops",
   "displayName": "Lumi-Ops",
   "description": "Shadow Clone Protocol - Git Worktree Automation for AI Agents",
-  "version": "0.3.11",
+  "version": "0.3.10",
   "publisher": "ZunRenYao",
   "engines": {
     "vscode": "^1.85.0"
