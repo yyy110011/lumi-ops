@@ -1,0 +1,22 @@
+{
+  "name": "@lumi-ops/mcp-server",
+  "version": "0.3.9",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "lumi-ops-mcp": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@lumi-ops/cli": "workspace:*",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.3"
+  }
+}

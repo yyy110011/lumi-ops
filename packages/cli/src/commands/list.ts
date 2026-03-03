@@ -10,6 +10,7 @@ export interface ShadowClone {
   isMain?: boolean;
   isDetached?: boolean;
   baseBranch?: string;
+  description?: string;
   reviewStatus?: ReviewStatus;
   hasConflict?: boolean;
 }

@@ -43,7 +43,7 @@ export async function spawn(branchName: string, options: { root: string; descrip
     // 3. Persist base branch metadata (centralized)
     const repoStorageDir = getRepoStorageDir(rootDir);
     const metadataPath = path.join(repoStorageDir, METADATA_FILE);
-    let metadata: Record<string, { baseBranch?: string }> = {};
+    let metadata: Record<string, { baseBranch?: string; description?: string }> = {};
     try { metadata = await fs.readJSON(metadataPath); } catch {}
     if (exists) {
       // Existing branch — base is unknown, don't record
@@ -52,6 +52,9 @@ export async function spawn(branchName: string, options: { root: string; descrip
     } else {
       metadata[branchName] = { baseBranch: resolvedBase };
       console.log(chalk.gray(`✓ Recorded base branch: ${resolvedBase}`));
+    }
+    if (options.description) {
+      metadata[branchName].description = options.description;
     }
     await fs.writeJSON(metadataPath, metadata, { spaces: 2 });
 
