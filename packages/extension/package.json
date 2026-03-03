@@ -218,5 +218,6 @@
     "mocha": "^10.2.0",
     "typescript": "^5.3.3",
     "vitest": "^3.2.4"
-  }
+  },
+  "license": "GPL-3.0-or-later"
 }
