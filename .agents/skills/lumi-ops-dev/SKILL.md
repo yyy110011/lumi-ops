@@ -120,6 +120,10 @@ Used in `package.json` `menus.view/item/context` for conditional menu items:
 
 ## Key Patterns
 
+### Build & Verify
+Always follow the `/build-and-verify` workflow for verification.
+Do NOT improvise build commands from package.json — the monorepo has specific build order requirements.
+
 ### Adding a New Command
 1. Add to `contributes.commands` in `packages/extension/package.json`
 2. Add menu binding in `contributes.menus` if needed

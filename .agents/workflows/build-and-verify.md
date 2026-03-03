@@ -1,5 +1,5 @@
 ---
-description: Build the entire monorepo and verify no errors
+description: REQUIRED for all verification — correct pnpm build order for monorepo
 ---
 // turbo-all
 1. Build CLI: `cd /Users/ryan/project_in_progress/lumi-ops/packages/cli && npm run build`
