@@ -25,6 +25,20 @@ import type { ReviewStatus, ShadowClone } from '@lumi-ops/cli';
 
 const rootDir = process.cwd();
 
+/**
+ * Redirect console.log to stderr while executing fn.
+ * CLI functions use console.log with chalk/emoji which corrupts MCP stdio JSON.
+ */
+async function silenceStdout<T>(fn: () => Promise<T>): Promise<T> {
+  const origLog = console.log;
+  console.log = console.error; // redirect to stderr
+  try {
+    return await fn();
+  } finally {
+    console.log = origLog;
+  }
+}
+
 /** Read and parse .lumi-metadata.json for the current repo. */
 async function readMetadata(): Promise<
   Record<string, { baseBranch?: string; description?: string; reviewStatus?: ReviewStatus }>
@@ -200,11 +214,13 @@ server.tool(
         }
       }
 
-      await spawn(branch, {
-        root: rootDir,
-        description: finalDescription,
-        baseBranch,
-      });
+      await silenceStdout(() =>
+        spawn(branch, {
+          root: rootDir,
+          description: finalDescription,
+          baseBranch,
+        }),
+      );
 
       return {
         content: [
@@ -284,7 +300,7 @@ server.tool(
   },
   async ({ branch, keepBranch }) => {
     try {
-      await kill(branch, { root: rootDir, keepBranch });
+      await silenceStdout(() => kill(branch, { root: rootDir, keepBranch }));
       return {
         content: [
           { type: 'text' as const, text: JSON.stringify({ status: 'killed', branch, keepBranch }, null, 2) },
@@ -344,11 +360,13 @@ server.tool(
       }
 
       try {
-        await merge(source, {
-          root: rootDir,
-          cwd: mergeCwd,
-          commitMessage: `feat: merge ${source} into ${target} (shadow clone)`,
-        });
+        await silenceStdout(() =>
+          merge(source, {
+            root: rootDir,
+            cwd: mergeCwd,
+            commitMessage: `feat: merge ${source} into ${target} (shadow clone)`,
+          }),
+        );
 
         // Clean up temp worktree on success
         if (usedTempWorktree) {
