@@ -160,28 +160,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
       const cloneId = deriveCloneId(currentWorkspacePath);
       if (cloneId) {
-        // 1. Auto todo → inProgress when clone workspace opens
+        // Auto todo → inProgress when clone workspace opens
         setStatusIfApplicable(cloneId, 'inProgress', ['todo']);
-
-        // 2. Auto → needsReview when MISSION_COMPLETE.md appears
-        const missionCompletePath = path.join(currentWorkspacePath, 'MISSION_COMPLETE.md');
-
-        // Check if already exists at activation time
-        if (fs.existsSync(missionCompletePath)) {
-          setStatusIfApplicable(cloneId, 'needsReview', ['todo', 'inProgress']);
-        }
-
-        // Watch for future creation
-        try {
-          const mcWatcher = fs.watch(currentWorkspacePath, (_, filename) => {
-            if (filename === 'MISSION_COMPLETE.md') {
-              setStatusIfApplicable(cloneId, 'needsReview', ['todo', 'inProgress']);
-            }
-          });
-          context.subscriptions.push({ dispose: () => mcWatcher.close() });
-        } catch (e) {
-          console.error('[lumi-ops] ❌ Failed to watch for MISSION_COMPLETE.md:', e);
-        }
       }
     }
   }
