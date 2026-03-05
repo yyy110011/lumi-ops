@@ -9,14 +9,14 @@ export function registerKillCommands(
   const { rootPath, shadowTreeProvider, creatorProvider } = deps;
 
   const killCmd = vscode.commands.registerCommand('lumi-ops.kill', async (item: any) => {
-    const branchName = item?.clone?.branch || await vscode.window.showInputBox({
+    const cloneId = item?.clone?.dirName || await vscode.window.showInputBox({
       prompt: 'Enter the branch name to kill',
-      placeHolder: 'feature/my-old-task'
+      placeHolder: 'feature/my-old-task (clone directory name)'
     });
 
-    if (branchName) {
+    if (cloneId) {
       const choice = await vscode.window.showWarningMessage(
-        `How do you want to kill the shadow clone for "${branchName}"?`,
+        `How do you want to kill the shadow clone for "${cloneId}"?`,
         { modal: true },
         'Remove Clone Only',
         'Kill Clone + Branch'
@@ -27,15 +27,15 @@ export function registerKillCommands(
         try {
           await vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
-            title: `Killing shadow clone: ${branchName}`,
+            title: `Killing shadow clone: ${cloneId}`,
             cancellable: false
           }, async () => {
-            await kill(branchName, { root: rootPath!, keepBranch });
+            await kill(cloneId, { root: rootPath!, keepBranch });
           });
           
           const msg = keepBranch
-            ? `Shadow clone ${branchName} removed (branch preserved).`
-            : `Shadow clone ${branchName} killed.`;
+            ? `Shadow clone ${cloneId} removed (branch preserved).`
+            : `Shadow clone ${cloneId} killed.`;
           vscode.window.showInformationMessage(msg);
           shadowTreeProvider.refresh();
           creatorProvider.resetForm();

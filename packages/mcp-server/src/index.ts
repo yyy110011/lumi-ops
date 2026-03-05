@@ -269,7 +269,7 @@ server.tool(
 
       // Enrich clones with metadata + hasReport
       const enriched = clones.map((c) => {
-        const meta = metadata[c.branch];
+        const meta = metadata[c.dirName];
         const hasReport = fs.existsSync(path.join(c.path, 'MISSION_COMPLETE.md'));
         const base: ShadowClone & { hasReport: boolean } = { ...c, hasReport };
         if (meta) {
@@ -303,7 +303,7 @@ server.tool(
   'kill_clone',
   'Remove a shadow clone.',
   {
-    branch: z.string().describe('Branch name of the clone to remove'),
+    branch: z.string().describe('Clone identifier (directory name, e.g. feat/my-task)'),
     keepBranch: z
       .boolean()
       .default(false)
@@ -344,7 +344,7 @@ server.tool(
       // Find worktree for target branch
       const rawEntries = await git.listWorktrees();
       const clones = parseWorktrees(rawEntries, rootDir);
-      const targetClone = clones.find((c) => c.branch === target);
+      const targetClone = clones.find((c) => c.currentBranch === target);
 
       let mergeCwd: string;
       let usedTempWorktree = false;
@@ -412,7 +412,7 @@ server.tool(
 
           // Read source clone's MISSION.md or metadata description
           let sourceMission = '';
-          const sourceClone = clones.find((c) => c.branch === source);
+          const sourceClone = clones.find((c) => c.currentBranch === source);
           if (sourceClone) {
             const missionPath = path.join(sourceClone.path, 'MISSION.md');
             try {
@@ -420,7 +420,7 @@ server.tool(
             } catch {
               // Fallback to metadata description
               const metadata = await readMetadata();
-              sourceMission = metadata[source]?.description || '';
+              sourceMission = metadata[sourceClone.dirName]?.description || '';
             }
           }
 
@@ -491,7 +491,7 @@ server.tool(
   'set_clone_status',
   'Update the review status of a clone.',
   {
-    branch: z.string().describe('Branch name of the clone'),
+    branch: z.string().describe('Clone identifier (directory name, e.g. feat/my-task)'),
     status: z
       .enum(['todo', 'inProgress', 'done', 'wontDo', 'needsReview', 'needsRevision'])
       .describe('New review status'),

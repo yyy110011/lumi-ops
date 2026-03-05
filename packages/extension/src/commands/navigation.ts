@@ -21,7 +21,7 @@ export function registerNavigationCommands(
   });
 
   const copyBranchName = vscode.commands.registerCommand('lumi-ops.copyBranchName', async (item: any) => {
-    const branchName = item?.clone?.branch;
+    const branchName = item?.clone?.currentBranch;
     if (!branchName) return;
     await vscode.env.clipboard.writeText(branchName);
     vscode.window.showInformationMessage(`Copied: ${branchName}`);

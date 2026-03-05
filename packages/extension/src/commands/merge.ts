@@ -10,8 +10,10 @@ export function registerMergeCommands(
   const { rootPath, shadowTreeProvider } = deps;
 
   const mergeCmd = vscode.commands.registerCommand('lumi-ops.merge', async (item: any) => {
-    const branchName = item?.clone?.branch;
-    if (!branchName || !rootPath) return;
+    const clone = item?.clone;
+    if (!clone || !rootPath) return;
+    const branchName = clone.currentBranch;  // Actual branch with commits
+    const cloneId = clone.dirName;           // Stable identity for metadata/kill
 
     try {
       const git = new GitUtils(rootPath);
@@ -23,7 +25,7 @@ export function registerMergeCommands(
       try {
         const raw = fs.readFileSync(metadataPath, 'utf-8');
         const metadata = JSON.parse(raw);
-        baseBranch = metadata[branchName]?.baseBranch;
+        baseBranch = metadata[cloneId]?.baseBranch;
       } catch {
         // No metadata — baseBranch stays undefined
       }
@@ -166,12 +168,12 @@ export function registerMergeCommands(
       if (selection === 'Yes, Delete It') {
         await vscode.window.withProgress({
           location: vscode.ProgressLocation.Notification,
-          title: `Killing shadow clone: ${branchName}`,
+          title: `Killing shadow clone: ${cloneId}`,
           cancellable: false
         }, async () => {
-          await kill(branchName, { root: rootPath! });
+          await kill(cloneId, { root: rootPath! });
         });
-        vscode.window.showInformationMessage(`Shadow clone ${branchName} deleted.`);
+        vscode.window.showInformationMessage(`Shadow clone ${cloneId} deleted.`);
         shadowTreeProvider.refresh();
       }
 

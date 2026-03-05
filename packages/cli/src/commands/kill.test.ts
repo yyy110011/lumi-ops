@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as path from 'path';
 
 // --- Mocks (vi.hoisted ensures these are available when vi.mock factories run) ---
-const { mockGitUtils, mockFs } = vi.hoisted(() => ({
+const { mockGitUtils, mockFs, mockExecSync } = vi.hoisted(() => ({
   mockGitUtils: {
     removeWorktree: vi.fn(),
     deleteBranch: vi.fn(),
@@ -12,6 +12,7 @@ const { mockGitUtils, mockFs } = vi.hoisted(() => ({
     readJSON: vi.fn(),
     writeJSON: vi.fn(),
   },
+  mockExecSync: vi.fn(),
 }));
 
 vi.mock('../utils/git', () => ({
@@ -32,15 +33,19 @@ vi.mock('chalk', () => ({
   },
 }));
 
+vi.mock('child_process', () => ({
+  execSync: mockExecSync,
+}));
+
 const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
 
 import { kill } from './kill';
 import { getClonesDir, getRepoStorageDir, METADATA_FILE } from '../constants';
 
 describe('kill', () => {
-  const branchName = 'feat/old-feature';
+  const identifier = 'feat/old-feature';
   const rootDir = '/fake/root';
-  const targetPath = path.join(getClonesDir(rootDir), branchName);
+  const targetPath = path.join(getClonesDir(rootDir), identifier);
   const metadataPath = path.join(getRepoStorageDir(rootDir), METADATA_FILE);
 
   beforeEach(() => {
@@ -49,17 +54,19 @@ describe('kill', () => {
     mockGitUtils.deleteBranch.mockResolvedValue(undefined);
     mockFs.readJSON.mockRejectedValue(new Error('ENOENT'));
     mockFs.writeJSON.mockResolvedValue(undefined);
+    // Default: actual branch matches identifier
+    mockExecSync.mockReturnValue('feat/old-feature\n');
   });
 
-  it('should remove worktree with force and delete branch with force', async () => {
-    await kill(branchName, { root: rootDir });
+  it('should remove worktree with force and delete actual branch', async () => {
+    await kill(identifier, { root: rootDir });
 
     expect(mockGitUtils.removeWorktree).toHaveBeenCalledWith(targetPath, true);
-    expect(mockGitUtils.deleteBranch).toHaveBeenCalledWith(branchName, true);
+    expect(mockGitUtils.deleteBranch).toHaveBeenCalledWith('feat/old-feature', true);
   });
 
   it('should NOT delete branch when keepBranch is true', async () => {
-    await kill(branchName, { root: rootDir, keepBranch: true });
+    await kill(identifier, { root: rootDir, keepBranch: true });
 
     expect(mockGitUtils.removeWorktree).toHaveBeenCalledWith(targetPath, true);
     expect(mockGitUtils.deleteBranch).not.toHaveBeenCalled();
@@ -74,18 +81,18 @@ describe('kill', () => {
       callOrder.push('deleteBranch');
     });
 
-    await kill(branchName, { root: rootDir });
+    await kill(identifier, { root: rootDir });
 
     expect(callOrder).toEqual(['removeWorktree', 'deleteBranch']);
   });
 
-  it('should remove branch entry from centralized metadata', async () => {
+  it('should remove entry from centralized metadata using identifier (dirName)', async () => {
     mockFs.readJSON.mockResolvedValue({
       'feat/old-feature': { baseBranch: 'main' },
       'feat/other': { baseBranch: 'develop' },
     });
 
-    await kill(branchName, { root: rootDir });
+    await kill(identifier, { root: rootDir });
 
     expect(mockFs.writeJSON).toHaveBeenCalledWith(
       metadataPath,
@@ -97,7 +104,7 @@ describe('kill', () => {
   it('should not fail when metadata file does not exist', async () => {
     mockFs.readJSON.mockRejectedValue(new Error('ENOENT'));
 
-    await kill(branchName, { root: rootDir });
+    await kill(identifier, { root: rootDir });
 
     expect(mockFs.writeJSON).not.toHaveBeenCalled();
     expect(mockExit).not.toHaveBeenCalled();
@@ -106,12 +113,45 @@ describe('kill', () => {
   it('should throw when removeWorktree fails', async () => {
     mockGitUtils.removeWorktree.mockRejectedValue(new Error('worktree not found'));
 
-    await expect(kill(branchName, { root: rootDir })).rejects.toThrow('worktree not found');
+    await expect(kill(identifier, { root: rootDir })).rejects.toThrow('worktree not found');
   });
 
-  it('should throw when deleteBranch fails', async () => {
+  it('should throw when deleteBranch fails for actual branch', async () => {
     mockGitUtils.deleteBranch.mockRejectedValue(new Error('branch not found'));
 
-    await expect(kill(branchName, { root: rootDir })).rejects.toThrow('branch not found');
+    // Should not throw - errors on branch deletion are caught silently
+    await kill(identifier, { root: rootDir });
+  });
+
+  it('should delete both actual branch and identifier branch when they differ', async () => {
+    // User checked out a different branch inside the clone
+    mockExecSync.mockReturnValue('develop\n');
+
+    await kill(identifier, { root: rootDir });
+
+    // Should attempt to delete both branches
+    expect(mockGitUtils.deleteBranch).toHaveBeenCalledTimes(2);
+    expect(mockGitUtils.deleteBranch).toHaveBeenCalledWith('develop', true);
+    expect(mockGitUtils.deleteBranch).toHaveBeenCalledWith('feat/old-feature', true);
+  });
+
+  it('should read actual branch via git rev-parse before removing worktree', async () => {
+    await kill(identifier, { root: rootDir });
+
+    expect(mockExecSync).toHaveBeenCalledWith(
+      'git rev-parse --abbrev-ref HEAD',
+      { cwd: targetPath, encoding: 'utf-8' },
+    );
+  });
+
+  it('should handle detached HEAD gracefully', async () => {
+    mockExecSync.mockReturnValue('HEAD\n');
+
+    await kill(identifier, { root: rootDir });
+
+    // Should try to delete identifier branch
+    expect(mockGitUtils.deleteBranch).toHaveBeenCalledWith('feat/old-feature', true);
+    // Should NOT try to delete 'HEAD' as a branch
+    expect(mockGitUtils.deleteBranch).toHaveBeenCalledTimes(1);
   });
 });

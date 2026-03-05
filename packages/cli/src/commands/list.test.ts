@@ -34,7 +34,7 @@ describe('list', () => {
   it('should parse porcelain worktrees and identify shadow clones', async () => {
     mockGitUtils.listWorktrees.mockResolvedValue([
       'worktree /fake/root\nHEAD abc123\nbranch refs/heads/main',
-      `worktree /some/other/path/feat/test\nHEAD def456\nbranch refs/heads/feat/test`,
+      `worktree /fake/root.worktrees/feat/test\nHEAD def456\nbranch refs/heads/feat/test`,
     ]);
 
     await list({ root: rootDir, json: true });
@@ -42,14 +42,18 @@ describe('list', () => {
     const output = JSON.parse(consoleSpy.mock.calls[0][0]);
     expect(output).toHaveLength(2);
     expect(output[0]).toEqual({
+      dirName: 'root',
+      currentBranch: 'main',
       branch: 'main',
       path: '/fake/root',
       isShadow: false,
       isMain: true,
     });
     expect(output[1]).toEqual({
+      dirName: 'feat/test',
+      currentBranch: 'feat/test',
       branch: 'feat/test',
-      path: '/some/other/path/feat/test',
+      path: '/fake/root.worktrees/feat/test',
       isShadow: true,
       isMain: false,
     });
@@ -63,6 +67,7 @@ describe('list', () => {
     await list({ root: rootDir, json: true });
 
     const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+    expect(output[0].currentBranch).toBe('feature/deep/nested');
     expect(output[0].branch).toBe('feature/deep/nested');
   });
 
@@ -125,6 +130,8 @@ describe('parseWorktrees', () => {
 
     expect(result[0].isMain).toBe(true);
     expect(result[0].isShadow).toBe(false);
+    expect(result[0].currentBranch).toBe('main');
+    expect(result[0].branch).toBe('main');
   });
 
   it('non-first entries are isShadow: true regardless of path', () => {
@@ -152,6 +159,8 @@ describe('parseWorktrees', () => {
 
     expect(result).toHaveLength(2);
     expect(result[1]).toMatchObject({
+      dirName: 'feat-branch',
+      currentBranch: 'feat-branch',
       branch: 'feat-branch',
       path: '/random/location/feat-branch',
       isShadow: true,
@@ -168,5 +177,35 @@ describe('parseWorktrees', () => {
     expect(result[0].isMain).toBe(true);
     expect(result[0].isShadow).toBe(false);
     expect(result[0].isDetached).toBe(true);
+  });
+
+  it('derives dirName from .worktrees/ path', () => {
+    const result = parseWorktrees([
+      'worktree /repo\nHEAD abc\nbranch refs/heads/main',
+      'worktree /repo.worktrees/feat/my-task\nHEAD def\nbranch refs/heads/feat/my-task',
+    ], '/repo');
+
+    expect(result[1].dirName).toBe('feat/my-task');
+    expect(result[1].currentBranch).toBe('feat/my-task');
+  });
+
+  it('handles branch drift — dirName differs from currentBranch', () => {
+    const result = parseWorktrees([
+      'worktree /repo\nHEAD abc\nbranch refs/heads/main',
+      'worktree /repo.worktrees/feat/task\nHEAD def\nbranch refs/heads/develop',
+    ], '/repo');
+
+    expect(result[1].dirName).toBe('feat/task');
+    expect(result[1].currentBranch).toBe('develop');
+    expect(result[1].branch).toBe('develop');  // backward compat alias
+  });
+
+  it('falls back to last path segment for non-.worktrees/ paths', () => {
+    const result = parseWorktrees([
+      'worktree /repo\nHEAD abc\nbranch refs/heads/main',
+      'worktree /completely/different/my-clone\nHEAD def\nbranch refs/heads/feat/a',
+    ], '/repo');
+
+    expect(result[1].dirName).toBe('my-clone');
   });
 });
