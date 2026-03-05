@@ -22,6 +22,7 @@ import { registerNavigationCommands } from './commands/navigation';
 import { registerBranchCommands } from './commands/branches';
 import { registerPromptLibraryCommands } from './commands/promptLibrary';
 import { registerMissionTemplateCommands } from './commands/missionTemplate';
+import { registerRootAgentMode } from './rootAgentMode';
 
 export async function activate(context: vscode.ExtensionContext) {
 
@@ -104,6 +105,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Run all one-time migrations
   await runMigrations(context, rootPath);
+
+  // Root Agent Mode: inject/remove .agents/rules/ based on setting
+  const isCloneWorkspace = !!currentWorkspacePath;
+  registerRootAgentMode(context, rootPath, isCloneWorkspace);
 
   const statusBus = new StatusEventBus();
   context.subscriptions.push({ dispose: () => statusBus.dispose() });

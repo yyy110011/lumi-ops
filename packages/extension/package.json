@@ -189,6 +189,12 @@
           "scope": "resource",
           "editPresentation": "multilineText",
           "markdownDescription": "Folders and files to copy from root into shadow clones on spawn (one per line).\n\n[$(folder) Browse workspace folders...](command:lumi-ops.pickCopyFolders)"
+        },
+        "lumi-ops.rootAgentMode": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "markdownDescription": "When enabled, injects a rule file (`.agents/rules/lumi-ops-root-agent.md`) that instructs AI agents in the **main workspace** to act as a strategist — analyzing tasks, discussing solutions, and writing prompts for shadow clones instead of implementing code directly."
         }
       }
     }
