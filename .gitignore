@@ -17,3 +17,8 @@ doc/prompt-library.md
 doc/roadmap.md
 doc/shadow-mode-ui.md
 GEMINI.md
+
+# Shadow Clone artifacts (clone-specific, never commit)
+MISSION.md
+MISSION_COMPLETE.md
+REVIEW_FEEDBACK.md
