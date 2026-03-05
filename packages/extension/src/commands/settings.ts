@@ -10,7 +10,7 @@ export function registerSettingsCommands(
   const { rootPath } = deps;
 
   const openSettings = vscode.commands.registerCommand('lumi-ops.openSettings', () => {
-    vscode.commands.executeCommand('workbench.action.openWorkspaceSettings', 'lumi-ops.copyOnSpawn');
+    vscode.commands.executeCommand('workbench.action.openWorkspaceSettings', '@ext:ZunRenYao.lumi-ops');
   });
 
   const pickCopyFolders = vscode.commands.registerCommand('lumi-ops.pickCopyFolders', async () => {
