@@ -51,16 +51,25 @@ export function registerRebaseCommands(
         statusBus.fire('*');
         vscode.window.showInformationMessage(`✅ Rebased "${branch}" onto "${baseBranch}" successfully.`);
       } catch (err: any) {
-        // Rebase conflict — abort the rebase so the worktree isn't stuck
-        try {
-          await git.rebase('--abort');
-        } catch {
-          // abort may fail if rebase wasn't started — that's ok
-        }
+        // Rebase conflict — do NOT abort. Leave conflict state for manual resolution.
+        statusBus.fire('*'); // Refresh sidebar to show 🔀 rebasing prefix
         vscode.window.showWarningMessage(
-          `⚠️ Rebase of "${branch}" onto "${baseBranch}" failed with conflicts. ` +
-          `Open the clone and resolve manually.`
+          `⚠️ Rebase of "${branch}" onto "${baseBranch}" has conflicts. ` +
+          `Open the clone to resolve, or right-click → Abort Rebase.`
         );
+      }
+    }),
+
+    vscode.commands.registerCommand('lumi-ops.abortRebase', async (item?: ShadowItem) => {
+      if (!rootPath || !item) return;
+      const clonePath = item.clone.path;
+      const git = new GitUtils(clonePath);
+      try {
+        await git.rebase('--abort');
+        statusBus.fire('*');
+        vscode.window.showInformationMessage(`Rebase aborted for "${item.clone.dirName}".`);
+      } catch (err: any) {
+        vscode.window.showErrorMessage(`Failed to abort rebase: ${err.message}`);
       }
     }),
   ];

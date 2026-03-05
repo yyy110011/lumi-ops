@@ -284,7 +284,9 @@ export class ShadowItem extends vscode.TreeItem {
     super(label, collapsibleState);
     // Stable ID using dirName so VS Code tracks this item across updates
     this.id = `shadow-${clone.dirName}-${role}`;
-    this.contextValue = role;
+    this.contextValue = (role === 'shadowClone' && clone.isDetached)
+      ? 'shadowClone-detached'
+      : role;
 
     const conflictPrefix = this.clone.hasConflict ? '⚠️ · ' : '';
     const rebasePrefix = this.clone.needsRebase ? '⟲ rebase · ' : '';

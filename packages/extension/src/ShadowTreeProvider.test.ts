@@ -173,5 +173,20 @@ describe('ShadowItem', () => {
       }), 'shadowClone', '/ext', clonePath);
       expect(item.description).toBe('⚠️ · ⟲ rebase · 🔀 rebasing · ← main · ★');
     });
+
+    it('sets contextValue to shadowClone for normal clones', () => {
+      const item = new ShadowItem('feat/test', NONE, makeClone(), 'shadowClone', '/ext', undefined);
+      expect(item.contextValue).toBe('shadowClone');
+    });
+
+    it('sets contextValue to shadowClone-detached for detached clones', () => {
+      const item = new ShadowItem('feat/test', NONE, makeClone({ isDetached: true }), 'shadowClone', '/ext', undefined);
+      expect(item.contextValue).toBe('shadowClone-detached');
+    });
+
+    it('sets contextValue to currentBranch for root entry', () => {
+      const item = new ShadowItem('main', NONE, makeClone({ dirName: 'root', currentBranch: 'main', path: '/repo', isShadow: false }), 'currentBranch', '/ext', undefined);
+      expect(item.contextValue).toBe('currentBranch');
+    });
   });
 });
