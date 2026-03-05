@@ -151,7 +151,7 @@ export async function activate(context: vscode.ExtensionContext) {
           const raw = fs.readFileSync(metadataPath, 'utf-8');
           const metadata = JSON.parse(raw);
           const current = metadata[cloneId]?.reviewStatus;
-          if (current && eligibleFrom.includes(current)) {
+          if (!current || eligibleFrom.includes(current)) {
             metadata[cloneId].reviewStatus = newStatus;
             fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
           }
