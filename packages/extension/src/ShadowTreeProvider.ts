@@ -9,16 +9,20 @@ const STATUS_SVG: Partial<Record<ReviewStatus, string>> = {
   todo:   'status-todo.svg',
   done:   'status-done.svg',
   wontDo: 'status-wont-do.svg',
+  needsReview: 'status-needs-review.svg',
+  needsRevision: 'status-needs-revision.svg',
 };
 
 const STATUS_LABELS: Record<ReviewStatus, string> = {
   todo: 'Todo',
   inProgress: 'In Progress',
+  needsReview: 'Needs Review',
   done: 'Done',
   wontDo: "Won't Do",
+  needsRevision: 'Needs Revision',
 };
 
-const STATUS_ORDER: ReviewStatus[] = ['todo', 'inProgress', 'done', 'wontDo'];
+const STATUS_ORDER: ReviewStatus[] = ['todo', 'inProgress', 'needsReview', 'done', 'wontDo'];
 
 export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
   private _onDidChangeTreeData: vscode.EventEmitter<ShadowItem | undefined | void> = new vscode.EventEmitter<ShadowItem | undefined | void>();

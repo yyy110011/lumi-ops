@@ -5,7 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import * as path from 'path';
 import * as fs from 'fs';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import {
   spawn,
   kill,
@@ -267,18 +267,20 @@ server.tool(
       const clones = parseWorktrees(rawEntries, rootDir);
       const metadata = await readMetadata();
 
-      // Enrich clones with metadata
-      const enriched: ShadowClone[] = clones.map((c) => {
+      // Enrich clones with metadata + hasReport
+      const enriched = clones.map((c) => {
         const meta = metadata[c.branch];
+        const hasReport = fs.existsSync(path.join(c.path, 'MISSION_COMPLETE.md'));
+        const base: ShadowClone & { hasReport: boolean } = { ...c, hasReport };
         if (meta) {
           return {
-            ...c,
+            ...base,
             baseBranch: meta.baseBranch || c.baseBranch,
             description: meta.description,
             reviewStatus: meta.reviewStatus,
           };
         }
-        return c;
+        return base;
       });
 
       return {
@@ -491,7 +493,7 @@ server.tool(
   {
     branch: z.string().describe('Branch name of the clone'),
     status: z
-      .enum(['todo', 'inProgress', 'done', 'wontDo', 'needsReview'])
+      .enum(['todo', 'inProgress', 'done', 'wontDo', 'needsReview', 'needsRevision'])
       .describe('New review status'),
   },
   async ({ branch, status }) => {
@@ -511,6 +513,254 @@ server.tool(
     } catch (error: any) {
       return {
         content: [{ type: 'text' as const, text: `Error setting status: ${error.message}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Tool 8: review_clone
+// ---------------------------------------------------------------------------
+
+/** Parse `git diff --numstat` output into structured data. */
+function parseDiffStat(raw: string): {
+  filesChanged: number;
+  insertions: number;
+  deletions: number;
+  files: { path: string; insertions: number; deletions: number }[];
+} {
+  const lines = raw.trim().split('\n').filter(Boolean);
+  const files: { path: string; insertions: number; deletions: number }[] = [];
+  let totalInsertions = 0;
+  let totalDeletions = 0;
+
+  for (const line of lines) {
+    // numstat format: "insertions\tdeletions\tfilepath"
+    // Binary files show as: "-\t-\tpath"
+    const parts = line.split('\t');
+    if (parts.length < 3) continue;
+    const [ins, del, ...pathParts] = parts;
+    const filePath = pathParts.join('\t'); // handle paths with tabs (rare but safe)
+    if (ins === '-' || del === '-') {
+      // Binary file — count it but skip numeric totals
+      files.push({ path: filePath, insertions: 0, deletions: 0 });
+      continue;
+    }
+    const insertions = parseInt(ins, 10) || 0;
+    const deletions = parseInt(del, 10) || 0;
+    files.push({ path: filePath, insertions, deletions });
+    totalInsertions += insertions;
+    totalDeletions += deletions;
+  }
+
+  return { filesChanged: files.length, insertions: totalInsertions, deletions: totalDeletions, files };
+}
+
+server.tool(
+  'review_clone',
+  'Get a structured review summary of a shadow clone: completion report, diff stats, and commit list.',
+  {
+    branch: z.string().describe('Branch name of the clone to review'),
+  },
+  async ({ branch }) => {
+    try {
+      // 1. Find the clone's worktree path
+      const git = new GitUtils(rootDir);
+      const rawEntries = await git.listWorktrees();
+      const clones = parseWorktrees(rawEntries, rootDir);
+      const clone = clones.find((c) => c.branch === branch);
+
+      if (!clone) {
+        return {
+          content: [{ type: 'text' as const, text: `Error: no worktree found for branch "${branch}". The clone may have been killed.` }],
+          isError: true,
+        };
+      }
+
+      // 2. Read MISSION_COMPLETE.md
+      let report: string | null = null;
+      try {
+        report = await fs.promises.readFile(path.join(clone.path, 'MISSION_COMPLETE.md'), 'utf-8');
+      } catch {
+        // No report — that's fine
+      }
+
+      // 3. Look up baseBranch from metadata
+      const metadata = await readMetadata();
+      const baseBranch = metadata[branch]?.baseBranch || 'main';
+
+      // 4. Get diff stat
+      let diffStat: ReturnType<typeof parseDiffStat> = { filesChanged: 0, insertions: 0, deletions: 0, files: [] };
+      try {
+        const diffStatRaw = execFileSync('git', ['diff', '--numstat', `${baseBranch}...${branch}`], {
+          cwd: rootDir,
+          encoding: 'utf-8',
+          maxBuffer: 10 * 1024 * 1024,
+        });
+        diffStat = parseDiffStat(diffStatRaw);
+      } catch (e: any) {
+        // Could be detached HEAD or missing base branch
+        diffStat = { filesChanged: 0, insertions: 0, deletions: 0, files: [] };
+      }
+
+      // Cap file list at 50
+      const MAX_FILES = 50;
+      let truncatedNote: string | undefined;
+      if (diffStat.files.length > MAX_FILES) {
+        const remaining = diffStat.files.length - MAX_FILES;
+        diffStat.files = diffStat.files.slice(0, MAX_FILES);
+        truncatedNote = `... and ${remaining} more files (${diffStat.filesChanged} total)`;
+      }
+
+      // 5. Get commits
+      let commits: { hash: string; message: string }[] = [];
+      try {
+        const logRaw = execFileSync('git', ['log', '--oneline', `${baseBranch}..${branch}`], {
+          cwd: rootDir,
+          encoding: 'utf-8',
+        });
+        commits = logRaw
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => {
+            const spaceIdx = line.indexOf(' ');
+            return {
+              hash: line.substring(0, spaceIdx),
+              message: line.substring(spaceIdx + 1),
+            };
+          });
+      } catch {
+        // No commits or branch not found
+      }
+
+      const result: Record<string, unknown> = {
+        branch,
+        baseBranch,
+        report,
+        commits,
+        diffStat: {
+          ...diffStat,
+          ...(truncatedNote ? { truncatedNote } : {}),
+        },
+      };
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error: any) {
+      return {
+        content: [{ type: 'text' as const, text: `Error reviewing clone: ${error.message}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Tool 9: get_clone_file_diff
+// ---------------------------------------------------------------------------
+
+server.tool(
+  'get_clone_file_diff',
+  'Get the full diff of a specific file in a shadow clone compared to its base branch.',
+  {
+    branch: z.string().describe('Branch name of the clone'),
+    filepath: z.string().describe('Relative file path to diff (from repo root)'),
+  },
+  async ({ branch, filepath }) => {
+    try {
+      // Look up baseBranch from metadata
+      const metadata = await readMetadata();
+      const baseBranch = metadata[branch]?.baseBranch || 'main';
+
+      let diff: string;
+      try {
+        diff = execFileSync('git', ['diff', `${baseBranch}...${branch}`, '--', filepath], {
+          cwd: rootDir,
+          encoding: 'utf-8',
+          maxBuffer: 10 * 1024 * 1024,
+        });
+      } catch (e: any) {
+        return {
+          content: [{ type: 'text' as const, text: `Error: could not diff "${filepath}" — ${e.message}` }],
+          isError: true,
+        };
+      }
+
+      if (!diff.trim()) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ branch, filepath, diff: null, note: 'No changes in this file between base and branch.' }, null, 2) }],
+        };
+      }
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ branch, baseBranch, filepath, diff }, null, 2) }],
+      };
+    } catch (error: any) {
+      return {
+        content: [{ type: 'text' as const, text: `Error getting file diff: ${error.message}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Tool 10: request_revision
+// ---------------------------------------------------------------------------
+
+server.tool(
+  'request_revision',
+  'Send review feedback to a shadow clone for revision. Writes REVIEW_FEEDBACK.md and sets status to needsRevision.',
+  {
+    branch: z.string().describe('Branch name of the clone to send feedback to'),
+    feedback: z.string().describe('Review feedback content (markdown)'),
+  },
+  async ({ branch, feedback }) => {
+    try {
+      // 1. Find the clone's worktree path
+      const git = new GitUtils(rootDir);
+      const rawEntries = await git.listWorktrees();
+      const clones = parseWorktrees(rawEntries, rootDir);
+      const clone = clones.find((c) => c.branch === branch);
+
+      if (!clone) {
+        return {
+          content: [{ type: 'text' as const, text: `Error: no worktree found for branch "${branch}". The clone may have been killed.` }],
+          isError: true,
+        };
+      }
+
+      // 2. Write REVIEW_FEEDBACK.md
+      const feedbackPath = path.join(clone.path, 'REVIEW_FEEDBACK.md');
+      const feedbackContent = `# Review Feedback\n\nYou are revising your previous work. Read \`MISSION.md\` (original task) → \`MISSION_COMPLETE.md\` (what you did) → this file (what to fix).\n\n## Issues to Fix\n\n${feedback}\n\n## After fixing, update MISSION_COMPLETE.md with the new changes.\n`;
+      await fs.promises.writeFile(feedbackPath, feedbackContent);
+
+      // 3. Set reviewStatus to needsRevision
+      const metadata = await readMetadata();
+      if (!metadata[branch]) {
+        metadata[branch] = {};
+      }
+      metadata[branch].reviewStatus = 'needsRevision' as ReviewStatus;
+      await writeMetadata(metadata);
+
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify(
+              { branch, reviewStatus: 'needsRevision', feedbackPath },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    } catch (error: any) {
+      return {
+        content: [{ type: 'text' as const, text: `Error requesting revision: ${error.message}` }],
         isError: true,
       };
     }
