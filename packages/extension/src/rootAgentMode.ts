@@ -36,8 +36,8 @@ async function syncRootAgentRule(rootPath: string, isCloneWorkspace: boolean): P
     // Write rule file
     await fs.promises.mkdir(rulesDir, { recursive: true });
     await fs.promises.writeFile(ruleFilePath, ROOT_AGENT_RULE_CONTENT);
-  } else {
-    // Delete rule file if it exists
+  } else if (!isCloneWorkspace) {
+    // Only clean up in root workspace context — clone windows must not touch root rules
     try { await fs.promises.unlink(ruleFilePath); } catch { /* doesn't exist */ }
   }
 }
