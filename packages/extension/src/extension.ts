@@ -57,15 +57,40 @@ export async function activate(context: vscode.ExtensionContext) {
           preview: false,
           preserveFocus: true 
         });
+
+        // Determine prompt content based on clone's reviewStatus
+        let prompt = 'Please read @MISSION.md and start working on the objective described in it.';
+        let message = '👻 Shadow Clone ready! Copy prompt to paste in chat?';
+
+        try {
+          const wsPath = workspaceRoot.uri.fsPath;
+          const cloneId = deriveCloneId(wsPath);
+          if (cloneId) {
+            const gitCommonDir = execSync('git rev-parse --git-common-dir', {
+              cwd: wsPath,
+              encoding: 'utf-8',
+            }).trim();
+            const mainRepoRoot = path.dirname(path.resolve(wsPath, gitCommonDir));
+            const metadataPath = path.join(getRepoStorageDir(mainRepoRoot), METADATA_FILE);
+            const raw = fs.readFileSync(metadataPath, 'utf-8');
+            const metadata = JSON.parse(raw);
+            const reviewStatus = metadata[cloneId]?.reviewStatus;
+
+            if (reviewStatus === 'needsRevision') {
+              message = '🔄 Revision needed! Copy revision prompt to paste in chat?';
+              prompt = 'You have review feedback. Read @MISSION.md → @MISSION_COMPLETE.md → @REVIEW_FEEDBACK.md, then fix the issues listed in REVIEW_FEEDBACK.md. After fixing, update MISSION_COMPLETE.md.';
+            }
+          }
+        } catch {
+          // Could not read status — fall back to default prompt
+        }
         
         const action = await vscode.window.showInformationMessage(
-          '👻 Shadow Clone ready! Copy prompt to paste in chat?',
+          message,
           'Copy Prompt'
         );
         if (action === 'Copy Prompt') {
-          await vscode.env.clipboard.writeText(
-            'Please read @MISSION.md and start working on the objective described in it.'
-          );
+          await vscode.env.clipboard.writeText(prompt);
           vscode.window.showInformationMessage('✅ Prompt copied to clipboard!');
         }
       } catch (e) {
