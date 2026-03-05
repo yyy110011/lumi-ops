@@ -1,6 +1,10 @@
 import * as path from 'path';
+import { execSync } from 'child_process';
 import { GitUtils } from '../utils/git';
 import chalk from 'chalk';
+
+// Files that should never be merged into target (clone-specific artifacts)
+const MERGE_EXCLUDE = ['MISSION.md', 'MISSION_COMPLETE.md', 'REVIEW_FEEDBACK.md'];
 
 export async function merge(branchName: string, options: {
   root: string;
@@ -21,14 +25,28 @@ export async function merge(branchName: string, options: {
     await git.mergeSquash(branchName);
     console.log(chalk.gray('✓ Squash merge successful.'));
 
-    // 2. Commit
+    // 2. Exclude clone-specific artifacts before committing
+    for (const file of MERGE_EXCLUDE) {
+      try {
+        execSync(`git reset HEAD "${file}"`, { cwd: mergeDir, stdio: 'ignore' });
+        execSync(`git checkout -- "${file}" 2>/dev/null || rm -f "${file}"`, {
+          cwd: mergeDir,
+          stdio: 'ignore',
+          shell: '/bin/sh',
+        });
+      } catch {
+        // file may not exist in the merge — fine
+      }
+    }
+
+    // 3. Commit
     await git.commit(effectiveCommitMessage);
     console.log(chalk.green(`\n✨ Successfully merged ${branchName}!`));
 
   } catch (error: any) {
     const errorMsg = error.message || '';
 
-    // 3. Handle Conflicts
+    // Handle Conflicts
     if (errorMsg.includes('CONFLICT') || errorMsg.toLowerCase().includes('conflict')) {
       console.error(chalk.yellow(`\n⚠️  Merge Conflict detected.`));
       throw new Error('CONFLICT');

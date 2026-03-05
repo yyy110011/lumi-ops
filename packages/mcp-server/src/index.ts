@@ -9,7 +9,6 @@ import { execSync, execFileSync } from 'child_process';
 import {
   spawn,
   kill,
-  merge,
   parseWorktrees,
   GitUtils,
   getClonesDir,
@@ -22,6 +21,9 @@ import type { ReviewStatus, ShadowClone } from '@lumi-ops/cli';
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// Files that should never be merged into target (clone-specific artifacts)
+const MERGE_EXCLUDE = ['MISSION.md', 'MISSION_COMPLETE.md', 'REVIEW_FEEDBACK.md'];
 
 /** Auto-detect git repo root. Falls back to cwd if not inside a git repo. */
 function detectRootDir(): string {
@@ -371,12 +373,27 @@ server.tool(
       }
 
       try {
+        // Squash merge (stages changes, no commit yet)
+        const mergeGit = new GitUtils(mergeCwd);
+        await silenceStdout(() => mergeGit.mergeSquash(source));
+
+        // Exclude clone-specific artifacts before committing
+        for (const file of MERGE_EXCLUDE) {
+          try {
+            execSync(`git reset HEAD "${file}"`, { cwd: mergeCwd, stdio: 'ignore' });
+            execSync(`git checkout -- "${file}" 2>/dev/null || rm -f "${file}"`, {
+              cwd: mergeCwd,
+              stdio: 'ignore',
+              shell: '/bin/sh',
+            });
+          } catch {
+            // file may not exist in the merge — fine
+          }
+        }
+
+        // Commit the squash merge (without excluded files)
         await silenceStdout(() =>
-          merge(source, {
-            root: rootDir,
-            cwd: mergeCwd,
-            commitMessage: `feat: merge ${source} into ${target} (shadow clone)`,
-          }),
+          mergeGit.commit(`feat: merge ${source} into ${target} (shadow clone)`),
         );
 
         // Clean up temp worktree on success
@@ -410,19 +427,11 @@ server.tool(
             // ignore — we still have the conflict status
           }
 
-          // Read source clone's MISSION.md or metadata description
-          let sourceMission = '';
+          // Provide paths to source clone's MISSION.md and MISSION_COMPLETE.md
+          // (slim response — agents can read these on demand instead of including full content)
           const sourceClone = clones.find((c) => c.currentBranch === source);
-          if (sourceClone) {
-            const missionPath = path.join(sourceClone.path, 'MISSION.md');
-            try {
-              sourceMission = await fs.promises.readFile(missionPath, 'utf-8');
-            } catch {
-              // Fallback to metadata description
-              const metadata = await readMetadata();
-              sourceMission = metadata[sourceClone.dirName]?.description || '';
-            }
-          }
+          const missionPath = sourceClone ? path.join(sourceClone.path, 'MISSION.md') : null;
+          const reportPath = sourceClone ? path.join(sourceClone.path, 'MISSION_COMPLETE.md') : null;
 
           // Get diff stat
           let sourceDiff = '';
@@ -452,7 +461,7 @@ server.tool(
               {
                 type: 'text' as const,
                 text: JSON.stringify(
-                  { status: 'conflict', source, target, conflictFiles, sourceMission, sourceDiff },
+                  { status: 'conflict', source, target, conflictFiles, missionPath, reportPath, sourceDiff },
                   null,
                   2,
                 ),

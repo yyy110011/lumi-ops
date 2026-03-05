@@ -20,6 +20,11 @@ vi.mock('chalk', () => ({
   },
 }));
 
+const mockExecSync = vi.fn();
+vi.mock('child_process', () => ({
+  execSync: (...args: any[]) => mockExecSync(...args),
+}));
+
 import { merge } from './merge';
 import { GitUtils } from '../utils/git';
 
@@ -111,5 +116,43 @@ describe('merge', () => {
     expect(GitUtils).toHaveBeenCalledWith('/fake/worktree/develop');
     expect(mockGitUtils.mergeSquash).toHaveBeenCalledWith(branchName);
     expect(mockGitUtils.commit).toHaveBeenCalledWith(customMsg);
+  });
+
+  // --- Merge exclude (clone artifacts) ---
+
+  it('should exclude clone artifacts after squash merge before committing', async () => {
+    await merge(branchName, options);
+
+    // Should call execSync for each excluded file (reset + checkout/rm)
+    const expectedFiles = ['MISSION.md', 'MISSION_COMPLETE.md', 'REVIEW_FEEDBACK.md'];
+    for (const file of expectedFiles) {
+      expect(mockExecSync).toHaveBeenCalledWith(
+        `git reset HEAD "${file}"`,
+        expect.objectContaining({ cwd: '/fake/root', stdio: 'ignore' }),
+      );
+      expect(mockExecSync).toHaveBeenCalledWith(
+        `git checkout -- "${file}" 2>/dev/null || rm -f "${file}"`,
+        expect.objectContaining({ cwd: '/fake/root', stdio: 'ignore', shell: '/bin/sh' }),
+      );
+    }
+
+    // Ensure exclude runs between squash merge and commit
+    const squashCallOrder = mockGitUtils.mergeSquash.mock.invocationCallOrder[0];
+    const commitCallOrder = mockGitUtils.commit.mock.invocationCallOrder[0];
+    const firstExecCallOrder = mockExecSync.mock.invocationCallOrder[0];
+    const lastExecCallOrder = mockExecSync.mock.invocationCallOrder[mockExecSync.mock.invocationCallOrder.length - 1];
+
+    expect(firstExecCallOrder).toBeGreaterThan(squashCallOrder);
+    expect(lastExecCallOrder).toBeLessThan(commitCallOrder);
+  });
+
+  it('should not fail if exclude files do not exist', async () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error('pathspec did not match any file(s)');
+    });
+
+    // Should still complete successfully
+    await expect(merge(branchName, options)).resolves.toBeUndefined();
+    expect(mockGitUtils.commit).toHaveBeenCalled();
   });
 });
