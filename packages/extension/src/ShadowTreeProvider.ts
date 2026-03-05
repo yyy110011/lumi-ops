@@ -88,7 +88,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
         const currentWorktree = clones.find(c => c.isMain);
         if (currentWorktree) {
           items.push(new ShadowItem(
-            currentWorktree.dirName,
+            currentWorktree.currentBranch,
             vscode.TreeItemCollapsibleState.None,
             currentWorktree,
             'currentBranch',
