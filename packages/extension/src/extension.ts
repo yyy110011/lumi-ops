@@ -138,7 +138,7 @@ export async function activate(context: vscode.ExtensionContext) {
   // Root Agent Mode: inject/remove .agents/rules/ based on setting
   const isCloneWorkspace = !!currentWorkspacePath;
   registerRootAgentMode(context, rootPath, isCloneWorkspace);
-  registerCloneAgentRules(context, rootPath, isCloneWorkspace);
+  registerCloneAgentRules(context, rootPath, isCloneWorkspace, currentWorkspacePath);
 
   // -- Auto-status transitions for clone workspaces --
   if (isCloneWorkspace && rootPath && currentWorkspacePath) {

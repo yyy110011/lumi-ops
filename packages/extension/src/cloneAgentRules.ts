@@ -27,10 +27,12 @@ function getRulesDir(rootPath: string): string {
   return path.join(rootPath, '.agents', 'rules');
 }
 
-async function syncCloneAgentRule(rootPath: string, isCloneWorkspace: boolean): Promise<void> {
+async function syncCloneAgentRule(rootPath: string, isCloneWorkspace: boolean, cloneWorkspacePath?: string): Promise<void> {
   const config = vscode.workspace.getConfiguration('lumi-ops');
   const enabled = config.get<boolean>('cloneAgentRules', false);
-  const rulesDir = getRulesDir(rootPath);
+  // Write to clone's own path (untracked files aren't shared across worktrees)
+  const targetPath = isCloneWorkspace && cloneWorkspacePath ? cloneWorkspacePath : rootPath;
+  const rulesDir = getRulesDir(targetPath);
   const ruleFilePath = path.join(rulesDir, RULE_FILENAME);
 
   if (enabled && isCloneWorkspace) {
@@ -47,16 +49,17 @@ export function registerCloneAgentRules(
   context: vscode.ExtensionContext,
   rootPath: string | undefined,
   isCloneWorkspace: boolean,
+  cloneWorkspacePath?: string,
 ): void {
   if (!rootPath) return;
 
   // Sync on activation
-  syncCloneAgentRule(rootPath, isCloneWorkspace);
+  syncCloneAgentRule(rootPath, isCloneWorkspace, cloneWorkspacePath);
 
   // Re-sync when the setting changes
   const disposable = vscode.workspace.onDidChangeConfiguration((e: vscode.ConfigurationChangeEvent) => {
     if (e.affectsConfiguration('lumi-ops.cloneAgentRules')) {
-      syncCloneAgentRule(rootPath, isCloneWorkspace);
+      syncCloneAgentRule(rootPath, isCloneWorkspace, cloneWorkspacePath);
     }
   });
 
