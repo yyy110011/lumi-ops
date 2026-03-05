@@ -4,6 +4,7 @@ import { spawn } from './commands/spawn';
 import { kill } from './commands/kill';
 import { list } from './commands/list';
 import { migrateLegacyClones } from './commands/migration';
+import { patchApply, patchRevert, patchStatus } from './commands/patch';
 import * as path from 'path';
 
 // Export for library usage
@@ -12,6 +13,7 @@ export * from './commands/kill';
 export * from './commands/list';
 export * from './commands/merge';
 export * from './commands/migration';
+export * from './commands/patch';
 export * from './utils/git';
 export * from './constants';
 export * from './registry';
@@ -57,5 +59,29 @@ program
     const rootDir = path.resolve(options.root);
     await migrateLegacyClones(rootDir, { dryRun: options.dryRun });
   });
+
+const patchCmd = program
+  .command('patch')
+  .description('Patch Antigravity IDE for auto-start chat on MISSION.md workspaces');
+
+patchCmd
+  .command('apply')
+  .description('Apply the auto-start patch to Antigravity')
+  .option('--path <antigravityPath>', 'Path to Antigravity out/ directory')
+  .option('--message <msg>', 'Custom auto-start message')
+  .option('--no-submit', 'Only copy text to clipboard, do not auto-submit')
+  .action(patchApply);
+
+patchCmd
+  .command('revert')
+  .description('Revert the auto-start patch (restore backup)')
+  .option('--path <antigravityPath>', 'Path to Antigravity out/ directory')
+  .action(patchRevert);
+
+patchCmd
+  .command('status')
+  .description('Check if Antigravity is patched')
+  .option('--path <antigravityPath>', 'Path to Antigravity out/ directory')
+  .action(patchStatus);
 
 program.parse();
