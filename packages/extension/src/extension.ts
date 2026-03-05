@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { execSync } from 'child_process';
 import { ShadowTreeProvider } from './ShadowTreeProvider';
 import { ShadowCreatorProvider } from './ShadowCreatorProvider';
 import { PromptLibraryViewProvider } from './PromptLibraryViewProvider';
@@ -110,6 +111,80 @@ export async function activate(context: vscode.ExtensionContext) {
   // Root Agent Mode: inject/remove .agents/rules/ based on setting
   const isCloneWorkspace = !!currentWorkspacePath;
   registerRootAgentMode(context, rootPath, isCloneWorkspace);
+
+  // -- Auto-status transitions for clone workspaces --
+  if (isCloneWorkspace && rootPath && currentWorkspacePath) {
+    // Derive mainRepoRoot using git (canonical method for worktrees)
+    let mainRepoRoot: string | undefined;
+    try {
+      const gitCommonDir = execSync('git rev-parse --git-common-dir', {
+        cwd: currentWorkspacePath,
+        encoding: 'utf-8',
+      }).trim();
+      // gitCommonDir is e.g. "/repo/.git" or a relative path — resolve and get parent
+      mainRepoRoot = path.dirname(path.resolve(currentWorkspacePath, gitCommonDir));
+    } catch {
+      // git command failed — skip auto-transitions gracefully
+      console.warn('[lumi-ops] Could not derive mainRepoRoot via git, skipping auto-status transitions.');
+    }
+
+    if (mainRepoRoot) {
+      // Derive cloneId the same way as deriveDirName() in CLI list.ts
+      const deriveCloneId = (wtPath: string): string | undefined => {
+        const marker = '.worktrees/';
+        const idx = wtPath.indexOf(marker);
+        return idx !== -1 ? wtPath.substring(idx + marker.length) : undefined;
+      };
+
+      /**
+       * Transition clone status if current status is eligible.
+       * Only transitions from early states (todo, inProgress) to prevent
+       * overriding meaningful statuses like done, needsRevision, etc.
+       */
+      const setStatusIfApplicable = (
+        cloneId: string,
+        newStatus: string,
+        eligibleFrom: string[],
+      ) => {
+        try {
+          const metadataPath = path.join(getRepoStorageDir(mainRepoRoot!), METADATA_FILE);
+          const raw = fs.readFileSync(metadataPath, 'utf-8');
+          const metadata = JSON.parse(raw);
+          const current = metadata[cloneId]?.reviewStatus;
+          if (current && eligibleFrom.includes(current)) {
+            metadata[cloneId].reviewStatus = newStatus;
+            fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+          }
+        } catch { /* no metadata or parse error — skip */ }
+      };
+
+      const cloneId = deriveCloneId(currentWorkspacePath);
+      if (cloneId) {
+        // 1. Auto todo → inProgress when clone workspace opens
+        setStatusIfApplicable(cloneId, 'inProgress', ['todo']);
+
+        // 2. Auto → needsReview when MISSION_COMPLETE.md appears
+        const missionCompletePath = path.join(currentWorkspacePath, 'MISSION_COMPLETE.md');
+
+        // Check if already exists at activation time
+        if (fs.existsSync(missionCompletePath)) {
+          setStatusIfApplicable(cloneId, 'needsReview', ['todo', 'inProgress']);
+        }
+
+        // Watch for future creation
+        try {
+          const mcWatcher = fs.watch(currentWorkspacePath, (_, filename) => {
+            if (filename === 'MISSION_COMPLETE.md') {
+              setStatusIfApplicable(cloneId, 'needsReview', ['todo', 'inProgress']);
+            }
+          });
+          context.subscriptions.push({ dispose: () => mcWatcher.close() });
+        } catch (e) {
+          console.error('[lumi-ops] ❌ Failed to watch for MISSION_COMPLETE.md:', e);
+        }
+      }
+    }
+  }
 
   const statusBus = new StatusEventBus();
   context.subscriptions.push({ dispose: () => statusBus.dispose() });
