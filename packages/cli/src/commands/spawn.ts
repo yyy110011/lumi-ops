@@ -113,6 +113,7 @@ ${objectiveSection}
 ## Environment
 - You are working in an isolated Git Worktree.
 - Path: \`${targetPath}\`
+- Read and follow all rules in \`.agents/rules/\` before starting work.
 
 ## Rules
 ${rules}
