@@ -11,6 +11,7 @@ const { mockGitUtils, mockFs, mockExecSync } = vi.hoisted(() => ({
   mockFs: {
     readJSON: vi.fn(),
     writeJSON: vi.fn(),
+    unlinkSync: vi.fn(),
   },
   mockExecSync: vi.fn(),
 }));
@@ -153,5 +154,65 @@ describe('kill', () => {
     expect(mockGitUtils.deleteBranch).toHaveBeenCalledWith('feat/old-feature', true);
     // Should NOT try to delete 'HEAD' as a branch
     expect(mockGitUtils.deleteBranch).toHaveBeenCalledTimes(1);
+  });
+
+  // --- Generated prompt cleanup tests ---
+
+  it('should delete generated prompt file when metadata has sourcePrompt in _generated/', async () => {
+    mockFs.readJSON.mockResolvedValue({
+      'feat/old-feature': {
+        baseBranch: 'main',
+        sourcePrompt: '_generated/old-feature.md',
+      },
+    });
+
+    await kill(identifier, { root: rootDir });
+
+    expect(mockFs.unlinkSync).toHaveBeenCalledWith(
+      path.join(rootDir, '.prompts', '_generated/old-feature.md'),
+    );
+    // Metadata should still be cleaned up
+    expect(mockFs.writeJSON).toHaveBeenCalledWith(
+      metadataPath,
+      {},
+      { spaces: 2 },
+    );
+  });
+
+  it('should NOT delete prompt when sourcePrompt is not in _generated/', async () => {
+    mockFs.readJSON.mockResolvedValue({
+      'feat/old-feature': {
+        baseBranch: 'main',
+        sourcePrompt: 'user-prompt.md',
+      },
+    });
+
+    await kill(identifier, { root: rootDir });
+
+    expect(mockFs.unlinkSync).not.toHaveBeenCalled();
+    // Metadata should still be cleaned up
+    expect(mockFs.writeJSON).toHaveBeenCalled();
+  });
+
+  it('should handle already-deleted generated prompt gracefully', async () => {
+    mockFs.readJSON.mockResolvedValue({
+      'feat/old-feature': {
+        baseBranch: 'main',
+        sourcePrompt: '_generated/old-feature.md',
+      },
+    });
+    mockFs.unlinkSync.mockImplementation(() => {
+      throw new Error('ENOENT');
+    });
+
+    // Should not throw
+    await kill(identifier, { root: rootDir });
+
+    // Metadata should still be cleaned up
+    expect(mockFs.writeJSON).toHaveBeenCalledWith(
+      metadataPath,
+      {},
+      { spaces: 2 },
+    );
   });
 });

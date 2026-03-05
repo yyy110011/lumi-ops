@@ -52,7 +52,7 @@ async function silenceStdout<T>(fn: () => Promise<T>): Promise<T> {
 
 /** Read and parse .lumi-metadata.json for the current repo. */
 async function readMetadata(): Promise<
-  Record<string, { baseBranch?: string; description?: string; reviewStatus?: ReviewStatus }>
+  Record<string, { baseBranch?: string; description?: string; reviewStatus?: ReviewStatus; sourcePrompt?: string }>
 > {
   const metaPath = path.join(getRepoStorageDir(rootDir), METADATA_FILE);
   try {
@@ -65,7 +65,7 @@ async function readMetadata(): Promise<
 
 /** Write .lumi-metadata.json for the current repo. */
 async function writeMetadata(
-  metadata: Record<string, { baseBranch?: string; description?: string; reviewStatus?: ReviewStatus }>,
+  metadata: Record<string, { baseBranch?: string; description?: string; reviewStatus?: ReviewStatus; sourcePrompt?: string }>,
 ): Promise<void> {
   const metaPath = path.join(getRepoStorageDir(rootDir), METADATA_FILE);
   await fs.promises.writeFile(metaPath, JSON.stringify(metadata, null, 2));
@@ -123,13 +123,20 @@ server.tool(
       .describe('Which scope to list prompts from'),
   },
   async ({ scope }) => {
-    const prompts: { name: string; scope: string; fileName: string }[] = [];
+    const prompts: { name: string; scope: string; fileName: string; generated: boolean }[] = [];
 
     const collectFromScope = async (s: 'global' | 'project') => {
       const dir = promptDir(s);
+      // Collect top-level prompts
       const files = await listPromptFiles(dir);
       for (const f of files) {
-        prompts.push({ name: f.replace(/\.md$/, ''), scope: s, fileName: f });
+        prompts.push({ name: f.replace(/\.md$/, ''), scope: s, fileName: f, generated: false });
+      }
+      // Collect _generated/ prompts
+      const genDir = path.join(dir, '_generated');
+      const genFiles = await listPromptFiles(genDir);
+      for (const f of genFiles) {
+        prompts.push({ name: f.replace(/\.md$/, ''), scope: s, fileName: `_generated/${f}`, generated: true });
       }
     };
 
@@ -156,8 +163,13 @@ server.tool(
       .enum(['global', 'project'])
       .default('project')
       .describe('Scope to save the prompt in'),
+    generated: z
+      .boolean()
+      .default(false)
+      .optional()
+      .describe('If true, save to _generated/ subdirectory (agent-authored, auto-cleaned on kill)'),
   },
-  async ({ name, content, scope }) => {
+  async ({ name, content, scope, generated }) => {
     const sanitized = toKebabCase(name);
     if (!sanitized) {
       return {
@@ -166,16 +178,18 @@ server.tool(
       };
     }
 
-    const dir = promptDir(scope);
+    const baseDir = promptDir(scope);
+    const dir = generated ? path.join(baseDir, '_generated') : baseDir;
     await fs.promises.mkdir(dir, { recursive: true });
     const filePath = path.join(dir, `${sanitized}.md`);
     await fs.promises.writeFile(filePath, content);
 
+    const fileName = generated ? `_generated/${sanitized}.md` : `${sanitized}.md`;
     return {
       content: [
         {
           type: 'text' as const,
-          text: JSON.stringify({ fileName: `${sanitized}.md`, scope, path: filePath }, null, 2),
+          text: JSON.stringify({ fileName, scope, path: filePath, generated: !!generated }, null, 2),
         },
       ],
     };
@@ -232,6 +246,19 @@ server.tool(
           baseBranch,
         }),
       );
+
+      // Track sourcePrompt in metadata if the prompt is from _generated/
+      if (prompt) {
+        const promptName = prompt.endsWith('.md') ? prompt : `${prompt}.md`;
+        // Determine the resolved prompt path (may include _generated/ prefix)
+        const isGenerated = promptName.startsWith('_generated/');
+        if (isGenerated) {
+          const metadata = await readMetadata();
+          if (!metadata[branch]) metadata[branch] = {};
+          metadata[branch].sourcePrompt = promptName;
+          await writeMetadata(metadata);
+        }
+      }
 
       return {
         content: [
@@ -313,10 +340,28 @@ server.tool(
   },
   async ({ branch, keepBranch }) => {
     try {
+      // Read metadata BEFORE kill (kill deletes the metadata entry)
+      const metadata = await readMetadata();
+      const meta = metadata[branch];
+      const sourcePrompt = meta?.sourcePrompt;
+
       await silenceStdout(() => kill(branch, { root: rootDir, keepBranch }));
+
+      // Clean up generated prompt file if tracked
+      let promptCleaned = false;
+      if (sourcePrompt && sourcePrompt.startsWith('_generated/')) {
+        const promptPath = path.join(rootDir, '.prompts', sourcePrompt);
+        try {
+          await fs.promises.unlink(promptPath);
+          promptCleaned = true;
+        } catch {
+          // Already gone — that's fine
+        }
+      }
+
       return {
         content: [
-          { type: 'text' as const, text: JSON.stringify({ status: 'killed', branch, keepBranch }, null, 2) },
+          { type: 'text' as const, text: JSON.stringify({ status: 'killed', branch, keepBranch, promptCleaned }, null, 2) },
         ],
       };
     } catch (error: any) {
