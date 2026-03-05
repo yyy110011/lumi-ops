@@ -647,7 +647,7 @@ server.tool(
       // 4. Get diff stat
       let diffStat: ReturnType<typeof parseDiffStat> = { filesChanged: 0, insertions: 0, deletions: 0, files: [] };
       try {
-        const diffStatRaw = execFileSync('git', ['diff', '--numstat', `${baseBranch}...${branch}`], {
+        const diffStatRaw = execFileSync('git', ['diff', '--numstat', `HEAD...${branch}`], {
           cwd: rootDir,
           encoding: 'utf-8',
           maxBuffer: 10 * 1024 * 1024,
@@ -670,7 +670,7 @@ server.tool(
       // 5. Get commits
       let commits: { hash: string; message: string }[] = [];
       try {
-        const logRaw = execFileSync('git', ['log', '--oneline', `${baseBranch}..${branch}`], {
+        const logRaw = execFileSync('git', ['log', '--oneline', `HEAD..${branch}`], {
           cwd: rootDir,
           encoding: 'utf-8',
         });
@@ -718,20 +718,16 @@ server.tool(
 
 server.tool(
   'get_clone_file_diff',
-  'Get the full diff of a specific file in a shadow clone compared to its base branch.',
+  'Get the full diff of a specific file in a shadow clone compared to its current branch.',
   {
     branch: z.string().describe('Branch name of the clone'),
     filepath: z.string().describe('Relative file path to diff (from repo root)'),
   },
   async ({ branch, filepath }) => {
     try {
-      // Look up baseBranch from metadata
-      const metadata = await readMetadata();
-      const baseBranch = metadata[branch]?.baseBranch || 'main';
-
       let diff: string;
       try {
-        diff = execFileSync('git', ['diff', `${baseBranch}...${branch}`, '--', filepath], {
+        diff = execFileSync('git', ['diff', `HEAD...${branch}`, '--', filepath], {
           cwd: rootDir,
           encoding: 'utf-8',
           maxBuffer: 10 * 1024 * 1024,
@@ -750,7 +746,7 @@ server.tool(
       }
 
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ branch, baseBranch, filepath, diff }, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ branch, filepath, diff }, null, 2) }],
       };
     } catch (error: any) {
       return {
