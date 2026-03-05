@@ -11,6 +11,7 @@ import { MissionTemplateEditorProvider } from './MissionTemplateEditorProvider';
 import { WorktreeManagerPanel } from './WorktreeManagerPanel';
 import { StatusEventBus } from './StatusEventBus';
 import { runMigrations } from './migrations';
+import { deriveCloneId, setStatusIfApplicable } from './autoStatus';
 
 import { GitUtils, getClonesDir, getRepoStorageDir, LUMI_OPS_HOME, METADATA_FILE, registerRepo } from '@lumi-ops/cli';
 
@@ -121,47 +122,16 @@ export async function activate(context: vscode.ExtensionContext) {
         cwd: currentWorkspacePath,
         encoding: 'utf-8',
       }).trim();
-      // gitCommonDir is e.g. "/repo/.git" or a relative path — resolve and get parent
       mainRepoRoot = path.dirname(path.resolve(currentWorkspacePath, gitCommonDir));
     } catch {
-      // git command failed — skip auto-transitions gracefully
       console.warn('[lumi-ops] Could not derive mainRepoRoot via git, skipping auto-status transitions.');
     }
 
     if (mainRepoRoot) {
-      // Derive cloneId the same way as deriveDirName() in CLI list.ts
-      const deriveCloneId = (wtPath: string): string | undefined => {
-        const marker = '.worktrees/';
-        const idx = wtPath.indexOf(marker);
-        return idx !== -1 ? wtPath.substring(idx + marker.length) : undefined;
-      };
-
-      /**
-       * Transition clone status if current status is eligible.
-       * Only transitions from early states (todo, inProgress) to prevent
-       * overriding meaningful statuses like done, needsRevision, etc.
-       */
-      const setStatusIfApplicable = (
-        cloneId: string,
-        newStatus: string,
-        eligibleFrom: string[],
-      ) => {
-        try {
-          const metadataPath = path.join(getRepoStorageDir(mainRepoRoot!), METADATA_FILE);
-          const raw = fs.readFileSync(metadataPath, 'utf-8');
-          const metadata = JSON.parse(raw);
-          const current = metadata[cloneId]?.reviewStatus;
-          if (!current || eligibleFrom.includes(current)) {
-            metadata[cloneId].reviewStatus = newStatus;
-            fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
-          }
-        } catch { /* no metadata or parse error — skip */ }
-      };
-
       const cloneId = deriveCloneId(currentWorkspacePath);
       if (cloneId) {
         // Auto todo → inProgress when clone workspace opens
-        setStatusIfApplicable(cloneId, 'inProgress', ['todo']);
+        setStatusIfApplicable(mainRepoRoot, cloneId, 'inProgress', ['todo']);
       }
     }
   }
