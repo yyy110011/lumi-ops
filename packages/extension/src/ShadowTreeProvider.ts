@@ -241,6 +241,8 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
     try {
       const raw = fs.readFileSync(metadataPath, 'utf-8');
       const metadata = JSON.parse(raw);
+      // Rebuild cache from disk to clear stale entries (e.g. after kill + respawn)
+      this.statusCache.clear();
       for (const [key, data] of Object.entries(metadata)) {
         const status = (data as any)?.reviewStatus;
         if (status) {
@@ -248,7 +250,8 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
         }
       }
     } catch {
-      // No metadata file — leave cache as-is
+      // No metadata file — clear cache
+      this.statusCache.clear();
     }
   }
 
