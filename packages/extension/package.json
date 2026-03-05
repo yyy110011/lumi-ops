@@ -110,6 +110,10 @@
         "title": "Open Lumi-Ops Settings",
         "category": "Lumi-Ops",
         "icon": "$(gear)"
+      },
+      {
+        "command": "lumi-ops.rebase",
+        "title": "⟲ Rebase onto Base Branch"
       }
     ],
     "menus": {
@@ -155,6 +159,11 @@
           "command": "lumi-ops.merge",
           "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "modification@1"
+        },
+        {
+          "command": "lumi-ops.rebase",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "group": "modification@2"
         },
         {
           "command": "lumi-ops.kill",

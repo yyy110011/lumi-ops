@@ -11,7 +11,7 @@ import { WorktreeManagerPanel } from './WorktreeManagerPanel';
 import { StatusEventBus } from './StatusEventBus';
 import { runMigrations } from './migrations';
 
-import { GitUtils, getClonesDir, LUMI_OPS_HOME, METADATA_FILE, registerRepo } from '@lumi-ops/cli';
+import { GitUtils, getClonesDir, getRepoStorageDir, LUMI_OPS_HOME, METADATA_FILE, registerRepo } from '@lumi-ops/cli';
 
 import { CommandDeps } from './commands/types';
 import { registerSettingsCommands } from './commands/settings';
@@ -23,6 +23,7 @@ import { registerBranchCommands } from './commands/branches';
 import { registerPromptLibraryCommands } from './commands/promptLibrary';
 import { registerMissionTemplateCommands } from './commands/missionTemplate';
 import { registerRootAgentMode } from './rootAgentMode';
+import { registerRebaseCommands } from './commands/rebase';
 
 export async function activate(context: vscode.ExtensionContext) {
 
@@ -200,6 +201,60 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   }
 
+  // -- fs.watch for ref changes (needsRebase detection) --
+  if (rootPath) {
+    const gitDir = path.join(rootPath, '.git');
+    const refsDir = path.join(gitDir, 'refs', 'heads');
+    try {
+      if (fs.existsSync(refsDir)) {
+        let refDebounce: ReturnType<typeof setTimeout> | null = null;
+        const refWatcher = fs.watch(refsDir, { recursive: true }, (_, filename) => {
+          if (!filename) return;
+          if (refDebounce) clearTimeout(refDebounce);
+          refDebounce = setTimeout(async () => {
+            try {
+              const metadataPath = path.join(getRepoStorageDir(rootPath!), METADATA_FILE);
+              let metadata: Record<string, any> = {};
+              try {
+                const raw = fs.readFileSync(metadataPath, 'utf-8');
+                metadata = JSON.parse(raw);
+              } catch {
+                return; // No metadata
+              }
+
+              let changed = false;
+              for (const [branch, meta] of Object.entries(metadata)) {
+                if (!meta?.baseBranch) continue;
+                // Check if the changed ref matches this clone's baseBranch
+                // filename can be "main" or "feat/xxx" (nested)
+                const changedBranch = filename!.replace(/\\/g, '/');
+                if (changedBranch !== meta.baseBranch) continue;
+
+                const git = new GitUtils(rootPath!);
+                const ahead = await git.getCommitsAhead(meta.baseBranch, branch);
+                const needsRebase = ahead > 0;
+                if (meta.needsRebase !== needsRebase) {
+                  meta.needsRebase = needsRebase;
+                  changed = true;
+                }
+              }
+
+              if (changed) {
+                fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
+                statusBus.fire('*');
+              }
+            } catch (e) {
+              console.error('[lumi-ops] ref watcher error:', e);
+            }
+          }, 150);
+        });
+        context.subscriptions.push({ dispose: () => refWatcher.close() });
+      }
+    } catch (e) {
+      console.error('[lumi-ops] \u274c Failed to watch refs:', e);
+    }
+  }
+
   // -- Polling for live updates + branch change detection (fallback) --
   let lastKnownBranch: string | undefined;
   const pollInterval = setInterval(async () => {
@@ -270,6 +325,7 @@ export async function activate(context: vscode.ExtensionContext) {
     ...registerBranchCommands(context, deps),
     ...registerPromptLibraryCommands(context, deps),
     ...registerMissionTemplateCommands(context, deps),
+    ...registerRebaseCommands(context, deps),
   );
 }
 

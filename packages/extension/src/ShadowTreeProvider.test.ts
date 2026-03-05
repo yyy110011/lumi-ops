@@ -155,5 +155,23 @@ describe('ShadowItem', () => {
       expect(item.description).toBe('← main');
       expect(item.description).not.toContain('on:');
     });
+
+    it('shows rebase prefix when needsRebase is true', () => {
+      const item = new ShadowItem('feat/test', NONE, makeClone({ needsRebase: true, baseBranch: 'main' }), 'shadowClone', '/ext', undefined);
+      expect(item.description).toBe('⟲ rebase · ← main');
+    });
+
+    it('does not show rebase prefix when needsRebase is false', () => {
+      const item = new ShadowItem('feat/test', NONE, makeClone({ needsRebase: false, baseBranch: 'main' }), 'shadowClone', '/ext', undefined);
+      expect(item.description).toBe('← main');
+    });
+
+    it('combines conflict + rebase + detached + baseBranch + ★', () => {
+      const clonePath = '/repo.worktrees/feat/test';
+      const item = new ShadowItem('feat/test', NONE, makeClone({
+        path: clonePath, hasConflict: true, needsRebase: true, isDetached: true, baseBranch: 'main'
+      }), 'shadowClone', '/ext', clonePath);
+      expect(item.description).toBe('⚠️ · ⟲ rebase · 🔀 rebasing · ← main · ★');
+    });
   });
 });

@@ -134,7 +134,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
 
         // Load centralized metadata once
         const metadataPath = path.join(getRepoStorageDir(this.workspaceRoot), METADATA_FILE);
-        let metadata: Record<string, { baseBranch?: string; reviewStatus?: ReviewStatus }> = {};
+        let metadata: Record<string, { baseBranch?: string; reviewStatus?: ReviewStatus; needsRebase?: boolean }> = {};
         try {
           const raw = fs.readFileSync(metadataPath, 'utf-8');
           metadata = JSON.parse(raw);
@@ -151,6 +151,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
           if (meta) {
             clone.baseBranch = meta.baseBranch;
             clone.reviewStatus = meta.reviewStatus;
+            clone.needsRebase = meta.needsRebase;
           }
         }
 
@@ -286,6 +287,7 @@ export class ShadowItem extends vscode.TreeItem {
     this.contextValue = role;
 
     const conflictPrefix = this.clone.hasConflict ? '⚠️ · ' : '';
+    const rebasePrefix = this.clone.needsRebase ? '⟲ rebase · ' : '';
 
     if (role === 'currentBranch') {
       this.tooltip = `Current workspace: ${this.clone.path}`;
@@ -310,8 +312,8 @@ export class ShadowItem extends vscode.TreeItem {
       const isCurrent = this.currentWorkspacePath && this.clone.path === this.currentWorkspacePath;
       const baseDesc = this.clone.baseBranch ? `← ${this.clone.baseBranch}` : 'Shadow Clone';
       this.description = isCurrent
-        ? `${conflictPrefix}${detachedPrefix}${branchDrift}${baseDesc} · ★`
-        : `${conflictPrefix}${detachedPrefix}${branchDrift}${baseDesc}`;
+        ? `${conflictPrefix}${rebasePrefix}${detachedPrefix}${branchDrift}${baseDesc} · ★`
+        : `${conflictPrefix}${rebasePrefix}${detachedPrefix}${branchDrift}${baseDesc}`;
       // Click = focus-then-cycle status (uses dirName as identifier)
       this.command = {
         command: 'lumi-ops.cycleReviewStatus',

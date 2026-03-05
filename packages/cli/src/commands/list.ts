@@ -15,6 +15,7 @@ export interface ShadowClone {
   description?: string;
   reviewStatus?: ReviewStatus;
   hasConflict?: boolean;
+  needsRebase?: boolean;
 }
 
 /**
