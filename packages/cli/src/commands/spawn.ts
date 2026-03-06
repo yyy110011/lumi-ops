@@ -66,16 +66,32 @@ export async function spawn(branchName: string, options: { root: string; descrip
       console.log(chalk.gray('✓ Copied .env to shadow clone.'));
     }
 
-    // 4b. Copy configured folders/files from root to worktree
-    if (options.copyFolders && options.copyFolders.length > 0) {
-      for (const item of options.copyFolders) {
-        const source = path.join(rootDir, item);
-        const dest = path.join(targetPath, item);
-        if (await fs.pathExists(source)) {
-          options.onProgress?.(`Copying ${item}...`);
-          await fs.copy(source, dest);
-          console.log(chalk.gray(`✓ Copied ${item} to shadow clone.`));
-        }
+    // 4b. Read copyOnSpawn from .vscode/settings.json
+    let settingsCopyFolders: string[] = [];
+    try {
+      const settingsPath = path.join(rootDir, '.vscode', 'settings.json');
+      const settings = await fs.readJSON(settingsPath);
+      const copyOnSpawn = settings['lumi-ops.copyOnSpawn'];
+      if (typeof copyOnSpawn === 'string') {
+        settingsCopyFolders = copyOnSpawn.split('\n').map(s => s.trim()).filter(Boolean);
+      }
+    } catch { /* no settings file */ }
+
+    // Merge: caller-provided + settings + always include .vscode
+    const allCopyFolders = [...new Set([
+      ...(options.copyFolders || []),
+      ...settingsCopyFolders,
+      '.vscode',
+    ])];
+
+    // Copy merged folders/files from root to worktree
+    for (const item of allCopyFolders) {
+      const source = path.join(rootDir, item);
+      const dest = path.join(targetPath, item);
+      if (await fs.pathExists(source)) {
+        options.onProgress?.(`Copying ${item}...`);
+        await fs.copy(source, dest);
+        console.log(chalk.gray(`✓ Copied ${item} to shadow clone.`));
       }
     }
 

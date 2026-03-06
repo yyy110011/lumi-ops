@@ -157,6 +157,7 @@ describe('spawn', () => {
 
     await spawn(branchName, { root: rootDir });
 
+    // .env doesn't exist, .vscode doesn't exist — no copies
     expect(mockFs.copy).not.toHaveBeenCalled();
   });
 
@@ -252,7 +253,7 @@ describe('spawn', () => {
 
     await expect(spawn(branchName, { root: rootDir, copyFolders: ['nonexistent'] })).resolves.not.toThrow();
 
-    // .env copy should not happen (pathExists returns false), and nonexistent folder should be skipped
+    // pathExists returns false for all — no copies (including .vscode)
     expect(mockFs.copy).not.toHaveBeenCalled();
   });
 
@@ -261,7 +262,90 @@ describe('spawn', () => {
 
     await spawn(branchName, { root: rootDir, copyFolders: [] });
 
-    // No additional copies beyond the normal flow
+    // pathExists returns false for all — no copies (including .vscode)
     expect(mockFs.copy).not.toHaveBeenCalled();
+  });
+
+  // --- copyOnSpawn from .vscode/settings.json ---
+
+  it('should read copyOnSpawn from .vscode/settings.json when no copyFolders passed', async () => {
+    mockFs.readJSON.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode', 'settings.json')) {
+        return { 'lumi-ops.copyOnSpawn': '.agents\ndata' };
+      }
+      throw new Error('ENOENT');
+    });
+    mockFs.pathExists.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.agents')) return true;
+      if (p === path.join(rootDir, 'data')) return true;
+      if (p === path.join(rootDir, '.vscode')) return true;
+      return false;
+    });
+
+    await spawn(branchName, { root: rootDir });
+
+    expect(mockFs.copy).toHaveBeenCalledWith(
+      path.join(rootDir, '.agents'),
+      path.join(targetPath, '.agents'),
+    );
+    expect(mockFs.copy).toHaveBeenCalledWith(
+      path.join(rootDir, 'data'),
+      path.join(targetPath, 'data'),
+    );
+    expect(mockFs.copy).toHaveBeenCalledWith(
+      path.join(rootDir, '.vscode'),
+      path.join(targetPath, '.vscode'),
+    );
+  });
+
+  it('should merge copyFolders from caller and settings without duplicates', async () => {
+    mockFs.readJSON.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode', 'settings.json')) {
+        return { 'lumi-ops.copyOnSpawn': 'shared\nconfig' };
+      }
+      throw new Error('ENOENT');
+    });
+    mockFs.pathExists.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, 'config')) return true;
+      if (p === path.join(rootDir, 'shared')) return true;
+      if (p === path.join(rootDir, '.vscode')) return true;
+      return false;
+    });
+
+    // 'config' appears in both caller and settings — should be deduplicated
+    await spawn(branchName, { root: rootDir, copyFolders: ['config'] });
+
+    const copyCalls = mockFs.copy.mock.calls.map((c: any[]) => c[0]);
+    // 'config' should only appear once
+    const configCopies = copyCalls.filter((p: string) => p === path.join(rootDir, 'config'));
+    expect(configCopies).toHaveLength(1);
+    // 'shared' from settings should be copied
+    expect(copyCalls).toContain(path.join(rootDir, 'shared'));
+    // '.vscode' should always be present
+    expect(copyCalls).toContain(path.join(rootDir, '.vscode'));
+  });
+
+  it('should always include .vscode even when not in settings or copyFolders', async () => {
+    // readJSON rejects (no settings file)
+    mockFs.readJSON.mockRejectedValue(new Error('ENOENT'));
+    mockFs.pathExists.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode')) return true;
+      return false;
+    });
+
+    await spawn(branchName, { root: rootDir });
+
+    expect(mockFs.copy).toHaveBeenCalledWith(
+      path.join(rootDir, '.vscode'),
+      path.join(targetPath, '.vscode'),
+    );
+  });
+
+  it('should handle missing .vscode/settings.json gracefully', async () => {
+    mockFs.readJSON.mockRejectedValue(new Error('ENOENT'));
+    mockFs.pathExists.mockResolvedValue(false);
+
+    // Should not throw — gracefully falls back to empty settings list
+    await expect(spawn(branchName, { root: rootDir })).resolves.not.toThrow();
   });
 });
