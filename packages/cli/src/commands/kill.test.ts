@@ -12,6 +12,8 @@ const { mockGitUtils, mockFs, mockExecSync } = vi.hoisted(() => ({
     readJSON: vi.fn(),
     writeJSON: vi.fn(),
     unlinkSync: vi.fn(),
+    pathExists: vi.fn(),
+    remove: vi.fn(),
   },
   mockExecSync: vi.fn(),
 }));
@@ -55,6 +57,8 @@ describe('kill', () => {
     mockGitUtils.deleteBranch.mockResolvedValue(undefined);
     mockFs.readJSON.mockRejectedValue(new Error('ENOENT'));
     mockFs.writeJSON.mockResolvedValue(undefined);
+    mockFs.pathExists.mockResolvedValue(false);
+    mockFs.remove.mockResolvedValue(undefined);
     // Default: actual branch matches identifier
     mockExecSync.mockReturnValue('feat/old-feature\n');
   });
@@ -214,5 +218,25 @@ describe('kill', () => {
       {},
       { spaces: 2 },
     );
+  });
+
+  // --- Residual directory cleanup tests ---
+
+  it('should clean up residual directory after worktree removal', async () => {
+    mockFs.pathExists.mockResolvedValue(true);
+
+    await kill(identifier, { root: rootDir });
+
+    expect(mockFs.pathExists).toHaveBeenCalledWith(targetPath);
+    expect(mockFs.remove).toHaveBeenCalledWith(targetPath);
+  });
+
+  it('should NOT call remove when no residual directory exists', async () => {
+    mockFs.pathExists.mockResolvedValue(false);
+
+    await kill(identifier, { root: rootDir });
+
+    expect(mockFs.pathExists).toHaveBeenCalledWith(targetPath);
+    expect(mockFs.remove).not.toHaveBeenCalled();
   });
 });

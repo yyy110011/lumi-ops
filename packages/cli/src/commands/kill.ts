@@ -32,6 +32,12 @@ export async function kill(identifier: string, options: { root: string; keepBran
     await git.pruneWorktrees();
     console.log(chalk.gray('✓ Removed git worktree.'));
 
+    // 2b. Clean up residual clone directory (e.g. extension re-created files after kill)
+    if (await fs.pathExists(targetPath)) {
+      await fs.remove(targetPath);
+      console.log(chalk.gray('✓ Cleaned up residual clone directory.'));
+    }
+
     // 3. Delete branch (unless keepBranch is set)
     if (!options.keepBranch) {
       // Delete the actual current branch

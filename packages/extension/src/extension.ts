@@ -25,7 +25,7 @@ import { registerBranchCommands } from './commands/branches';
 import { registerPromptLibraryCommands } from './commands/promptLibrary';
 import { registerMissionTemplateCommands } from './commands/missionTemplate';
 import { registerRootAgentMode } from './rootAgentMode';
-import { registerCloneAgentRules } from './cloneAgentRules';
+
 import { registerRebaseCommands } from './commands/rebase';
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -138,7 +138,7 @@ export async function activate(context: vscode.ExtensionContext) {
   // Root Agent Mode: inject/remove .agents/rules/ based on setting
   const isCloneWorkspace = !!currentWorkspacePath;
   registerRootAgentMode(context, rootPath, isCloneWorkspace);
-  registerCloneAgentRules(context, rootPath, isCloneWorkspace, currentWorkspacePath);
+
 
   // -- Auto-status transitions for clone workspaces --
   if (isCloneWorkspace && rootPath && currentWorkspacePath) {

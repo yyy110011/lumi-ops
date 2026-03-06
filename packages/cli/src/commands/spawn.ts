@@ -68,12 +68,16 @@ export async function spawn(branchName: string, options: { root: string; descrip
 
     // 4b. Read copyOnSpawn from .vscode/settings.json
     let settingsCopyFolders: string[] = [];
+    let cloneAgentRulesEnabled = false;
     try {
       const settingsPath = path.join(rootDir, '.vscode', 'settings.json');
       const settings = await fs.readJSON(settingsPath);
       const copyOnSpawn = settings['lumi-ops.copyOnSpawn'];
       if (typeof copyOnSpawn === 'string') {
         settingsCopyFolders = copyOnSpawn.split('\n').map(s => s.trim()).filter(Boolean);
+      }
+      if (settings['lumi-ops.cloneAgentRules'] === true) {
+        cloneAgentRulesEnabled = true;
       }
     } catch { /* no settings file */ }
 
@@ -93,6 +97,32 @@ export async function spawn(branchName: string, options: { root: string; descrip
         await fs.copy(source, dest);
         console.log(chalk.gray(`✓ Copied ${item} to shadow clone.`));
       }
+    }
+
+    // 4c. Write clone agent rule file if enabled
+    if (cloneAgentRulesEnabled) {
+      const rulesDir = path.join(targetPath, '.agents', 'rules');
+      await fs.ensureDir(rulesDir);
+      const ruleContent = `# Clone Agent Rules (Lumi-Ops)
+
+You are working inside a **Shadow Clone** worktree managed by the Lumi-Ops extension.
+
+## After Completing Work
+
+1. Create \`.lumi/MISSION_COMPLETE.md\` summarising what you did.
+2. Call the MCP tool **set_clone_status** with status \`needsReview\`.
+
+## Revision Cycle
+
+If a file called \`.lumi/REVIEW_FEEDBACK.md\` exists, you are in a **revision cycle**:
+
+1. Read \`.lumi/MISSION.md\` → \`.lumi/MISSION_COMPLETE.md\` → \`.lumi/REVIEW_FEEDBACK.md\` (in that order).
+2. Address every item listed in the feedback.
+3. Update \`.lumi/MISSION_COMPLETE.md\` with what you changed.
+4. Call **set_clone_status** with status \`needsReview\` again.
+`;
+      await fs.writeFile(path.join(rulesDir, 'lumi-ops-clone-agent.md'), ruleContent);
+      console.log(chalk.gray('✓ Wrote clone agent rules.'));
     }
 
     // 5. Create MISSION.md (AI Agent Context - only when description is provided)

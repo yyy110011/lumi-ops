@@ -84,7 +84,7 @@ describe('e2e: spawn', () => {
   it('should generate MISSION.md inside the worktree', async () => {
     await spawn('feat/mission-check', { root: tmpDir, description: 'Test objective' });
 
-    const missionPath = path.join(getClonesDir(tmpDir), 'feat/mission-check', 'MISSION.md');
+    const missionPath = path.join(getClonesDir(tmpDir), 'feat/mission-check', '.lumi', 'MISSION.md');
     expect(await fs.pathExists(missionPath)).toBe(true);
 
     const content = await fs.readFile(missionPath, 'utf-8');

@@ -356,4 +356,52 @@ describe('spawn', () => {
     // Should not throw — gracefully falls back to empty settings list
     await expect(spawn(branchName, { root: rootDir })).resolves.not.toThrow();
   });
+
+  // --- cloneAgentRules from .vscode/settings.json ---
+
+  it('should write clone agent rule file when cloneAgentRules is enabled', async () => {
+    mockFs.readJSON.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode', 'settings.json')) {
+        return { 'lumi-ops.cloneAgentRules': true };
+      }
+      throw new Error('ENOENT');
+    });
+    mockFs.pathExists.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode')) return true;
+      return false;
+    });
+
+    await spawn(branchName, { root: rootDir });
+
+    // Should create .agents/rules directory
+    expect(mockFs.ensureDir).toHaveBeenCalledWith(
+      path.join(targetPath, '.agents', 'rules'),
+    );
+    // Should write the rule file
+    const ruleWriteCall = mockFs.writeFile.mock.calls.find(
+      (c: any[]) => c[0] === path.join(targetPath, '.agents', 'rules', 'lumi-ops-clone-agent.md'),
+    );
+    expect(ruleWriteCall).toBeDefined();
+    expect(ruleWriteCall![1]).toContain('Clone Agent Rules');
+    expect(ruleWriteCall![1]).toContain('set_clone_status');
+    expect(ruleWriteCall![1]).toContain('MISSION_COMPLETE.md');
+  });
+
+  it('should NOT write clone agent rule file when cloneAgentRules is not enabled', async () => {
+    mockFs.readJSON.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode', 'settings.json')) {
+        return { 'lumi-ops.cloneAgentRules': false };
+      }
+      throw new Error('ENOENT');
+    });
+    mockFs.pathExists.mockResolvedValue(false);
+
+    await spawn(branchName, { root: rootDir });
+
+    // Should NOT write any rule file
+    const ruleWriteCall = mockFs.writeFile.mock.calls.find(
+      (c: any[]) => typeof c[0] === 'string' && c[0].includes('lumi-ops-clone-agent.md'),
+    );
+    expect(ruleWriteCall).toBeUndefined();
+  });
 });
