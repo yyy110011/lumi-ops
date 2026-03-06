@@ -211,6 +211,46 @@ export async function activate(context: vscode.ExtensionContext) {
     if (!fs.existsSync(globalPromptsPath)) {
       fs.mkdirSync(globalPromptsPath, { recursive: true });
     }
+
+    // Seed example prompt on first activation
+    const seededKey = 'lumi-ops.examplePromptSeeded';
+    if (!context.globalState.get<boolean>(seededKey)) {
+      const existingMdFiles = fs.readdirSync(globalPromptsPath).filter((f: string) => f.endsWith('.md'));
+      if (existingMdFiles.length === 0) {
+        const exampleContent = `# Example: Add User Authentication
+
+> This is an example prompt showing how to write effective task descriptions
+> for Shadow Clone agents. Feel free to delete or modify this file.
+
+## Objective
+Add JWT-based authentication to the Express.js API.
+
+## Background
+- The API currently has no authentication
+- We need to protect all \`/api/\` routes
+- Use the existing \`users\` table in the database
+
+## Implementation Details
+- Add \`jsonwebtoken\` and \`bcrypt\` dependencies
+- Create \`src/middleware/auth.ts\` with JWT verification
+- Add \`POST /auth/login\` and \`POST /auth/register\` endpoints
+- Protect all \`/api/*\` routes with the auth middleware
+
+## Edge Cases
+- Token expiration handling (default 24h)
+- Invalid/malformed token responses (401)
+- Duplicate email registration (409)
+
+## Verification
+1. Run \`npm test\` — all existing tests should still pass
+2. Test login flow: register → login → access protected route
+3. Test rejection: access protected route without token → 401
+`;
+        fs.writeFileSync(path.join(globalPromptsPath, 'example-task.md'), exampleContent);
+      }
+      context.globalState.update(seededKey, true);
+    }
+
     const globalWatcher = fs.watch(globalPromptsPath, () => {
       refreshPromptsNow();
     });
