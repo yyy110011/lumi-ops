@@ -47,7 +47,7 @@ export async function activate(context: vscode.ExtensionContext) {
   // Auto-open MISSION.md when in a shadow clone workspace
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0];
   if (workspaceRoot) {
-    const missionFile = vscode.Uri.joinPath(workspaceRoot.uri, 'MISSION.md');
+    const missionFile = vscode.Uri.joinPath(workspaceRoot.uri, '.lumi', 'MISSION.md');
     
     setTimeout(async () => {
       try {
@@ -60,7 +60,7 @@ export async function activate(context: vscode.ExtensionContext) {
         });
 
         // Determine prompt content based on clone's reviewStatus
-        let prompt = 'Please read @MISSION.md and start working on the objective described in it.';
+        let prompt = 'Please read @.lumi/MISSION.md and start working on the objective described in it.';
         let message = '👻 Shadow Clone ready! Copy prompt to paste in chat?';
 
         try {
@@ -79,7 +79,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
             if (reviewStatus === 'needsRevision') {
               message = '🔄 Revision needed! Copy revision prompt to paste in chat?';
-              prompt = 'You have review feedback. Read @MISSION.md → @MISSION_COMPLETE.md → @REVIEW_FEEDBACK.md, then fix the issues listed in REVIEW_FEEDBACK.md. After fixing, update MISSION_COMPLETE.md.';
+              prompt = 'You have review feedback. Read @.lumi/MISSION.md → @.lumi/MISSION_COMPLETE.md → @.lumi/REVIEW_FEEDBACK.md, then fix the issues listed in .lumi/REVIEW_FEEDBACK.md. After fixing, update .lumi/MISSION_COMPLETE.md.';
             }
           }
         } catch {

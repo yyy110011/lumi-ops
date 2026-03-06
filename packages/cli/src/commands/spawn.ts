@@ -97,7 +97,9 @@ export async function spawn(branchName: string, options: { root: string; descrip
 
     // 5. Create MISSION.md (AI Agent Context - only when description is provided)
     if (options.description) {
-      const contextFile = path.join(targetPath, 'MISSION.md');
+      const lumiDir = path.join(targetPath, '.lumi');
+      await fs.ensureDir(lumiDir);
+      const contextFile = path.join(lumiDir, 'MISSION.md');
       const templates = options.templates || [];
       const mission = options.missionTemplate;
 
@@ -130,6 +132,11 @@ ${objectiveSection}
 - You are working in an isolated Git Worktree.
 - Path: \`${targetPath}\`
 - Read and follow all rules in \`.agents/rules/\` before starting work.
+- If \`.lumi/REVIEW_FEEDBACK.md\` exists, you are in a revision cycle — read it first.
+- When finished:
+  1. Write \`.lumi/MISSION_COMPLETE.md\` summarizing your changes.
+  2. Commit only your code changes.
+  3. If MCP is available, call \`set_clone_status\` with status \`needsReview\`.
 
 ## Rules
 ${rules}

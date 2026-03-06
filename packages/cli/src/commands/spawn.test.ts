@@ -161,11 +161,14 @@ describe('spawn', () => {
     expect(mockFs.copy).not.toHaveBeenCalled();
   });
 
-  it('should generate MISSION.md with branch name and description', async () => {
+  it('should generate MISSION.md inside .lumi/ with branch name and description', async () => {
     await spawn(branchName, { root: rootDir, description: 'Build the widget' });
 
+    // Should create .lumi/ directory
+    expect(mockFs.ensureDir).toHaveBeenCalledWith(path.join(targetPath, '.lumi'));
+
     const writeCall = mockFs.writeFile.mock.calls[0];
-    expect(writeCall[0]).toBe(path.join(targetPath, 'MISSION.md'));
+    expect(writeCall[0]).toBe(path.join(targetPath, '.lumi', 'MISSION.md'));
     const content = writeCall[1] as string;
     expect(content).toContain('Agent Mission: feat/my-feature');
     expect(content).toContain('Build the widget');
@@ -174,6 +177,9 @@ describe('spawn', () => {
     expect(content).toContain('## Task');
     expect(content).toContain('## Rules');
     expect(content).toContain('## Instructions');
+    // .lumi/ path references
+    expect(content).toContain('.lumi/REVIEW_FEEDBACK.md');
+    expect(content).toContain('.lumi/MISSION_COMPLETE.md');
   });
 
   it('should NOT generate MISSION.md when no description provided', async () => {
@@ -193,6 +199,7 @@ describe('spawn', () => {
     await spawn(branchName, { root: rootDir, description: 'Custom task', missionTemplate: customTemplate });
 
     const writeCall = mockFs.writeFile.mock.calls[0];
+    expect(writeCall[0]).toBe(path.join(targetPath, '.lumi', 'MISSION.md'));
     const content = writeCall[1] as string;
     expect(content).toContain('Do NOT run tests');
     expect(content).toContain('Push to remote');
@@ -204,6 +211,7 @@ describe('spawn', () => {
     await spawn(branchName, { root: rootDir, description: 'Default task' });
 
     const writeCall = mockFs.writeFile.mock.calls[0];
+    expect(writeCall[0]).toBe(path.join(targetPath, '.lumi', 'MISSION.md'));
     const content = writeCall[1] as string;
     // Should contain default instructions
     expect(content).toContain('Conventional Commits');

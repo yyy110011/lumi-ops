@@ -13,7 +13,7 @@ export const DEFAULT_MISSION_TEMPLATE = {
    - Example: \`feat: add OAuth login with Google provider\`
    - Example: \`fix: resolve race condition in data fetching\`
    - Include a brief summary of all changes made.
-5. Before your final commit, create a \`MISSION_COMPLETE.md\` file in the worktree root with the following structure:
+5. Before your final commit, create \`.lumi/MISSION_COMPLETE.md\` with the following structure:
 
 \`\`\`markdown
 ## Summary
@@ -36,5 +36,5 @@ Paste actual build/test output proving the changes work.
 Anything that needs the user's input or decision.
 \`\`\`
 
-6. If a \`REVIEW_FEEDBACK.md\` file exists in the worktree root, you are in **revision mode**. Read \`MISSION.md\` → \`MISSION_COMPLETE.md\` → \`REVIEW_FEEDBACK.md\`, then address the feedback. Update \`MISSION_COMPLETE.md\` when done.`,
+6. If \`.lumi/REVIEW_FEEDBACK.md\` exists, you are in **revision mode**. Read \`.lumi/MISSION.md\` → \`.lumi/MISSION_COMPLETE.md\` → \`.lumi/REVIEW_FEEDBACK.md\`, then address the feedback. Update \`.lumi/MISSION_COMPLETE.md\` when done.`,
 };

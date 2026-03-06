@@ -22,8 +22,7 @@ import type { ReviewStatus, ShadowClone } from '@lumi-ops/cli';
 // Helpers
 // ---------------------------------------------------------------------------
 
-// Files that should never be merged into target (clone-specific artifacts)
-const MERGE_EXCLUDE = ['MISSION.md', 'MISSION_COMPLETE.md', 'REVIEW_FEEDBACK.md'];
+
 
 /** Auto-detect git repo root. Falls back to cwd if not inside a git repo. */
 function detectRootDir(): string {
@@ -299,7 +298,7 @@ server.tool(
       // Enrich clones with metadata + hasReport
       const enriched = clones.map((c) => {
         const meta = metadata[c.dirName];
-        const hasReport = fs.existsSync(path.join(c.path, 'MISSION_COMPLETE.md'));
+        const hasReport = fs.existsSync(path.join(c.path, '.lumi', 'MISSION_COMPLETE.md'));
         const base: ShadowClone & { hasReport: boolean } = { ...c, hasReport };
         if (meta) {
           return {
@@ -422,19 +421,11 @@ server.tool(
         const mergeGit = new GitUtils(mergeCwd);
         await silenceStdout(() => mergeGit.mergeSquash(source));
 
-        // Exclude clone-specific artifacts before committing
-        for (const file of MERGE_EXCLUDE) {
-          try {
-            execSync(`git reset HEAD "${file}"`, { cwd: mergeCwd, stdio: 'ignore' });
-            execSync(`git checkout -- "${file}" 2>/dev/null || rm -f "${file}"`, {
-              cwd: mergeCwd,
-              stdio: 'ignore',
-              shell: '/bin/sh',
-            });
-          } catch {
-            // file may not exist in the merge — fine
-          }
-        }
+        // Exclude .lumi/ directory (all workflow artifacts) before committing
+        try {
+          execSync('git reset HEAD .lumi/', { cwd: mergeCwd, stdio: 'ignore' });
+          execSync('rm -rf .lumi/', { cwd: mergeCwd, stdio: 'ignore' });
+        } catch { /* .lumi/ may not exist */ }
 
         // Commit the squash merge (without excluded files)
         await silenceStdout(() =>
@@ -475,8 +466,8 @@ server.tool(
           // Provide paths to source clone's MISSION.md and MISSION_COMPLETE.md
           // (slim response — agents can read these on demand instead of including full content)
           const sourceClone = clones.find((c) => c.currentBranch === source);
-          const missionPath = sourceClone ? path.join(sourceClone.path, 'MISSION.md') : null;
-          const reportPath = sourceClone ? path.join(sourceClone.path, 'MISSION_COMPLETE.md') : null;
+          const missionPath = sourceClone ? path.join(sourceClone.path, '.lumi', 'MISSION.md') : null;
+          const reportPath = sourceClone ? path.join(sourceClone.path, '.lumi', 'MISSION_COMPLETE.md') : null;
 
           // Get diff stat
           let sourceDiff = '';
@@ -632,10 +623,10 @@ server.tool(
         };
       }
 
-      // 2. Read MISSION_COMPLETE.md
+      // 2. Read .lumi/MISSION_COMPLETE.md
       let report: string | null = null;
       try {
-        report = await fs.promises.readFile(path.join(clone.path, 'MISSION_COMPLETE.md'), 'utf-8');
+        report = await fs.promises.readFile(path.join(clone.path, '.lumi', 'MISSION_COMPLETE.md'), 'utf-8');
       } catch {
         // No report — that's fine
       }
@@ -763,7 +754,7 @@ server.tool(
 
 server.tool(
   'request_revision',
-  'Send review feedback to a shadow clone for revision. Writes REVIEW_FEEDBACK.md and sets status to needsRevision.',
+  'Send review feedback to a shadow clone for revision. Writes .lumi/REVIEW_FEEDBACK.md and sets status to needsRevision.',
   {
     branch: z.string().describe('Branch name of the clone to send feedback to'),
     feedback: z.string().describe('Review feedback content (markdown)'),
@@ -783,9 +774,11 @@ server.tool(
         };
       }
 
-      // 2. Write REVIEW_FEEDBACK.md
-      const feedbackPath = path.join(clone.path, 'REVIEW_FEEDBACK.md');
-      const feedbackContent = `# Review Feedback\n\nYou are revising your previous work. Read \`MISSION.md\` (original task) → \`MISSION_COMPLETE.md\` (what you did) → this file (what to fix).\n\n## Issues to Fix\n\n${feedback}\n\n## After fixing, update MISSION_COMPLETE.md with the new changes.\n`;
+      // 2. Write .lumi/REVIEW_FEEDBACK.md
+      const lumiDir = path.join(clone.path, '.lumi');
+      await fs.promises.mkdir(lumiDir, { recursive: true });
+      const feedbackPath = path.join(lumiDir, 'REVIEW_FEEDBACK.md');
+      const feedbackContent = `# Review Feedback\n\nYou are revising your previous work. Read \`.lumi/MISSION.md\` (original task) → \`.lumi/MISSION_COMPLETE.md\` (what you did) → this file (what to fix).\n\n## Issues to Fix\n\n${feedback}\n\n## After fixing, update .lumi/MISSION_COMPLETE.md with the new changes.\n`;
       await fs.promises.writeFile(feedbackPath, feedbackContent);
 
       // 3. Set reviewStatus to needsRevision

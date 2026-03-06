@@ -120,21 +120,18 @@ describe('merge', () => {
 
   // --- Merge exclude (clone artifacts) ---
 
-  it('should exclude clone artifacts after squash merge before committing', async () => {
+  it('should exclude .lumi/ directory after squash merge before committing', async () => {
     await merge(branchName, options);
 
-    // Should call execSync for each excluded file (reset + checkout/rm)
-    const expectedFiles = ['MISSION.md', 'MISSION_COMPLETE.md', 'REVIEW_FEEDBACK.md'];
-    for (const file of expectedFiles) {
-      expect(mockExecSync).toHaveBeenCalledWith(
-        `git reset HEAD "${file}"`,
-        expect.objectContaining({ cwd: '/fake/root', stdio: 'ignore' }),
-      );
-      expect(mockExecSync).toHaveBeenCalledWith(
-        `git checkout -- "${file}" 2>/dev/null || rm -f "${file}"`,
-        expect.objectContaining({ cwd: '/fake/root', stdio: 'ignore', shell: '/bin/sh' }),
-      );
-    }
+    // Should call execSync for .lumi/ directory exclusion (reset + rm -rf)
+    expect(mockExecSync).toHaveBeenCalledWith(
+      'git reset HEAD .lumi/',
+      expect.objectContaining({ cwd: '/fake/root', stdio: 'ignore' }),
+    );
+    expect(mockExecSync).toHaveBeenCalledWith(
+      'rm -rf .lumi/',
+      expect.objectContaining({ cwd: '/fake/root', stdio: 'ignore' }),
+    );
 
     // Ensure exclude runs between squash merge and commit
     const squashCallOrder = mockGitUtils.mergeSquash.mock.invocationCallOrder[0];
