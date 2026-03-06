@@ -1,0 +1,68 @@
+# Agent Workflow 讀取改進建議
+
+## 問題描述
+
+Agent 在執行 `feat/refactor-extension-commands` 任務時，未讀取 [.agents/workflows/build-and-verify.md](file:///Users/ryan/project_in_progress/lumi-ops.worktrees/feat/refactor-extension-commands/.agents/workflows/build-and-verify.md)，導致驗證階段使用了錯誤的 build 指令（`npm run package` 而非 monorepo 正確的 `pnpm --filter` 指令）。
+
+## Agent 的思考路徑（失敗原因分析）
+
+1. **讀 MISSION.md** → 看到 Verification 區段寫了 `cd packages/extension && npm run package must succeed`
+2. **讀 SKILL.md** → 確認了檔案結構與 command registry，沒有提到 workflow
+3. **掃描 workflow 列表** → 看到 `/build-and-verify: Build the entire monorepo and verify no errors`
+4. **判斷跳過** → 心理路徑：「MISSION.md 已經給了驗證指令，我知道該怎麼驗證了，不需要再讀 workflow」
+
+> [!IMPORTANT]
+> **根因：MISSION.md 的 Verification 區段提供了「看似足夠但實際不完整」的指令，Agent 認為已經取得驗證所需資訊，不再進一步查找。兩個資訊源競爭時，Agent 優先信任了離任務最近的 MISSION.md，跳過了 workflow。**
+
+## 改進建議
+
+### 建議 1：在 MISSION.md 模板中引用 workflow（最有效）
+
+將 MISSION.md 的 Verification 區段改為引用 workflow，而非直接寫 raw commands：
+
+```markdown
+## Verification
+Follow the `/build-and-verify` workflow to verify your changes.
+```
+
+**為什麼有效：** Agent 一定會讀 MISSION.md，看到引用就不得不去打開 workflow 檔案。消除了「我已經有驗證指令了」的錯誤判斷。
+
+---
+
+### 建議 2：在 SKILL.md 加入 workflow 提醒（安全網）
+
+在 SKILL.md 的 Key Patterns 區段加入：
+
+```markdown
+### Build & Verify
+Always follow the `/build-and-verify` workflow for verification.
+Do NOT improvise build commands from package.json — the monorepo has specific build order requirements.
+```
+
+**為什麼有效：** Agent 必讀 SKILL.md，這段話明確禁止自行推導 build 指令，形成第二道防線。
+
+---
+
+### 建議 3：Workflow description 更具體（輔助）
+
+目前：
+```
+- /build-and-verify: Build the entire monorepo and verify no errors
+```
+
+改為：
+```
+- /build-and-verify: REQUIRED for all verification — correct pnpm build order for monorepo
+```
+
+**為什麼有效：** 「REQUIRED」和「correct build order」比「Build the entire monorepo」更能觸發 Agent 的相關性判斷，降低被跳過的機率。
+
+## 綜合建議
+
+| 建議 | 效果 | 優先度 |
+|------|------|--------|
+| 1. MISSION.md 引用 workflow | 消除資訊源競爭，強制讀取 | ⭐⭐⭐ |
+| 2. SKILL.md 加入提醒 | 第二道防線，禁止自行推導 | ⭐⭐ |
+| 3. Workflow description 更具體 | 提升相關性判斷命中率 | ⭐ |
+
+建議至少實施 1，搭配 2 作為安全網。建議 3 是錦上添花。
