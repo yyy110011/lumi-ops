@@ -30,6 +30,9 @@ jobs:
       - name: Build CLI
         run: pnpm --filter @lumi-ops/cli build
 
+      - name: Build MCP Server
+        run: pnpm --filter @lumi-ops/mcp-server build
+
       - name: Build Extension
         run: pnpm --filter lumi-ops build
 

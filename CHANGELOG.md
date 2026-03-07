@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 ## v0.4.0 (Unreleased)
 
 ### ✨ Features
-- **MCP Server** — New `@lumi-ops/mcp-server` package with tools for spawn, kill, list, merge, review, and status management.
+- **MCP Server** — New `@lumi-ops/mcp-server` package with tools for spawn, kill, list, merge, review, and status management. Published to npm — install via `npx @lumi-ops/mcp-server`. Supports Antigravity, VS Code, Cursor, Windsurf, and Claude Desktop.
 - **Auto-Status Transitions** — Clone status auto-transitions from `todo` → `inProgress` when workspace opens.
 - **Status-Aware Prompt** — Copy prompt varies based on clone's review status (normal vs revision).
 - **Merge Improvements** — Auto-exclude clone artifacts from merges, slim conflict response.

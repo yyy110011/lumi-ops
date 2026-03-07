@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+declare const __VERSION__: string;
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -105,7 +105,7 @@ function promptDir(scope: 'global' | 'project'): string {
 
 const server = new McpServer({
   name: 'lumi-ops',
-  version: '0.3.9',
+  version: __VERSION__,
 });
 
 // ---------------------------------------------------------------------------

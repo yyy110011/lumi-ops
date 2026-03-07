@@ -97,19 +97,22 @@ importers:
 
   packages/mcp-server:
     dependencies:
+      zod:
+        specifier: ^3.25.0
+        version: 3.25.76
+    devDependencies:
       '@lumi-ops/cli':
         specifier: workspace:*
         version: link:../cli
       '@modelcontextprotocol/sdk':
         specifier: ^1.12.1
         version: 1.27.1(zod@3.25.76)
-      zod:
-        specifier: ^3.25.0
-        version: 3.25.76
-    devDependencies:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.31
+      esbuild:
+        specifier: ^0.27.3
+        version: 0.27.3
       typescript:
         specifier: ^5.3.3
         version: 5.9.3
