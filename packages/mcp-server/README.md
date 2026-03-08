@@ -92,7 +92,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-> **Note:** The server auto-detects the Git repository root from `cwd`. Make sure your editor opens the project at the repo root.
+> **Note:** The server auto-detects the Git repository root from `cwd`. If detection fails, see [Troubleshooting](#troubleshooting) below.
 
 ## Available Tools
 
@@ -108,6 +108,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `request_revision` | Send review feedback to a clone (writes `.lumi/REVIEW_FEEDBACK.md`) |
 | `list_prompts` | List available prompt templates from global and/or project scope |
 | `save_prompt` | Create or overwrite a prompt template file |
+| `set_project_root` | Set the Git project root if auto-detection fails or picks the wrong repo |
 
 ## How It Works
 
@@ -118,6 +119,34 @@ The MCP server wraps the `@lumi-ops/cli` library and exposes its functionality o
 3. **Review** diffs and completion reports
 4. **Merge** finished work back via squash merge
 5. **Coordinate** multi-agent workflows using prompts and status transitions
+
+## Troubleshooting
+
+### Git repository not detected
+
+The server auto-detects the Git repo root from `cwd`. If it starts in a non-git directory (e.g. remote SSH, `~`), all git operations will return an error asking you to call `set_project_root`.
+
+**Option A — Environment variable:** Set `LUMI_OPS_ROOT` in your MCP config:
+
+```json
+{
+  "mcpServers": {
+    "lumi-ops": {
+      "command": "npx",
+      "args": ["-y", "@lumi-ops/mcp-server"],
+      "env": {
+        "LUMI_OPS_ROOT": "/absolute/path/to/your/project"
+      }
+    }
+  }
+}
+```
+
+**Option B — Runtime:** Call the `set_project_root` tool at any time:
+
+```
+set_project_root({ path: "/absolute/path/to/your/project" })
+```
 
 ## Links
 

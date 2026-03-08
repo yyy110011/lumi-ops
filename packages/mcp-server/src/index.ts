@@ -35,7 +35,28 @@ function detectRootDir(): string {
   }
 }
 
-const rootDir = detectRootDir();
+let rootDir = process.env.LUMI_OPS_ROOT || detectRootDir();
+
+/**
+ * Validate that rootDir points to a valid git repository.
+ * Returns an MCP error response if invalid, or null if valid.
+ */
+function ensureRootDir(): { content: { type: 'text'; text: string }[]; isError: true } | null {
+  try {
+    execSync('git rev-parse --show-toplevel', { cwd: rootDir, stdio: 'ignore' });
+    return null;
+  } catch {
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `No valid git repository at '${rootDir}'. Call 'set_project_root' with your project path to connect.`,
+        },
+      ],
+      isError: true,
+    };
+  }
+}
 
 
 
@@ -179,6 +200,42 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
+// Tool 2b: set_project_root
+// ---------------------------------------------------------------------------
+
+server.tool(
+  'set_project_root',
+  'Set the Git project root directory for all lumi-ops operations. Call this if git operations fail or if the server detected the wrong repository.',
+  {
+    path: z.string().describe('Absolute path to the project root directory'),
+  },
+  async ({ path: newPath }) => {
+    try {
+      const resolved = execSync('git rev-parse --show-toplevel', {
+        cwd: newPath,
+        encoding: 'utf-8',
+      }).trim();
+      rootDir = resolved;
+      return {
+        content: [
+          { type: 'text' as const, text: JSON.stringify({ status: 'ok', rootDir: resolved }, null, 2) },
+        ],
+      };
+    } catch {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error: '${newPath}' is not a valid git repository. Please provide a path inside a git repo.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Tool 3: spawn_clone
 // ---------------------------------------------------------------------------
 
@@ -196,6 +253,8 @@ server.tool(
       .describe('Scope of the prompt file'),
   },
   async ({ branch, description, baseBranch, prompt, promptScope }) => {
+    const rootErr = ensureRootDir();
+    if (rootErr) return rootErr;
     try {
       let finalDescription = description;
 
@@ -272,6 +331,8 @@ server.tool(
   'List all shadow clones with their metadata.',
   {},
   async () => {
+    const rootErr = ensureRootDir();
+    if (rootErr) return rootErr;
     try {
       const git = new GitUtils(rootDir);
       const rawEntries = await git.listWorktrees();
@@ -295,7 +356,7 @@ server.tool(
       });
 
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ clones: enriched }, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ repository: rootDir, clones: enriched }, null, 2) }],
       };
     } catch (error: any) {
       return {
@@ -321,6 +382,8 @@ server.tool(
       .describe('If true, keep the git branch after removing the worktree'),
   },
   async ({ branch, keepBranch }) => {
+    const rootErr = ensureRootDir();
+    if (rootErr) return rootErr;
     try {
       // Read metadata BEFORE kill (kill deletes the metadata entry)
       const metadata = await readMetadata();
@@ -367,6 +430,8 @@ server.tool(
     target: z.string().describe('Branch to merge INTO (your own branch)'),
   },
   async ({ source, target }) => {
+    const rootErr = ensureRootDir();
+    if (rootErr) return rootErr;
     try {
       const git = new GitUtils(rootDir);
 
@@ -525,6 +590,8 @@ server.tool(
       .describe('New review status'),
   },
   async ({ branch, status }) => {
+    const rootErr = ensureRootDir();
+    if (rootErr) return rootErr;
     try {
       const metadata = await readMetadata();
       if (!metadata[branch]) {
@@ -560,6 +627,8 @@ server.tool(
     branch: z.string().describe('Branch name of the clone to review'),
   },
   async ({ branch }) => {
+    const rootErr = ensureRootDir();
+    if (rootErr) return rootErr;
     try {
       // 1. Find the clone's worktree path
       const git = new GitUtils(rootDir);
@@ -666,6 +735,8 @@ server.tool(
     filepath: z.string().describe('Relative file path to diff (from repo root)'),
   },
   async ({ branch, filepath }) => {
+    const rootErr = ensureRootDir();
+    if (rootErr) return rootErr;
     try {
       let diff: string;
       try {
@@ -711,6 +782,8 @@ server.tool(
     feedback: z.string().describe('Review feedback content (markdown)'),
   },
   async ({ branch, feedback }) => {
+    const rootErr = ensureRootDir();
+    if (rootErr) return rootErr;
     try {
       // 1. Find the clone's worktree path
       const git = new GitUtils(rootDir);
