@@ -140,4 +140,25 @@ export class GitUtils {
     return [...topLevel].sort();
   }
 
+  /**
+   * Returns how many commits baseBranch is ahead of targetBranch.
+   * Uses: git rev-list --count targetBranch..baseBranch
+   */
+  async getCommitsAhead(baseBranch: string, targetBranch: string): Promise<number> {
+    try {
+      const output = await this.git.raw(['rev-list', '--count', `${targetBranch}..${baseBranch}`]);
+      return parseInt(output.trim(), 10) || 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Rebase the current branch onto the given base branch.
+   * Throws on conflict — caller should catch and handle.
+   */
+  async rebase(baseBranch: string): Promise<void> {
+    await this.git.raw(['rebase', baseBranch]);
+  }
+
 }

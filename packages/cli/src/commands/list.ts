@@ -4,14 +4,37 @@ import type { ReviewStatus } from '../constants';
 import chalk from 'chalk';
 
 export interface ShadowClone {
-  branch: string;
+  dirName: string;        // Stable identity — derived from worktree path
+  branch: string;         // Alias for currentBranch (backward compat)
+  currentBranch: string;  // Actual branch checked out
   path: string;
   isShadow: boolean;
   isMain?: boolean;
   isDetached?: boolean;
   baseBranch?: string;
+  description?: string;
   reviewStatus?: ReviewStatus;
   hasConflict?: boolean;
+  needsRebase?: boolean;
+}
+
+/**
+ * Derive the stable `dirName` identity from a worktree path.
+ *
+ * For worktrees under `.worktrees/`: extracts the relative path suffix.
+ *   e.g., `/repo.worktrees/feat/my-task` → `feat/my-task`
+ *
+ * Fallback for paths NOT under `.worktrees/`: uses the last path segment.
+ */
+function deriveDirName(worktreePath: string): string {
+  const marker = '.worktrees/';
+  const idx = worktreePath.indexOf(marker);
+  if (idx !== -1) {
+    return worktreePath.substring(idx + marker.length);
+  }
+  // Fallback: last path segment
+  const segments = worktreePath.split('/');
+  return segments[segments.length - 1] || worktreePath;
 }
 
 /**
@@ -31,22 +54,29 @@ export function parseWorktrees(rawEntries: string[], _rootDir: string): ShadowCl
     const lines = entry.split('\n');
     const wtLine = lines.find(l => l.startsWith('worktree '));
     const worktreePath = wtLine ? wtLine.substring('worktree '.length) : undefined;
-    const branch = lines.find(l => l.startsWith('branch'))?.split(' ').pop();
+    const branchRef = lines.find(l => l.startsWith('branch'))?.split(' ').pop();
     const isMain = i === 0;
 
-    if (worktreePath && branch) {
+    if (worktreePath && branchRef) {
+      const currentBranch = branchRef.replace('refs/heads/', '');
+      const dirName = deriveDirName(worktreePath);
       clones.push({
-        branch: branch.replace('refs/heads/', ''),
+        dirName,
+        currentBranch,
+        branch: currentBranch,  // backward compat alias
         path: worktreePath,
         isShadow: !isMain,
         isMain,
       });
-    } else if (worktreePath && !branch) {
+    } else if (worktreePath && !branchRef) {
       // Detached HEAD (e.g. during rebase conflict) — derive branch from path
       const segments = worktreePath.split('/');
       const derivedBranch = segments[segments.length - 1] || worktreePath;
+      const dirName = deriveDirName(worktreePath);
       clones.push({
-        branch: derivedBranch,
+        dirName,
+        currentBranch: derivedBranch,
+        branch: derivedBranch,  // backward compat alias
         path: worktreePath,
         isShadow: !isMain,
         isMain,
@@ -72,7 +102,10 @@ export async function list(options: { root: string; json?: boolean }) {
       console.log(chalk.blue('📋 Active Git Worktrees:'));
       shadowClones.forEach(clone => {
         const marker = clone.isShadow ? chalk.cyan('[SHADOW]') : chalk.gray('[CORE]');
-        console.log(`${marker} ${chalk.bold(clone.branch)} -> ${clone.path}`);
+        const branchInfo = clone.currentBranch !== clone.dirName
+          ? ` (on: ${clone.currentBranch})`
+          : '';
+        console.log(`${marker} ${chalk.bold(clone.dirName)}${branchInfo} -> ${clone.path}`);
       });
     }
   } catch (error: any) {

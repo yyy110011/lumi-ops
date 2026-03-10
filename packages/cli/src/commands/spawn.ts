@@ -43,7 +43,7 @@ export async function spawn(branchName: string, options: { root: string; descrip
     // 3. Persist base branch metadata (centralized)
     const repoStorageDir = getRepoStorageDir(rootDir);
     const metadataPath = path.join(repoStorageDir, METADATA_FILE);
-    let metadata: Record<string, { baseBranch?: string }> = {};
+    let metadata: Record<string, { baseBranch?: string; description?: string }> = {};
     try { metadata = await fs.readJSON(metadataPath); } catch {}
     if (exists) {
       // Existing branch — base is unknown, don't record
@@ -52,6 +52,9 @@ export async function spawn(branchName: string, options: { root: string; descrip
     } else {
       metadata[branchName] = { baseBranch: resolvedBase };
       console.log(chalk.gray(`✓ Recorded base branch: ${resolvedBase}`));
+    }
+    if (options.description) {
+      metadata[branchName].description = options.description;
     }
     await fs.writeJSON(metadataPath, metadata, { spaces: 2 });
 
@@ -63,22 +66,70 @@ export async function spawn(branchName: string, options: { root: string; descrip
       console.log(chalk.gray('✓ Copied .env to shadow clone.'));
     }
 
-    // 4b. Copy configured folders/files from root to worktree
-    if (options.copyFolders && options.copyFolders.length > 0) {
-      for (const item of options.copyFolders) {
-        const source = path.join(rootDir, item);
-        const dest = path.join(targetPath, item);
-        if (await fs.pathExists(source)) {
-          options.onProgress?.(`Copying ${item}...`);
-          await fs.copy(source, dest);
-          console.log(chalk.gray(`✓ Copied ${item} to shadow clone.`));
-        }
+    // 4b. Read copyOnSpawn from .vscode/settings.json
+    let settingsCopyFolders: string[] = [];
+    let cloneAgentRulesEnabled = false;
+    try {
+      const settingsPath = path.join(rootDir, '.vscode', 'settings.json');
+      const settings = await fs.readJSON(settingsPath);
+      const copyOnSpawn = settings['lumi-ops.copyOnSpawn'];
+      if (typeof copyOnSpawn === 'string') {
+        settingsCopyFolders = copyOnSpawn.split('\n').map(s => s.trim()).filter(Boolean);
       }
+      if (settings['lumi-ops.cloneAgentRules'] === true) {
+        cloneAgentRulesEnabled = true;
+      }
+    } catch { /* no settings file */ }
+
+    // Merge: caller-provided + settings + always include .vscode
+    const allCopyFolders = [...new Set([
+      ...(options.copyFolders || []),
+      ...settingsCopyFolders,
+      '.vscode',
+    ])];
+
+    // Copy merged folders/files from root to worktree
+    for (const item of allCopyFolders) {
+      const source = path.join(rootDir, item);
+      const dest = path.join(targetPath, item);
+      if (await fs.pathExists(source)) {
+        options.onProgress?.(`Copying ${item}...`);
+        await fs.copy(source, dest);
+        console.log(chalk.gray(`✓ Copied ${item} to shadow clone.`));
+      }
+    }
+
+    // 4c. Write clone agent rule file if enabled
+    if (cloneAgentRulesEnabled) {
+      const rulesDir = path.join(targetPath, '.agents', 'rules');
+      await fs.ensureDir(rulesDir);
+      const ruleContent = `# Clone Agent Rules (Lumi-Ops)
+
+You are working inside a **Shadow Clone** worktree managed by the Lumi-Ops extension.
+
+## After Completing Work
+
+1. Create \`.lumi/MISSION_COMPLETE.md\` summarising what you did.
+2. Call the MCP tool **set_clone_status** with status \`needsReview\`.
+
+## Revision Cycle
+
+If a file called \`.lumi/REVIEW_FEEDBACK.md\` exists, you are in a **revision cycle**:
+
+1. Read \`.lumi/MISSION.md\` → \`.lumi/MISSION_COMPLETE.md\` → \`.lumi/REVIEW_FEEDBACK.md\` (in that order).
+2. Address every item listed in the feedback.
+3. Update \`.lumi/MISSION_COMPLETE.md\` with what you changed.
+4. Call **set_clone_status** with status \`needsReview\` again.
+`;
+      await fs.writeFile(path.join(rulesDir, 'lumi-ops-clone-agent.md'), ruleContent);
+      console.log(chalk.gray('✓ Wrote clone agent rules.'));
     }
 
     // 5. Create MISSION.md (AI Agent Context - only when description is provided)
     if (options.description) {
-      const contextFile = path.join(targetPath, 'MISSION.md');
+      const lumiDir = path.join(targetPath, '.lumi');
+      await fs.ensureDir(lumiDir);
+      const contextFile = path.join(lumiDir, 'MISSION.md');
       const templates = options.templates || [];
       const mission = options.missionTemplate;
 
@@ -110,6 +161,12 @@ ${objectiveSection}
 ## Environment
 - You are working in an isolated Git Worktree.
 - Path: \`${targetPath}\`
+- Read and follow all rules in \`.agents/rules/\` before starting work.
+- If \`.lumi/REVIEW_FEEDBACK.md\` exists, you are in a revision cycle — read it first.
+- When finished:
+  1. Write \`.lumi/MISSION_COMPLETE.md\` summarizing your changes.
+  2. Commit only your code changes.
+  3. If MCP is available, call \`set_clone_status\` with status \`needsReview\`.
 
 ## Rules
 ${rules}

@@ -157,14 +157,18 @@ describe('spawn', () => {
 
     await spawn(branchName, { root: rootDir });
 
+    // .env doesn't exist, .vscode doesn't exist — no copies
     expect(mockFs.copy).not.toHaveBeenCalled();
   });
 
-  it('should generate MISSION.md with branch name and description', async () => {
+  it('should generate MISSION.md inside .lumi/ with branch name and description', async () => {
     await spawn(branchName, { root: rootDir, description: 'Build the widget' });
 
+    // Should create .lumi/ directory
+    expect(mockFs.ensureDir).toHaveBeenCalledWith(path.join(targetPath, '.lumi'));
+
     const writeCall = mockFs.writeFile.mock.calls[0];
-    expect(writeCall[0]).toBe(path.join(targetPath, 'MISSION.md'));
+    expect(writeCall[0]).toBe(path.join(targetPath, '.lumi', 'MISSION.md'));
     const content = writeCall[1] as string;
     expect(content).toContain('Agent Mission: feat/my-feature');
     expect(content).toContain('Build the widget');
@@ -173,6 +177,9 @@ describe('spawn', () => {
     expect(content).toContain('## Task');
     expect(content).toContain('## Rules');
     expect(content).toContain('## Instructions');
+    // .lumi/ path references
+    expect(content).toContain('.lumi/REVIEW_FEEDBACK.md');
+    expect(content).toContain('.lumi/MISSION_COMPLETE.md');
   });
 
   it('should NOT generate MISSION.md when no description provided', async () => {
@@ -192,6 +199,7 @@ describe('spawn', () => {
     await spawn(branchName, { root: rootDir, description: 'Custom task', missionTemplate: customTemplate });
 
     const writeCall = mockFs.writeFile.mock.calls[0];
+    expect(writeCall[0]).toBe(path.join(targetPath, '.lumi', 'MISSION.md'));
     const content = writeCall[1] as string;
     expect(content).toContain('Do NOT run tests');
     expect(content).toContain('Push to remote');
@@ -203,6 +211,7 @@ describe('spawn', () => {
     await spawn(branchName, { root: rootDir, description: 'Default task' });
 
     const writeCall = mockFs.writeFile.mock.calls[0];
+    expect(writeCall[0]).toBe(path.join(targetPath, '.lumi', 'MISSION.md'));
     const content = writeCall[1] as string;
     // Should contain default instructions
     expect(content).toContain('Conventional Commits');
@@ -252,7 +261,7 @@ describe('spawn', () => {
 
     await expect(spawn(branchName, { root: rootDir, copyFolders: ['nonexistent'] })).resolves.not.toThrow();
 
-    // .env copy should not happen (pathExists returns false), and nonexistent folder should be skipped
+    // pathExists returns false for all — no copies (including .vscode)
     expect(mockFs.copy).not.toHaveBeenCalled();
   });
 
@@ -261,7 +270,138 @@ describe('spawn', () => {
 
     await spawn(branchName, { root: rootDir, copyFolders: [] });
 
-    // No additional copies beyond the normal flow
+    // pathExists returns false for all — no copies (including .vscode)
     expect(mockFs.copy).not.toHaveBeenCalled();
+  });
+
+  // --- copyOnSpawn from .vscode/settings.json ---
+
+  it('should read copyOnSpawn from .vscode/settings.json when no copyFolders passed', async () => {
+    mockFs.readJSON.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode', 'settings.json')) {
+        return { 'lumi-ops.copyOnSpawn': '.agents\ndata' };
+      }
+      throw new Error('ENOENT');
+    });
+    mockFs.pathExists.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.agents')) return true;
+      if (p === path.join(rootDir, 'data')) return true;
+      if (p === path.join(rootDir, '.vscode')) return true;
+      return false;
+    });
+
+    await spawn(branchName, { root: rootDir });
+
+    expect(mockFs.copy).toHaveBeenCalledWith(
+      path.join(rootDir, '.agents'),
+      path.join(targetPath, '.agents'),
+    );
+    expect(mockFs.copy).toHaveBeenCalledWith(
+      path.join(rootDir, 'data'),
+      path.join(targetPath, 'data'),
+    );
+    expect(mockFs.copy).toHaveBeenCalledWith(
+      path.join(rootDir, '.vscode'),
+      path.join(targetPath, '.vscode'),
+    );
+  });
+
+  it('should merge copyFolders from caller and settings without duplicates', async () => {
+    mockFs.readJSON.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode', 'settings.json')) {
+        return { 'lumi-ops.copyOnSpawn': 'shared\nconfig' };
+      }
+      throw new Error('ENOENT');
+    });
+    mockFs.pathExists.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, 'config')) return true;
+      if (p === path.join(rootDir, 'shared')) return true;
+      if (p === path.join(rootDir, '.vscode')) return true;
+      return false;
+    });
+
+    // 'config' appears in both caller and settings — should be deduplicated
+    await spawn(branchName, { root: rootDir, copyFolders: ['config'] });
+
+    const copyCalls = mockFs.copy.mock.calls.map((c: any[]) => c[0]);
+    // 'config' should only appear once
+    const configCopies = copyCalls.filter((p: string) => p === path.join(rootDir, 'config'));
+    expect(configCopies).toHaveLength(1);
+    // 'shared' from settings should be copied
+    expect(copyCalls).toContain(path.join(rootDir, 'shared'));
+    // '.vscode' should always be present
+    expect(copyCalls).toContain(path.join(rootDir, '.vscode'));
+  });
+
+  it('should always include .vscode even when not in settings or copyFolders', async () => {
+    // readJSON rejects (no settings file)
+    mockFs.readJSON.mockRejectedValue(new Error('ENOENT'));
+    mockFs.pathExists.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode')) return true;
+      return false;
+    });
+
+    await spawn(branchName, { root: rootDir });
+
+    expect(mockFs.copy).toHaveBeenCalledWith(
+      path.join(rootDir, '.vscode'),
+      path.join(targetPath, '.vscode'),
+    );
+  });
+
+  it('should handle missing .vscode/settings.json gracefully', async () => {
+    mockFs.readJSON.mockRejectedValue(new Error('ENOENT'));
+    mockFs.pathExists.mockResolvedValue(false);
+
+    // Should not throw — gracefully falls back to empty settings list
+    await expect(spawn(branchName, { root: rootDir })).resolves.not.toThrow();
+  });
+
+  // --- cloneAgentRules from .vscode/settings.json ---
+
+  it('should write clone agent rule file when cloneAgentRules is enabled', async () => {
+    mockFs.readJSON.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode', 'settings.json')) {
+        return { 'lumi-ops.cloneAgentRules': true };
+      }
+      throw new Error('ENOENT');
+    });
+    mockFs.pathExists.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode')) return true;
+      return false;
+    });
+
+    await spawn(branchName, { root: rootDir });
+
+    // Should create .agents/rules directory
+    expect(mockFs.ensureDir).toHaveBeenCalledWith(
+      path.join(targetPath, '.agents', 'rules'),
+    );
+    // Should write the rule file
+    const ruleWriteCall = mockFs.writeFile.mock.calls.find(
+      (c: any[]) => c[0] === path.join(targetPath, '.agents', 'rules', 'lumi-ops-clone-agent.md'),
+    );
+    expect(ruleWriteCall).toBeDefined();
+    expect(ruleWriteCall![1]).toContain('Clone Agent Rules');
+    expect(ruleWriteCall![1]).toContain('set_clone_status');
+    expect(ruleWriteCall![1]).toContain('MISSION_COMPLETE.md');
+  });
+
+  it('should NOT write clone agent rule file when cloneAgentRules is not enabled', async () => {
+    mockFs.readJSON.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode', 'settings.json')) {
+        return { 'lumi-ops.cloneAgentRules': false };
+      }
+      throw new Error('ENOENT');
+    });
+    mockFs.pathExists.mockResolvedValue(false);
+
+    await spawn(branchName, { root: rootDir });
+
+    // Should NOT write any rule file
+    const ruleWriteCall = mockFs.writeFile.mock.calls.find(
+      (c: any[]) => typeof c[0] === 'string' && c[0].includes('lumi-ops-clone-agent.md'),
+    );
+    expect(ruleWriteCall).toBeUndefined();
   });
 });

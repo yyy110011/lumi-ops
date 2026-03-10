@@ -1,0 +1,373 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as path from 'path';
+
+// ---------------------------------------------------------------------------
+// Mocks — use vi.hoisted to ensure variables are available when vi.mock factories run
+// ---------------------------------------------------------------------------
+
+const mocks = vi.hoisted(() => {
+  const gitUtils = {
+    listWorktrees: vi.fn(),
+    branchExists: vi.fn(),
+    addWorktreeExisting: vi.fn(),
+    mergeSquash: vi.fn(),
+    commit: vi.fn(),
+    removeWorktree: vi.fn(),
+    pruneWorktrees: vi.fn(),
+  };
+  // Persistent storage for tool registrations — NOT cleared by vi.clearAllMocks
+  const toolRegistry: Record<string, (...args: any[]) => Promise<any>> = {};
+  const toolFn = vi.fn((...args: any[]) => {
+    const name = args[0] as string;
+    const handler = args[args.length - 1];
+    toolRegistry[name] = handler;
+  });
+  const connectFn = vi.fn();
+  // Low-level server mock (McpServer.server property)
+  const lowLevelServer = {
+    listRoots: vi.fn(),
+    getClientCapabilities: vi.fn(),
+    setNotificationHandler: vi.fn(),
+  };
+  return {
+    execSync: vi.fn(),
+    execFileSync: vi.fn(),
+    spawn: vi.fn(),
+    kill: vi.fn(),
+    parseWorktrees: vi.fn(),
+    gitUtils,
+    GitUtilsConstructor: vi.fn(() => gitUtils),
+    fsPromises: {
+      readFile: vi.fn(),
+      writeFile: vi.fn(),
+      mkdir: vi.fn(),
+      readdir: vi.fn(),
+      unlink: vi.fn(),
+    },
+    readMetadata: vi.fn().mockResolvedValue({}),
+    writeMetadata: vi.fn().mockResolvedValue(undefined),
+    setCloneStatus: vi.fn().mockResolvedValue(undefined),
+    requestRevision: vi.fn().mockResolvedValue({ feedbackPath: '/mock/path' }),
+    tool: toolFn,
+    connect: connectFn,
+    lowLevelServer,
+    serverInstance: { tool: toolFn, connect: connectFn, server: lowLevelServer },
+    toolRegistry,
+  };
+});
+
+// Provide __VERSION__ global before index.ts evaluates
+vi.hoisted(() => {
+  (globalThis as any).__VERSION__ = '0.0.0-test';
+});
+
+vi.mock('child_process', () => ({
+  execSync: (...args: any[]) => mocks.execSync(...args),
+  execFileSync: (...args: any[]) => mocks.execFileSync(...args),
+}));
+
+vi.mock('@lumi-ops/cli', () => ({
+  spawn: (...args: any[]) => mocks.spawn(...args),
+  kill: (...args: any[]) => mocks.kill(...args),
+  parseWorktrees: (...args: any[]) => mocks.parseWorktrees(...args),
+  GitUtils: mocks.GitUtilsConstructor,
+  getClonesDir: (root: string) => path.join(root, '.worktrees'),
+  getRepoStorageDir: (root: string) => path.join(root, '.lumi-storage'),
+  getLumiOpsHome: () => '/home/user/.lumi-ops',
+  METADATA_FILE: '.lumi-metadata.json',
+  readMetadata: (...args: any[]) => mocks.readMetadata(...args),
+  writeMetadata: (...args: any[]) => mocks.writeMetadata(...args),
+  setCloneStatus: (...args: any[]) => mocks.setCloneStatus(...args),
+  requestRevision: (...args: any[]) => mocks.requestRevision(...args),
+}));
+
+vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
+  McpServer: vi.fn(() => mocks.serverInstance),
+}));
+vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
+  StdioServerTransport: vi.fn(),
+}));
+vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
+  RootsListChangedNotificationSchema: { method: 'notifications/roots/list_changed' },
+}));
+
+vi.mock('fs', () => ({
+  promises: mocks.fsPromises,
+  existsSync: vi.fn(() => false),
+}));
+
+// ---------------------------------------------------------------------------
+// Import the module under test — triggers all server.tool() registrations
+// ---------------------------------------------------------------------------
+
+// Note: `import './index'` is a static ESM import hoisted before statements.
+// detectRootDir runs at module load using the real cwd fallback since the
+// execSync mock may not be configured yet at that point.
+// We capture the actual rootDir to use in assertions.
+import './index';
+
+// The rootDir used by index.ts at module load time — since the mock might not
+// intercept detectRootDir's execSync (static imports hoist), it falls back to
+// process.cwd(). We use this for path assertions.
+const ROOT_DIR = process.cwd();
+
+// ---------------------------------------------------------------------------
+// Helper to extract registered tool handlers (uses persistent registry)
+// ---------------------------------------------------------------------------
+
+type ToolHandler = (params: Record<string, any>) => Promise<any>;
+
+function getToolHandler(toolName: string): ToolHandler {
+  const handler = mocks.toolRegistry[toolName];
+  if (!handler) {
+    const registered = Object.keys(mocks.toolRegistry).join(', ');
+    throw new Error(`Tool "${toolName}" not registered. Registered: ${registered}`);
+  }
+  return handler;
+}
+
+// ---------------------------------------------------------------------------
+// spawn_clone tests
+// ---------------------------------------------------------------------------
+
+describe('spawn_clone tool', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.spawn.mockResolvedValue(undefined);
+    mocks.fsPromises.readFile.mockRejectedValue(new Error('ENOENT'));
+    mocks.fsPromises.writeFile.mockResolvedValue(undefined);
+    mocks.fsPromises.mkdir.mockResolvedValue(undefined);
+    handler = getToolHandler('spawn_clone');
+  });
+
+  it('should pass description directly to CLI spawn when no prompt specified', async () => {
+    const result = await handler({
+      branch: 'feat/test',
+      description: 'Build the widget',
+    });
+
+    expect(mocks.spawn).toHaveBeenCalledWith('feat/test', {
+      root: ROOT_DIR,
+      description: 'Build the widget',
+      baseBranch: undefined,
+    });
+    expect(result.isError).toBeUndefined();
+  });
+
+  it('should load prompt file and use its content as description', async () => {
+    mocks.fsPromises.readFile.mockImplementation(async (p: string) => {
+      if (typeof p === 'string' && p.includes('my-prompt.md')) {
+        return 'Prompt content from file';
+      }
+      throw new Error('ENOENT');
+    });
+
+    const result = await handler({
+      branch: 'feat/from-prompt',
+      prompt: 'my-prompt',
+      promptScope: 'project',
+    });
+
+    expect(mocks.fsPromises.readFile).toHaveBeenCalledWith(
+      path.join(ROOT_DIR, '.prompts', 'my-prompt.md'),
+      'utf-8',
+    );
+    expect(mocks.spawn).toHaveBeenCalledWith('feat/from-prompt', {
+      root: ROOT_DIR,
+      description: 'Prompt content from file',
+      baseBranch: undefined,
+    });
+    expect(result.isError).toBeUndefined();
+  });
+
+  it('should load prompt from global scope when promptScope is global', async () => {
+    mocks.fsPromises.readFile.mockImplementation(async (p: string) => {
+      if (typeof p === 'string' && p.includes('.lumi-ops/.prompts/global-prompt.md')) {
+        return 'Global prompt content';
+      }
+      throw new Error('ENOENT');
+    });
+
+    await handler({
+      branch: 'feat/global',
+      prompt: 'global-prompt',
+      promptScope: 'global',
+    });
+
+    expect(mocks.fsPromises.readFile).toHaveBeenCalledWith(
+      path.join('/home/user/.lumi-ops', '.prompts', 'global-prompt.md'),
+      'utf-8',
+    );
+  });
+
+  it('should return error when prompt file not found', async () => {
+    mocks.fsPromises.readFile.mockRejectedValue(new Error('ENOENT'));
+
+    const result = await handler({
+      branch: 'feat/missing',
+      prompt: 'nonexistent',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('not found');
+    expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+
+  it('should track _generated/ prompt in metadata', async () => {
+    mocks.fsPromises.readFile.mockImplementation(async (p: string) => {
+      if (typeof p === 'string' && p.includes('_generated/auto-prompt.md')) {
+        return 'Auto-generated prompt';
+      }
+      if (typeof p === 'string' && p.includes('.lumi-metadata.json')) {
+        return '{}';
+      }
+      throw new Error('ENOENT');
+    });
+    // readMetadata returns empty metadata so spawn_clone can add sourcePrompt
+    mocks.readMetadata.mockResolvedValue({});
+
+    await handler({
+      branch: 'feat/auto',
+      prompt: '_generated/auto-prompt',
+    });
+
+    expect(mocks.writeMetadata).toHaveBeenCalledWith(
+      ROOT_DIR,
+      expect.objectContaining({
+        'feat/auto': expect.objectContaining({
+          sourcePrompt: '_generated/auto-prompt.md',
+        }),
+      }),
+    );
+  });
+
+  it('should handle prompt name with .md extension', async () => {
+    mocks.fsPromises.readFile.mockImplementation(async (p: string) => {
+      if (typeof p === 'string' && p.includes('my-prompt.md')) {
+        return 'Prompt with extension';
+      }
+      throw new Error('ENOENT');
+    });
+
+    await handler({
+      branch: 'feat/ext',
+      prompt: 'my-prompt.md',
+    });
+
+    expect(mocks.fsPromises.readFile).toHaveBeenCalledWith(
+      path.join(ROOT_DIR, '.prompts', 'my-prompt.md'),
+      'utf-8',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// merge_clone tests
+// ---------------------------------------------------------------------------
+
+describe('merge_clone tool', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fsPromises.readFile.mockRejectedValue(new Error('ENOENT'));
+    mocks.fsPromises.writeFile.mockResolvedValue(undefined);
+    mocks.fsPromises.mkdir.mockResolvedValue(undefined);
+    handler = getToolHandler('merge_clone');
+
+    mocks.gitUtils.listWorktrees.mockResolvedValue([]);
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'main', branch: 'main', path: ROOT_DIR, dirName: '.' },
+    ]);
+    mocks.gitUtils.mergeSquash.mockResolvedValue(undefined);
+    mocks.gitUtils.commit.mockResolvedValue(undefined);
+    mocks.gitUtils.branchExists.mockResolvedValue(true);
+    mocks.gitUtils.addWorktreeExisting.mockResolvedValue(undefined);
+    mocks.gitUtils.removeWorktree.mockResolvedValue(undefined);
+    mocks.gitUtils.pruneWorktrees.mockResolvedValue(undefined);
+    // Default: all execSync calls return empty (for git reset, rm, etc.)
+    mocks.execSync.mockReturnValue('');
+  });
+
+  it('should perform successful squash merge into existing worktree', async () => {
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'main', branch: 'main', path: ROOT_DIR, dirName: '.' },
+      { currentBranch: 'develop', branch: 'develop', path: path.join(ROOT_DIR, '.worktrees/develop'), dirName: 'develop' },
+    ]);
+
+    const result = await handler({ source: 'feat/done', target: 'develop' });
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.status).toBe('merged');
+    expect(parsed.source).toBe('feat/done');
+    expect(parsed.target).toBe('develop');
+    expect(mocks.gitUtils.addWorktreeExisting).not.toHaveBeenCalled();
+  });
+
+  it('should create temp worktree when target has no existing worktree', async () => {
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'main', branch: 'main', path: ROOT_DIR, dirName: '.' },
+    ]);
+    mocks.gitUtils.branchExists.mockResolvedValue(true);
+
+    const result = await handler({ source: 'feat/done', target: 'develop' });
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.status).toBe('merged');
+    expect(mocks.gitUtils.addWorktreeExisting).toHaveBeenCalled();
+    expect(mocks.gitUtils.removeWorktree).toHaveBeenCalled();
+    expect(mocks.gitUtils.pruneWorktrees).toHaveBeenCalled();
+  });
+
+  it('should return error when target branch does not exist', async () => {
+    mocks.parseWorktrees.mockReturnValue([]);
+    mocks.gitUtils.branchExists.mockResolvedValue(false);
+
+    const result = await handler({ source: 'feat/done', target: 'nonexistent' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('does not exist');
+  });
+
+  it('should detect merge conflicts and return conflict status', async () => {
+    // No worktree matches 'develop' — forces temp worktree creation
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'main', branch: 'main', path: ROOT_DIR, dirName: '.' },
+    ]);
+    mocks.gitUtils.branchExists.mockResolvedValue(true);
+    mocks.gitUtils.mergeSquash.mockRejectedValue(new Error('CONFLICT'));
+
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('git status --porcelain')) {
+        return 'UU src/index.ts\nAA src/utils.ts\n';
+      }
+      if (typeof cmd === 'string' && cmd.includes('git diff --stat')) {
+        return ' src/index.ts | 10 +++++++---\n';
+      }
+      return '';
+    });
+
+    const result = await handler({ source: 'feat/conflict', target: 'develop' });
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.status).toBe('conflict');
+    expect(parsed.conflictFiles).toContain('src/index.ts');
+    expect(parsed.conflictFiles).toContain('src/utils.ts');
+    // Temp worktree should be cleaned up after conflict
+    expect(mocks.gitUtils.removeWorktree).toHaveBeenCalled();
+  });
+
+  it('should clean up temp worktree on non-conflict errors', async () => {
+    mocks.parseWorktrees.mockReturnValue([]);
+    mocks.gitUtils.branchExists.mockResolvedValue(true);
+    mocks.gitUtils.mergeSquash.mockRejectedValue(new Error('unexpected git error'));
+
+    const result = await handler({ source: 'feat/broken', target: 'main' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('unexpected git error');
+    expect(mocks.gitUtils.removeWorktree).toHaveBeenCalled();
+  });
+});

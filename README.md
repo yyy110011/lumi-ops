@@ -4,6 +4,7 @@
 [![Publish](https://github.com/yyy110011/lumi-ops/actions/workflows/publish.yml/badge.svg)](https://github.com/yyy110011/lumi-ops/actions/workflows/publish.yml)
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/ZunRenYao.lumi-ops?style=flat&label=VS%20Code&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=ZunRenYao.lumi-ops)
 [![Open VSX](https://img.shields.io/open-vsx/v/ZunRenYao/lumi-ops?style=flat&label=Open%20VSX&logo=eclipse-ide)](https://open-vsx.org/extension/ZunRenYao/lumi-ops)
+[![npm](https://img.shields.io/npm/v/@lumi-ops/mcp-server?style=flat&label=npm&logo=npm)](https://www.npmjs.com/package/@lumi-ops/mcp-server)
 [![Downloads](https://img.shields.io/open-vsx/dt/ZunRenYao/lumi-ops?style=flat&label=Downloads)](https://open-vsx.org/extension/ZunRenYao/lumi-ops)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-☕-yellow?style=flat)](https://buymeacoffee.com/ryanzryao)
@@ -24,8 +25,18 @@ Spawn isolated **Git Worktrees** ("Shadow Clones") so multiple AI Agents can wor
 packages/
 ├── cli/         # Core logic & CLI (spawn, kill, list, merge)
 ├── extension/   # VS Code / Antigravity Extension UI
-└── mcp-server/  # MCP Server (planned)
+└── mcp-server/  # MCP Server (published as @lumi-ops/mcp-server)
 ```
+
+## 🔌 MCP Server
+
+Let your AI agent spawn, review, and merge clones for you — hands-free. Connect any MCP-compatible agent:
+
+```bash
+npx @lumi-ops/mcp-server
+```
+
+See [`packages/mcp-server/README.md`](packages/mcp-server/README.md) for config examples (Antigravity, VS Code, Cursor, Windsurf, Claude Desktop).
 
 ## 🚀 Getting Started (Development)
 

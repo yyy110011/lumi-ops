@@ -375,4 +375,38 @@ describe('GitUtils', () => {
       expect(result).toEqual(['.agent', '.env']);
     });
   });
+
+  describe('getCommitsAhead', () => {
+    it('should return the number of commits ahead', async () => {
+      mockGit.raw.mockResolvedValue('3\n');
+      const count = await gitUtils.getCommitsAhead('main', 'feat/test');
+      expect(count).toBe(3);
+      expect(mockGit.raw).toHaveBeenCalledWith(['rev-list', '--count', 'feat/test..main']);
+    });
+
+    it('should return 0 when branches are even', async () => {
+      mockGit.raw.mockResolvedValue('0\n');
+      const count = await gitUtils.getCommitsAhead('main', 'feat/test');
+      expect(count).toBe(0);
+    });
+
+    it('should return 0 when git command fails', async () => {
+      mockGit.raw.mockRejectedValue(new Error('unknown revision'));
+      const count = await gitUtils.getCommitsAhead('nonexistent', 'feat/test');
+      expect(count).toBe(0);
+    });
+  });
+
+  describe('rebase', () => {
+    it('should call git rebase with the base branch', async () => {
+      mockGit.raw.mockResolvedValue('');
+      await gitUtils.rebase('main');
+      expect(mockGit.raw).toHaveBeenCalledWith(['rebase', 'main']);
+    });
+
+    it('should propagate errors on conflict', async () => {
+      mockGit.raw.mockRejectedValue(new Error('CONFLICT'));
+      await expect(gitUtils.rebase('main')).rejects.toThrow('CONFLICT');
+    });
+  });
 });

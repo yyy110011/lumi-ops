@@ -1,0 +1,49 @@
+{
+  "name": "@lumi-ops/mcp-server",
+  "version": "0.3.11",
+  "description": "MCP server for the Shadow Clone Protocol — Git Worktree automation for AI agents",
+  "license": "GPL-3.0-or-later",
+  "author": "ZunRenYao",
+  "homepage": "https://github.com/yyy110011/lumi-ops/tree/main/packages/mcp-server",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yyy110011/lumi-ops.git",
+    "directory": "packages/mcp-server"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "git-worktree",
+    "shadow-clone",
+    "ai-agents",
+    "lumi-ops"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "dist/index.js",
+  "bin": {
+    "lumi-ops-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --format=cjs --platform=node --outfile=dist/index.js --external:zod --banner:js=\"#!/usr/bin/env node\" --define:__VERSION__=\\\"$(node -p \"require('./package.json').version\")\\\"",
+    "test": "vitest run",
+    "dev": "tsc -w",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@lumi-ops/cli": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.27.3",
+    "typescript": "^5.3.3",
+    "simple-git": "^3.27.0",
+    "vitest": "^3.0.0"
+  }
+}
