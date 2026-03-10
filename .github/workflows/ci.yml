@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,6 +34,12 @@ jobs:
       - name: Build CLI
         run: pnpm --filter @lumi-ops/cli build
 
+      - name: Test MCP Server
+        run: pnpm --filter @lumi-ops/mcp-server test
+
+      - name: Build MCP Server
+        run: pnpm --filter @lumi-ops/mcp-server build
+
       - name: Build Extension
         run: pnpm --filter lumi-ops build
 
@@ -37,3 +47,45 @@ jobs:
         run: |
           cd packages/extension
           npx --yes @vscode/vsce package --no-dependencies
+
+  integration-tests:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache VS Code binary
+        uses: actions/cache@v4
+        with:
+          path: packages/extension/.vscode-test
+          key: vscode-test-${{ runner.os }}-${{ hashFiles('packages/extension/.vscode-test.mjs') }}
+
+      - name: Build CLI
+        run: pnpm --filter @lumi-ops/cli build
+
+      - name: Build Extension
+        run: pnpm --filter lumi-ops build
+
+      - name: Run Integration Tests (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm --filter lumi-ops run test:integration
+
+      - name: Run Integration Tests (macOS / Windows)
+        if: runner.os != 'Linux'
+        run: pnpm --filter lumi-ops run test:integration

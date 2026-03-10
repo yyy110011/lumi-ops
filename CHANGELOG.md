@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.4.0 (Unreleased)
+
+### ✨ Features
+- **MCP Server** — New `@lumi-ops/mcp-server` package with tools for spawn, kill, list, merge, review, and status management. Published to npm — install via `npx @lumi-ops/mcp-server`. Supports Antigravity, VS Code, Cursor, Windsurf, and Claude Desktop.
+- **Auto-Status Transitions** — Clone status auto-transitions from `todo` → `inProgress` when workspace opens.
+- **Status-Aware Prompt** — Copy prompt varies based on clone's review status (normal vs revision).
+- **Merge Improvements** — Auto-exclude clone artifacts from merges, slim conflict response.
+- **Generated Prompt Lifecycle** — Agent prompts in `_generated/` with auto-cleanup on kill.
+- **Clone Agent Rules** — New `lumi-ops.cloneAgentRules` setting to inject rules for clone agents.
+- **Root Agent Mode** — Setting to inject strategist rules for main workspace agents.
+- **Rebase Conflict UX** — Manual conflict resolution instead of auto-abort.
+- **Review Tools** — `review_clone` and `get_clone_file_diff` MCP tools for structured review and diff inspection.
+
+### 🐛 Bug Fixes
+- Fixed stale `statusCache` after kill+respawn.
+- Fixed settings page showing unrelated results.
+- MCP diff now uses caller's HEAD instead of `baseBranch`.
+
 ## [0.3.8] - 2026-03-02
 
 ### ✨ New Features
@@ -104,3 +122,4 @@ All notable changes to this project will be documented in this file.
 ### 🐛 Bug Fixes
 - Fixed focus-then-click guard for status cycling.
 - Fixed worktree-occupied branches appearing in Branch Name dropdown.
+

@@ -6,16 +6,9 @@ import { list } from './commands/list';
 import { migrateLegacyClones } from './commands/migration';
 import * as path from 'path';
 
-// Export for library usage
-export * from './commands/spawn';
-export * from './commands/kill';
-export * from './commands/list';
-export * from './commands/merge';
-export * from './commands/migration';
-export * from './utils/git';
-export * from './constants';
-export * from './registry';
-export * from './missionDefaults';
+// Re-export library API (backwards compatible for existing consumers)
+export * from './lib';
+
 
 
 

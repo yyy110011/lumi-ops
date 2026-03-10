@@ -10,6 +10,7 @@ description: Architecture map and patterns for the Lumi-Ops VS Code extension. R
 | File | Size | Responsibility |
 |------|------|----------------|
 | `extension.ts` | ~1091 lines | Activation, all command registrations, file watchers, polling |
+| `rootAgentMode.ts` | ~1KB | Root Agent Mode rule file injection/removal based on setting |
 | `ShadowTreeProvider.ts` | ~11KB | TreeDataProvider for "Active Clones" sidebar view |
 | `ShadowCreatorProvider.ts` | ~23KB | WebviewViewProvider for "Create Shadow Clone" form |
 | `PromptLibraryViewProvider.ts` | ~28KB | WebviewViewProvider for "Prompt Library" sidebar (HTML/CSS/JS inline) |
@@ -117,6 +118,7 @@ Used in `package.json` `menus.view/item/context` for conditional menu items:
 |-----|------|-------------|
 | `lumi-ops.activeMissionTemplate` | string | Active template in `name:scope` format |
 | `lumi-ops.copyOnSpawn` | string | Newline-separated folders/files to copy |
+| `lumi-ops.rootAgentMode` | boolean | Inject `.agents/rules/lumi-ops-root-agent.md` in main workspace |
 
 ## Key Patterns
 

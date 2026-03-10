@@ -9,29 +9,33 @@ const STATUS_SVG: Partial<Record<ReviewStatus, string>> = {
   todo:   'status-todo.svg',
   done:   'status-done.svg',
   wontDo: 'status-wont-do.svg',
+  needsReview: 'status-needs-review.svg',
+  needsRevision: 'status-needs-revision.svg',
 };
 
 const STATUS_LABELS: Record<ReviewStatus, string> = {
   todo: 'Todo',
   inProgress: 'In Progress',
+  needsReview: 'Needs Review',
   done: 'Done',
   wontDo: "Won't Do",
+  needsRevision: 'Needs Revision',
 };
 
-const STATUS_ORDER: ReviewStatus[] = ['todo', 'inProgress', 'done', 'wontDo'];
+const STATUS_ORDER: ReviewStatus[] = ['todo', 'inProgress', 'needsReview', 'done', 'wontDo'];
 
 export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
   private _onDidChangeTreeData: vscode.EventEmitter<ShadowItem | undefined | void> = new vscode.EventEmitter<ShadowItem | undefined | void>();
   readonly onDidChangeTreeData: vscode.Event<ShadowItem | undefined | void> = this._onDidChangeTreeData.event;
 
-  /** In-memory status cache for rapid clicks */
+  /** In-memory status cache for rapid clicks (keyed by dirName) */
   private statusCache: Map<string, ReviewStatus> = new Map();
-  /** Live item references — mutated in place for instant partial updates */
+  /** Live item references — mutated in place for instant partial updates (keyed by dirName) */
   private itemCache: Map<string, ShadowItem> = new Map();
   /** Debounce timer for coalescing rapid disk writes */
   private diskWriteTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Track which branch is currently focused (selected) for focus-then-click guard */
-  private lastFocusedBranch: string | null = null;
+  /** Track which clone is currently focused (selected) for focus-then-click guard (by dirName) */
+  private lastFocusedClone: string | null = null;
 
   constructor(
     private workspaceRoot: string | undefined,
@@ -84,7 +88,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
         const currentWorktree = clones.find(c => c.isMain);
         if (currentWorktree) {
           items.push(new ShadowItem(
-            currentWorktree.branch,
+            currentWorktree.currentBranch,
             vscode.TreeItemCollapsibleState.None,
             currentWorktree,
             'currentBranch',
@@ -97,20 +101,20 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
         const shadowClones = clones.filter(c => c.isShadow);
         for (const clone of shadowClones) {
           // Apply in-memory cache (overrides disk metadata)
-          const cached = this.statusCache.get(clone.branch);
+          const cached = this.statusCache.get(clone.dirName);
           if (cached !== undefined) {
             clone.reviewStatus = cached;
           }
           const item = new ShadowItem(
-            clone.branch,
+            clone.dirName,
             vscode.TreeItemCollapsibleState.None,
             clone,
             'shadowClone',
             this.extensionPath,
             this.currentWorkspacePath
           );
-          // Store live reference for partial updates
-          this.itemCache.set(clone.branch, item);
+          // Store live reference for partial updates (keyed by dirName)
+          this.itemCache.set(clone.dirName, item);
           items.push(item);
         }
 
@@ -130,7 +134,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
 
         // Load centralized metadata once
         const metadataPath = path.join(getRepoStorageDir(this.workspaceRoot), METADATA_FILE);
-        let metadata: Record<string, { baseBranch?: string; reviewStatus?: ReviewStatus }> = {};
+        let metadata: Record<string, { baseBranch?: string; reviewStatus?: ReviewStatus; needsRebase?: boolean }> = {};
         try {
           const raw = fs.readFileSync(metadataPath, 'utf-8');
           metadata = JSON.parse(raw);
@@ -141,12 +145,13 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
         const worktreesRaw = await git.listWorktrees();
         const clones = parseWorktrees(worktreesRaw, this.workspaceRoot!);
 
-        // Enrich with metadata
+        // Enrich with metadata (keyed by dirName)
         for (const clone of clones) {
-          const meta = metadata[clone.branch];
+          const meta = metadata[clone.dirName];
           if (meta) {
             clone.baseBranch = meta.baseBranch;
             clone.reviewStatus = meta.reviewStatus;
+            clone.needsRebase = meta.needsRebase;
           }
         }
 
@@ -172,15 +177,16 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
 
   /**
    * Update a clone's review status — instant partial update, no tree rebuild.
+   * Keyed by dirName (stable identity).
    */
-  setReviewStatus(branchName: string, status: ReviewStatus): void {
+  setReviewStatus(cloneIdentifier: string, status: ReviewStatus): void {
     if (!this.workspaceRoot) return;
 
-    // Update cache
-    this.statusCache.set(branchName, status);
+    // Update cache (keyed by dirName)
+    this.statusCache.set(cloneIdentifier, status);
 
     // Mutate existing item in place + partial fire (NO getChildren, NO loading bar)
-    const item = this.itemCache.get(branchName);
+    const item = this.itemCache.get(cloneIdentifier);
     if (item) {
       item.updateStatus(status, this.extensionPath!);
       this._onDidChangeTreeData.fire(item);
@@ -198,6 +204,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
 
   /**
    * Flush all cached statuses to disk (called after debounce settles).
+   * Keys are dirName identifiers.
    */
   private flushStatusToDisk(): void {
     if (!this.workspaceRoot) return;
@@ -210,11 +217,11 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
       } catch {
         // File doesn't exist yet
       }
-      for (const [branch, status] of this.statusCache) {
-        if (!metadata[branch]) {
-          metadata[branch] = {};
+      for (const [identifier, status] of this.statusCache) {
+        if (!metadata[identifier]) {
+          metadata[identifier] = {};
         }
-        metadata[branch].reviewStatus = status;
+        metadata[identifier].reviewStatus = status;
       }
       fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
       // File watcher will detect this write and fire bus for other consumers
@@ -234,33 +241,37 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
     try {
       const raw = fs.readFileSync(metadataPath, 'utf-8');
       const metadata = JSON.parse(raw);
-      for (const [branch, data] of Object.entries(metadata)) {
+      // Rebuild cache from disk to clear stale entries (e.g. after kill + respawn)
+      this.statusCache.clear();
+      for (const [key, data] of Object.entries(metadata)) {
         const status = (data as any)?.reviewStatus;
         if (status) {
-          this.statusCache.set(branch, status as ReviewStatus);
+          this.statusCache.set(key, status as ReviewStatus);
         }
       }
     } catch {
-      // No metadata file — leave cache as-is
+      // No metadata file — clear cache
+      this.statusCache.clear();
     }
   }
 
   /**
    * Cycle to the next review status with focus guard.
-   * First click on a branch just focuses it; subsequent clicks cycle the status.
+   * First click on a clone just focuses it; subsequent clicks cycle the status.
+   * Keyed by dirName (stable identity).
    */
-  cycleReviewStatus(branchName: string, currentStatus?: ReviewStatus): void {
-    if (this.lastFocusedBranch !== branchName) {
+  cycleReviewStatus(cloneIdentifier: string, currentStatus?: ReviewStatus): void {
+    if (this.lastFocusedClone !== cloneIdentifier) {
       // First click — just focus, don't cycle
-      this.lastFocusedBranch = branchName;
+      this.lastFocusedClone = cloneIdentifier;
       return;
     }
     // Already focused — cycle status
-    const cached = this.statusCache.get(branchName);
+    const cached = this.statusCache.get(cloneIdentifier);
     const current = cached ?? currentStatus ?? 'todo';
     const idx = STATUS_ORDER.indexOf(current);
     const next = STATUS_ORDER[(idx + 1) % STATUS_ORDER.length];
-    this.setReviewStatus(branchName, next);
+    this.setReviewStatus(cloneIdentifier, next);
   }
 }
 
@@ -274,11 +285,14 @@ export class ShadowItem extends vscode.TreeItem {
     private currentWorkspacePath?: string
   ) {
     super(label, collapsibleState);
-    // Stable ID so VS Code tracks this item across updates
-    this.id = `shadow-${clone.branch}-${role}`;
-    this.contextValue = role;
+    // Stable ID using dirName so VS Code tracks this item across updates
+    this.id = `shadow-${clone.dirName}-${role}`;
+    this.contextValue = (role === 'shadowClone' && clone.isDetached)
+      ? 'shadowClone-detached'
+      : role;
 
     const conflictPrefix = this.clone.hasConflict ? '⚠️ · ' : '';
+    const rebasePrefix = this.clone.needsRebase ? '⟲ rebase · ' : '';
 
     if (role === 'currentBranch') {
       this.tooltip = `Current workspace: ${this.clone.path}`;
@@ -296,16 +310,20 @@ export class ShadowItem extends vscode.TreeItem {
       const status: ReviewStatus = this.clone.reviewStatus || 'todo';
       this.applyStatus(status);
       const detachedPrefix = this.clone.isDetached ? '🔀 rebasing · ' : '';
+      // Show branch drift indicator when currentBranch differs from dirName
+      const branchDrift = this.clone.currentBranch !== this.clone.dirName
+        ? `⚠️ on: ${this.clone.currentBranch} · `
+        : '';
       const isCurrent = this.currentWorkspacePath && this.clone.path === this.currentWorkspacePath;
       const baseDesc = this.clone.baseBranch ? `← ${this.clone.baseBranch}` : 'Shadow Clone';
       this.description = isCurrent
-        ? `${conflictPrefix}${detachedPrefix}${baseDesc} · ★`
-        : `${conflictPrefix}${detachedPrefix}${baseDesc}`;
-      // Click = focus-then-cycle status
+        ? `${conflictPrefix}${rebasePrefix}${detachedPrefix}${branchDrift}${baseDesc} · ★`
+        : `${conflictPrefix}${rebasePrefix}${detachedPrefix}${branchDrift}${baseDesc}`;
+      // Click = focus-then-cycle status (uses dirName as identifier)
       this.command = {
         command: 'lumi-ops.cycleReviewStatus',
         title: 'Cycle Status',
-        arguments: [clone.branch]
+        arguments: [clone.dirName]
       };
     }
   }
@@ -330,3 +348,4 @@ export class ShadowItem extends vscode.TreeItem {
     this.applyStatus(status);
   }
 }
+

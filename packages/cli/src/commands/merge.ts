@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { execSync } from 'child_process';
 import { GitUtils } from '../utils/git';
 import chalk from 'chalk';
 
@@ -21,14 +22,20 @@ export async function merge(branchName: string, options: {
     await git.mergeSquash(branchName);
     console.log(chalk.gray('✓ Squash merge successful.'));
 
-    // 2. Commit
+    // 2. Exclude .lumi/ directory (all workflow artifacts) before committing
+    try {
+      execSync('git reset HEAD .lumi/', { cwd: mergeDir, stdio: 'ignore' });
+      execSync('rm -rf .lumi/', { cwd: mergeDir, stdio: 'ignore' });
+    } catch { /* .lumi/ may not exist */ }
+
+    // 3. Commit
     await git.commit(effectiveCommitMessage);
     console.log(chalk.green(`\n✨ Successfully merged ${branchName}!`));
 
   } catch (error: any) {
     const errorMsg = error.message || '';
 
-    // 3. Handle Conflicts
+    // Handle Conflicts
     if (errorMsg.includes('CONFLICT') || errorMsg.toLowerCase().includes('conflict')) {
       console.error(chalk.yellow(`\n⚠️  Merge Conflict detected.`));
       throw new Error('CONFLICT');

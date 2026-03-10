@@ -32,7 +32,7 @@ lumi-ops/
 │   │       ├── WorktreeManagerPanel.ts       # Multi-repo worktree dashboard (Beta)
 │   │       ├── StatusEventBus.ts             # Centralized event bus for cross-view sync
 │   │       └── migrations.ts                # Settings migrations across versions
-│   └── mcp-server/           # MCP server (planned)
+│   └── mcp-server/           # MCP server (published as @lumi-ops/mcp-server)
 ├── .prompts/                 # Reusable task prompts (project scope)
 │   └── _missions/            # Mission templates (project scope)
 ├── doc/                      # Design documents and feature proposals
@@ -122,6 +122,9 @@ cd packages/cli && npm run build
 
 # Build extension
 cd packages/extension && npm run package
+
+# Build MCP server
+cd packages/mcp-server && npm run build
 
 # Package extension as VSIX
 cd packages/extension && npx @vscode/vsce package --no-dependencies
