@@ -371,3 +371,49 @@ describe('merge_clone tool', () => {
     expect(mocks.gitUtils.removeWorktree).toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// set_project_root tests
+// ---------------------------------------------------------------------------
+
+describe('set_project_root tool', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getToolHandler('set_project_root');
+  });
+
+  it('should resolve worktree path to main repo root', async () => {
+    // resolveMainRepoRoot calls execSync with --git-common-dir first
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return '/home/user/my-repo/.git\n';
+      }
+      if (typeof cmd === 'string' && cmd.includes('--show-toplevel')) {
+        // This would be wrong for a worktree — but resolveMainRepoRoot
+        // should NOT reach this path when --git-common-dir returns /.git
+        return '/home/user/my-repo.worktrees/feat/test\n';
+      }
+      return '';
+    });
+
+    const result = await handler({ path: '/home/user/my-repo.worktrees/feat/test' });
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.status).toBe('ok');
+    // Should resolve to the main repo root, NOT the worktree path
+    expect(parsed.rootDir).toBe('/home/user/my-repo');
+  });
+
+  it('should return error for non-git directory', async () => {
+    mocks.execSync.mockImplementation(() => {
+      throw new Error('fatal: not a git repository');
+    });
+
+    const result = await handler({ path: '/tmp/not-a-repo' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('not a valid git repository');
+  });
+});

@@ -73,6 +73,43 @@ export async function silenceStdout<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 // ---------------------------------------------------------------------------
+// resolveMainRepoRoot
+// ---------------------------------------------------------------------------
+
+import { execSync } from 'child_process';
+
+/**
+ * Resolve the **main** repository root from any path — including worktree paths.
+ *
+ * `git rev-parse --show-toplevel` returns the worktree's own directory when run
+ * inside a worktree, which breaks metadata path resolution (see issue #31).
+ *
+ * Instead we use `--git-common-dir` which always points to the shared `.git`
+ * directory of the main repo, then resolve its parent.
+ */
+export function resolveMainRepoRoot(cwd: string): string {
+  // --git-common-dir returns the path to the shared .git dir.
+  // In a worktree it's something like `/repo/.git` (absolute with --path-format).
+  // In the main repo it's just `.git` or the absolute path.
+  const commonDir = execSync('git rev-parse --path-format=absolute --git-common-dir', {
+    cwd,
+    encoding: 'utf-8',
+  }).trim();
+
+  // The common dir is the .git folder of the main repo.
+  // Strip the trailing `/.git` (or `/.git/` if present) to get the repo root.
+  if (commonDir.endsWith('/.git') || commonDir.endsWith('/.git/')) {
+    return commonDir.replace(/\/\.git\/?$/, '');
+  }
+
+  // Edge case: bare repos or unusual layouts — fall back to --show-toplevel
+  return execSync('git rev-parse --show-toplevel', {
+    cwd,
+    encoding: 'utf-8',
+  }).trim();
+}
+
+// ---------------------------------------------------------------------------
 // extractRootFromRootsResponse
 // ---------------------------------------------------------------------------
 

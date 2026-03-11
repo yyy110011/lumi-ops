@@ -27,14 +27,14 @@ import type { ReviewStatus, ShadowClone } from '@lumi-ops/cli';
 // Helpers
 // ---------------------------------------------------------------------------
 
-import { parseDiffStat, toKebabCase, silenceStdout, extractRootFromRootsResponse } from './utils';
+import { parseDiffStat, toKebabCase, silenceStdout, extractRootFromRootsResponse, resolveMainRepoRoot } from './utils';
 
 
 
 /** Auto-detect git repo root from cwd. Falls back to cwd if not inside a git repo. */
 function detectRootDirFromCwd(): string {
   try {
-    return execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
+    return resolveMainRepoRoot(process.cwd());
   } catch {
     return process.cwd();
   }
@@ -233,10 +233,7 @@ server.tool(
   },
   async ({ path: newPath }) => {
     try {
-      const resolved = execSync('git rev-parse --show-toplevel', {
-        cwd: newPath,
-        encoding: 'utf-8',
-      }).trim();
+      const resolved = resolveMainRepoRoot(newPath);
       rootDir = resolved;
       return {
         content: [

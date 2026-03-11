@@ -1,5 +1,75 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { parseDiffStat, toKebabCase, silenceStdout, extractRootFromRootsResponse } from './utils';
+import { parseDiffStat, toKebabCase, silenceStdout, extractRootFromRootsResponse, resolveMainRepoRoot } from './utils';
+
+// ---------------------------------------------------------------------------
+// resolveMainRepoRoot
+// ---------------------------------------------------------------------------
+
+// We need to mock child_process.execSync for resolveMainRepoRoot tests
+vi.mock('child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('child_process')>();
+  return {
+    ...actual,
+    execSync: vi.fn(actual.execSync),
+  };
+});
+
+import { execSync } from 'child_process';
+const mockExecSync = vi.mocked(execSync);
+
+describe('resolveMainRepoRoot', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should resolve main repo root from a worktree path', () => {
+    mockExecSync.mockReturnValueOnce('/home/user/my-repo/.git\n' as any);
+
+    const result = resolveMainRepoRoot('/home/user/my-repo.worktrees/feat/test');
+
+    expect(result).toBe('/home/user/my-repo');
+    expect(mockExecSync).toHaveBeenCalledWith(
+      'git rev-parse --path-format=absolute --git-common-dir',
+      expect.objectContaining({ cwd: '/home/user/my-repo.worktrees/feat/test' }),
+    );
+  });
+
+  it('should resolve main repo root when already in the main repo', () => {
+    mockExecSync.mockReturnValueOnce('/home/user/my-repo/.git\n' as any);
+
+    const result = resolveMainRepoRoot('/home/user/my-repo');
+
+    expect(result).toBe('/home/user/my-repo');
+  });
+
+  it('should handle .git/ with trailing slash', () => {
+    mockExecSync.mockReturnValueOnce('/home/user/my-repo/.git/\n' as any);
+
+    const result = resolveMainRepoRoot('/some/path');
+
+    expect(result).toBe('/home/user/my-repo');
+  });
+
+  it('should fall back to --show-toplevel for bare repos', () => {
+    // --git-common-dir returns something that doesn't end with /.git
+    mockExecSync.mockReturnValueOnce('/home/user/bare-repo.git\n' as any);
+    // Fallback --show-toplevel
+    mockExecSync.mockReturnValueOnce('/home/user/bare-repo\n' as any);
+
+    const result = resolveMainRepoRoot('/home/user/bare-repo');
+
+    expect(result).toBe('/home/user/bare-repo');
+    expect(mockExecSync).toHaveBeenCalledTimes(2);
+  });
+
+  it('should throw if not inside a git repo', () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error('fatal: not a git repository');
+    });
+
+    expect(() => resolveMainRepoRoot('/tmp/not-a-repo')).toThrow();
+  });
+});
 
 // ---------------------------------------------------------------------------
 // extractRootFromRootsResponse
