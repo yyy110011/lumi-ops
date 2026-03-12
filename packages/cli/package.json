@@ -26,5 +26,13 @@
     "@types/fs-extra": "^11.0.4",
     "vitest": "^3.0.0"
   },
+  "keywords": [
+    "git-worktree",
+    "shadow-clone",
+    "ai-agents",
+    "mcp",
+    "lumi-ops",
+    "parallel-development"
+  ],
   "license": "GPL-3.0-or-later"
 }
