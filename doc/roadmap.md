@@ -2,7 +2,7 @@
 
 > Based on current feature status, design documents, and recent refactoring.
 
-## Current (v0.3.8)
+## Current (v0.4.0)
 
 ✅ Spawn / Kill / Merge — Full lifecycle management
 ✅ Review Status Tracking & Metadata Management
@@ -17,7 +17,11 @@
 ✅ **Worktree Manager (Beta)** (Multi-repo dashboard with global repo registry)
 ✅ **Copy on Spawn** (Configurable folders/files to copy from root to clone)
 ✅ **StatusEventBus** (Centralized cross-view sync for metadata changes)
-✅ Initial MCP Server
+✅ **MCP Server** (11 tools: spawn, kill, list, merge, review, revision, status, prompts, file diff)
+✅ **Clone Agent Rules** (Auto-inject executor rules into clones)
+✅ **Root Agent Mode** (Strategist rules for main workspace)
+✅ **Auto-Status Transitions** (`todo` → `inProgress` on workspace open)
+✅ **Review Protocol** (`MISSION_COMPLETE.md` → `needsReview` → `review_clone` → `request_revision`)
 
 ---
 
@@ -29,6 +33,18 @@
 - [ ] Clone-specific quick action bar (run tests, Git operations, etc.)
 - [ ] Show diff status against base branch
 - [ ] Prompt Library categorization (This Clone / Project / Global grouping)
+
+---
+
+## v0.4.1 — Onboarding & Polish
+
+**Goal**: Make the extension usable out-of-the-box for new users.
+
+- [ ] **VS Code Walkthrough** (Getting Started step-by-step: enable settings, set up MCP, create first prompt, spawn first clone)
+- [x] **Example Prompt** (Seed `~/.lumi-ops/.prompts/` with a starter template on first activation)
+- [x] **`cloneAgentRules` default → `true`**
+- [x] **MCP Server npm publish** (`npx @lumi-ops/mcp-server` or `npm install -g`)
+- [x] **MCP Server unit tests** (33 tests: pure functions + tool handler logic)
 
 ---
 
@@ -69,7 +85,8 @@
 **Reference**: [feature-candidates.md](./feature-candidates.md)
 
 - [ ] Reveal in Finder + Copy Path
-- [ ] Post-create command (e.g., auto-run `install` after spawn)
+- [ ] Post-spawn hooks (auto-run commands like `npm i`, `uv sync`, etc. after clone creation)
 - [x] ~~File copy patterns~~ → Implemented as `lumi-ops.copyOnSpawn` setting
 - [ ] Quick switch (Telescope / fuzzy search for clone directories)
+- [ ] Adopt existing worktrees (right-click → add metadata for manually-created worktrees)
 - [ ] i18n support
