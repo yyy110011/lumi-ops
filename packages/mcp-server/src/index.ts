@@ -823,6 +823,48 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
+// Tool 11: list_repos
+// ---------------------------------------------------------------------------
+
+server.tool(
+  'list_repos',
+  'List all Git repositories registered with Lumi-Ops. Returns repo names and root paths from the global registry. Use this to discover available repositories before calling set_project_root to switch context.',
+  {},
+  async () => {
+    try {
+      const registryPath = path.join(getLumiOpsHome(), '.registry.json');
+      let registry: Record<string, string> = {};
+      try {
+        const raw = await fs.promises.readFile(registryPath, 'utf-8');
+        registry = JSON.parse(raw);
+      } catch {
+        // Registry doesn't exist or is invalid — return empty list
+      }
+
+      const repos = Object.entries(registry).map(([name, repoPath]) => ({
+        name,
+        path: repoPath,
+        isCurrent: repoPath === rootDir,
+      }));
+
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({ currentRepo: rootDir, repos }, null, 2),
+          },
+        ],
+      };
+    } catch (error: any) {
+      return {
+        content: [{ type: 'text' as const, text: `Error listing repos: ${error.message}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
 

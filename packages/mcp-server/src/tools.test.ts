@@ -417,3 +417,88 @@ describe('set_project_root tool', () => {
     expect(result.content[0].text).toContain('not a valid git repository');
   });
 });
+
+// ---------------------------------------------------------------------------
+// list_repos tests
+// ---------------------------------------------------------------------------
+
+describe('list_repos tool', () => {
+  let handler: ToolHandler;
+  // Use a known rootDir for list_repos tests by resetting via set_project_root.
+  // The rootDir is module-level state that prior test suites may mutate.
+  const KNOWN_ROOT = '/home/user/test-repo';
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    handler = getToolHandler('list_repos');
+
+    // Reset rootDir to a known value via set_project_root
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${KNOWN_ROOT}/.git\n`;
+      }
+      return '';
+    });
+    await getToolHandler('set_project_root')({ path: KNOWN_ROOT });
+  });
+
+  it('should return empty repos when registry does not exist', async () => {
+    mocks.fsPromises.readFile.mockRejectedValue(new Error('ENOENT'));
+
+    const result = await handler({});
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.currentRepo).toBe(KNOWN_ROOT);
+    expect(parsed.repos).toEqual([]);
+    expect(result.isError).toBeUndefined();
+  });
+
+  it('should return registry contents with isCurrent flag', async () => {
+    const registry = {
+      'my-project': KNOWN_ROOT,
+      'other-project': '/home/user/other-project',
+    };
+    mocks.fsPromises.readFile.mockImplementation(async (p: string) => {
+      if (typeof p === 'string' && p.includes('.registry.json')) {
+        return JSON.stringify(registry);
+      }
+      throw new Error('ENOENT');
+    });
+
+    const result = await handler({});
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.currentRepo).toBe(KNOWN_ROOT);
+    expect(parsed.repos).toHaveLength(2);
+
+    const current = parsed.repos.find((r: any) => r.name === 'my-project');
+    expect(current).toBeDefined();
+    expect(current.path).toBe(KNOWN_ROOT);
+    expect(current.isCurrent).toBe(true);
+
+    const other = parsed.repos.find((r: any) => r.name === 'other-project');
+    expect(other).toBeDefined();
+    expect(other.path).toBe('/home/user/other-project');
+    expect(other.isCurrent).toBe(false);
+  });
+
+  it('should always include currentRepo in response', async () => {
+    // Registry exists but does not contain the current rootDir
+    const registry = {
+      'unrelated-repo': '/home/user/unrelated',
+    };
+    mocks.fsPromises.readFile.mockImplementation(async (p: string) => {
+      if (typeof p === 'string' && p.includes('.registry.json')) {
+        return JSON.stringify(registry);
+      }
+      throw new Error('ENOENT');
+    });
+
+    const result = await handler({});
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.currentRepo).toBe(KNOWN_ROOT);
+    expect(parsed.repos).toHaveLength(1);
+    expect(parsed.repos[0].isCurrent).toBe(false);
+  });
+});
