@@ -140,7 +140,7 @@ const server = new McpServer({
 
 server.tool(
   'list_prompts',
-  'List available prompts from global and/or project scope.',
+  'List available prompts from global and/or project scope. Use before spawn_clone to discover reusable task prompts. Pairs with save_prompt for creating new prompts and spawn_clone\'s `prompt` param to attach one during spawn.',
   {
     scope: z
       .enum(['global', 'project', 'all'])
@@ -180,7 +180,7 @@ server.tool(
 
 server.tool(
   'save_prompt',
-  'Create or overwrite a prompt file.',
+  'Create or overwrite a prompt file. Use to persist reusable task descriptions that can be attached to clones via spawn_clone\'s `prompt` param. Set `generated: true` for agent-authored prompts — these are saved to `_generated/` and auto-cleaned when the clone is killed.',
   {
     name: z.string().describe('Prompt name (without .md extension)'),
     content: z.string().describe('Markdown content of the prompt'),
@@ -227,7 +227,7 @@ server.tool(
 
 server.tool(
   'set_project_root',
-  'Set the Git project root directory for all lumi-ops operations. Call this if git operations fail or if the server detected the wrong repository.',
+  'Set the Git project root directory for all lumi-ops operations. This is a recovery tool — call it when git operations fail or the server detected the wrong repository. Root is normally auto-detected via MCP Roots Protocol, LUMI_OPS_ROOT env var, or cwd.',
   {
     path: z.string().describe('Absolute path to the project root directory'),
   },
@@ -260,7 +260,7 @@ server.tool(
 
 server.tool(
   'spawn_clone',
-  'Create a new shadow clone (worktree) with optional prompt content.',
+  'Create a new shadow clone (worktree) with optional prompt content. Use list_prompts first to find reusable prompts, or pass a `description` directly. After spawning, use set_clone_status to track progress through the review lifecycle.',
   {
     branch: z.string().describe('Branch name for the new clone'),
     description: z.string().optional().describe('Task description → MISSION.md'),
@@ -347,7 +347,7 @@ server.tool(
 
 server.tool(
   'list_clones',
-  'List all shadow clones with their metadata.',
+  'List all shadow clones with their metadata. Returns reviewStatus, description, and hasReport (indicates MISSION_COMPLETE.md exists, signaling review readiness). Use to find clones ready for review_clone or to check overall progress.',
   {},
   async () => {
     const rootErr = ensureRootDir();
@@ -392,7 +392,7 @@ server.tool(
 
 server.tool(
   'kill_clone',
-  'Remove a shadow clone.',
+  'Remove a shadow clone. Use after merge_clone to clean up, or to discard abandoned work. Set `keepBranch: true` to preserve the git branch for manual recovery. Note: the branch currently checked out in the main workspace cannot be killed.',
   {
     branch: z.string().describe('Clone identifier (directory name, e.g. feat/my-task)'),
     keepBranch: z
@@ -443,7 +443,7 @@ server.tool(
 
 server.tool(
   'merge_clone',
-  'Pull-only squash merge: merge source branch INTO target branch.',
+  'Pull-only squash merge: merge source branch INTO target branch. Use review_clone first to inspect changes before merging. On conflict, returns conflicted file list and diff stats for resolution. Excludes .lumi/ workflow artifacts from the merge commit.',
   {
     source: z.string().describe('Branch to merge FROM'),
     target: z.string().describe('Branch to merge INTO (your own branch)'),
@@ -601,7 +601,7 @@ server.tool(
 
 server.tool(
   'set_clone_status',
-  'Update the review status of a clone.',
+  'Update the review status of a clone. Valid statuses: todo → inProgress → needsReview → done (or needsRevision → inProgress for revision cycles, wontDo to discard). Agents should set needsReview when work is complete; reviewers set done or use request_revision.',
   {
     branch: z.string().describe('Clone identifier (directory name, e.g. feat/my-task)'),
     status: z
@@ -636,7 +636,7 @@ server.tool(
 
 server.tool(
   'review_clone',
-  'Get a structured review summary of a shadow clone: completion report, diff stats, and commit list.',
+  'Get a structured review summary of a shadow clone: completion report, diff stats, and commit list. Use as the first step when reviewing work — it returns MISSION_COMPLETE.md content, changed file stats, and commit history. Follow up with get_clone_file_diff to deep-dive into specific file changes.',
   {
     branch: z.string().describe('Branch name of the clone to review'),
   },
@@ -743,7 +743,7 @@ server.tool(
 
 server.tool(
   'get_clone_file_diff',
-  'Get the full diff of a specific file in a shadow clone compared to its current branch.',
+  'Get the full diff of a specific file in a shadow clone compared to its current branch. Use after review_clone to inspect specific file changes in detail. Provide a relative file path from the repo root (as shown in review_clone\'s diffStat.files list).',
   {
     branch: z.string().describe('Branch name of the clone'),
     filepath: z.string().describe('Relative file path to diff (from repo root)'),
@@ -790,7 +790,7 @@ server.tool(
 
 server.tool(
   'request_revision',
-  'Send review feedback to a shadow clone for revision. Writes .lumi/REVIEW_FEEDBACK.md and sets status to needsRevision.',
+  'Send review feedback to a shadow clone for revision. Writes .lumi/REVIEW_FEEDBACK.md and automatically sets status to needsRevision. Use after review_clone when changes need corrections — the clone agent will read the feedback on its next run and address the issues.',
   {
     branch: z.string().describe('Branch name of the clone to send feedback to'),
     feedback: z.string().describe('Review feedback content (markdown)'),
