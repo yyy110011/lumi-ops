@@ -939,6 +939,87 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
+// Tool 13: read_clone_file
+// ---------------------------------------------------------------------------
+
+const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1 MB
+
+server.tool(
+  'read_clone_file',
+  "Read the contents of a file from a shadow clone's worktree. Use this to inspect code, configuration, or any file in a clone without requiring filesystem access. Pair with get_clone_file_diff to see changes, or review_clone for an overview.",
+  {
+    branch: z.string().describe('Branch name of the clone'),
+    filepath: z.string().describe('Relative file path from the worktree root'),
+  },
+  async ({ branch, filepath }) => {
+    const rootErr = ensureRootDir();
+    if (rootErr) return rootErr;
+    try {
+      // 1. Find the clone's worktree path
+      const git = new GitUtils(rootDir);
+      const rawEntries = await git.listWorktrees();
+      const clones = parseWorktrees(rawEntries, rootDir);
+      const clone = clones.find((c) => c.branch === branch);
+
+      if (!clone) {
+        return {
+          content: [{ type: 'text' as const, text: `Error: no worktree found for branch "${branch}". The clone may have been killed.` }],
+          isError: true,
+        };
+      }
+
+      // 2. Resolve path and guard against traversal
+      const resolvedPath = path.resolve(clone.path, filepath);
+      if (!resolvedPath.startsWith(clone.path + path.sep) && resolvedPath !== clone.path) {
+        return {
+          content: [{ type: 'text' as const, text: `Error: path "${filepath}" resolves outside the clone's worktree. Path traversal is not allowed.` }],
+          isError: true,
+        };
+      }
+
+      // 3. Check file existence and size
+      let stat: { size: number };
+      try {
+        stat = await fs.promises.stat(resolvedPath);
+      } catch {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ branch, filepath, content: null, note: 'File not found' }, null, 2) }],
+        };
+      }
+
+      if (stat.size > MAX_FILE_SIZE) {
+        return {
+          content: [{ type: 'text' as const, text: `Error: file is ${(stat.size / 1024 / 1024).toFixed(1)}MB, exceeding the 1MB limit. Use get_clone_file_diff for large files.` }],
+          isError: true,
+        };
+      }
+
+      // 4. Read the file
+      const buffer = await fs.promises.readFile(resolvedPath);
+
+      // 5. Binary detection — check first 8KB for null bytes
+      const sample = buffer.subarray(0, 8192);
+      if (sample.includes(0)) {
+        return {
+          content: [{ type: 'text' as const, text: `Error: "${filepath}" appears to be a binary file. Use get_clone_file_diff to inspect changes instead.` }],
+          isError: true,
+        };
+      }
+
+      const content = buffer.toString('utf-8');
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ branch, filepath, content, size: stat.size }, null, 2) }],
+      };
+    } catch (error: any) {
+      return {
+        content: [{ type: 'text' as const, text: `Error reading file: ${error.message}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
 

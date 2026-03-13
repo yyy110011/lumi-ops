@@ -43,6 +43,7 @@ const mocks = vi.hoisted(() => {
       mkdir: vi.fn(),
       readdir: vi.fn(),
       unlink: vi.fn(),
+      stat: vi.fn(),
     },
     readMetadata: vi.fn().mockResolvedValue({}),
     writeMetadata: vi.fn().mockResolvedValue(undefined),
@@ -587,3 +588,67 @@ describe('get_clone_log tool', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// read_clone_file tests
+// ---------------------------------------------------------------------------
+
+describe('read_clone_file tool', () => {
+  let handler: ToolHandler;
+
+  const CLONE_PATH = path.join(ROOT_DIR, '.worktrees', 'feat/my-clone');
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getToolHandler('read_clone_file');
+    // ensureRootDir calls execSync('git rev-parse --show-toplevel') — must succeed
+    mocks.execSync.mockReturnValue('');
+    mocks.gitUtils.listWorktrees.mockResolvedValue([]);
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'feat/my-clone', branch: 'feat/my-clone', path: CLONE_PATH, dirName: 'feat/my-clone' },
+    ]);
+  });
+
+  it('should successfully read a text file from a clone', async () => {
+    mocks.fsPromises.stat.mockResolvedValue({ size: 42 });
+    mocks.fsPromises.readFile.mockResolvedValue(Buffer.from('hello world'));
+
+    const result = await handler({ branch: 'feat/my-clone', filepath: 'src/index.ts' });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.branch).toBe('feat/my-clone');
+    expect(parsed.filepath).toBe('src/index.ts');
+    expect(parsed.content).toBe('hello world');
+    expect(parsed.size).toBe(42);
+  });
+
+  it('should return error for non-existent clone', async () => {
+    mocks.parseWorktrees.mockReturnValue([]);
+
+    const result = await handler({ branch: 'feat/nonexistent', filepath: 'README.md' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('no worktree found');
+  });
+
+  it('should return not-found for non-existent file', async () => {
+    mocks.fsPromises.stat.mockRejectedValue(new Error('ENOENT'));
+
+    const result = await handler({ branch: 'feat/my-clone', filepath: 'does-not-exist.txt' });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.content).toBeNull();
+    expect(parsed.note).toBe('File not found');
+  });
+
+  it('should block path traversal attempts', async () => {
+    const result = await handler({ branch: 'feat/my-clone', filepath: '../../../etc/passwd' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Path traversal is not allowed');
+    // readFile should never be called for traversal attempts
+    expect(mocks.fsPromises.readFile).not.toHaveBeenCalled();
+    expect(mocks.fsPromises.stat).not.toHaveBeenCalled();
+  });
+});
