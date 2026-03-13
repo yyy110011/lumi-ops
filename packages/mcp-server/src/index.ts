@@ -865,6 +865,80 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
+// Tool 12: get_clone_log
+// ---------------------------------------------------------------------------
+
+server.tool(
+  'get_clone_log',
+  "Get the recent git commit history for a shadow clone's branch. Use this to understand what changes an agent has made. Pair with review_clone for a full review summary, or get_clone_file_diff for specific file changes.",
+  {
+    branch: z.string().describe('Branch name of the clone'),
+    maxCount: z
+      .number()
+      .optional()
+      .default(20)
+      .describe('Maximum number of commits to return'),
+  },
+  async ({ branch, maxCount }) => {
+    const rootErr = ensureRootDir();
+    if (rootErr) return rootErr;
+    try {
+      // 1. Read metadata to get baseBranch
+      const metadata = await readMetadata();
+      const baseBranch = metadata[branch]?.baseBranch || 'main';
+
+      // 2. Get formatted commit log
+      let commits: { hash: string; message: string; date: string; author: string }[] = [];
+      try {
+        const logRaw = execFileSync(
+          'git',
+          ['log', `--format=%H%x00%s%x00%ai%x00%an`, `${baseBranch}..${branch}`, `-${maxCount}`],
+          { cwd: rootDir, encoding: 'utf-8' },
+        );
+        commits = logRaw
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => {
+            const [hash, message, date, author] = line.split('\0');
+            return { hash, message, date, author };
+          });
+      } catch {
+        // No commits or branch not found — return empty
+      }
+
+      // 3. Get total commit count
+      let totalCommits = 0;
+      try {
+        const countRaw = execFileSync(
+          'git',
+          ['rev-list', '--count', `${baseBranch}..${branch}`],
+          { cwd: rootDir, encoding: 'utf-8' },
+        );
+        totalCommits = parseInt(countRaw.trim(), 10) || 0;
+      } catch {
+        // Fallback to commits array length
+        totalCommits = commits.length;
+      }
+
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({ branch, baseBranch, commits, totalCommits }, null, 2),
+          },
+        ],
+      };
+    } catch (error: any) {
+      return {
+        content: [{ type: 'text' as const, text: `Error getting clone log: ${error.message}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
 

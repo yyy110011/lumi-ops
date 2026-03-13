@@ -502,3 +502,88 @@ describe('list_repos tool', () => {
     expect(parsed.repos[0].isCurrent).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// get_clone_log tests
+// ---------------------------------------------------------------------------
+
+describe('get_clone_log tool', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getToolHandler('get_clone_log');
+    // ensureRootDir uses execSync to validate git repo
+    mocks.execSync.mockReturnValue('');
+    // Default: metadata returns baseBranch for look-up
+    mocks.readMetadata.mockResolvedValue({
+      'feat/test': { baseBranch: 'main' },
+    });
+  });
+
+  it('should return empty commits array when branch has no commits ahead', async () => {
+    // git log returns empty string (no commits)
+    mocks.execFileSync.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('log')) return '';
+      if (args.includes('--count')) return '0\n';
+      return '';
+    });
+
+    const result = await handler({ branch: 'feat/test', maxCount: 20 });
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.branch).toBe('feat/test');
+    expect(parsed.baseBranch).toBe('main');
+    expect(parsed.commits).toEqual([]);
+    expect(parsed.totalCommits).toBe(0);
+    expect(result.isError).toBeUndefined();
+  });
+
+  it('should respect maxCount parameter', async () => {
+    mocks.execFileSync.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('log')) {
+        // Verify maxCount is reflected in the args
+        expect(args).toContain('-5');
+        return [
+          'abc1234\x00feat: add login\x002026-03-13 10:00:00 +0800\x00Alice',
+          'def5678\x00fix: typo\x002026-03-13 09:00:00 +0800\x00Bob',
+        ].join('\n');
+      }
+      if (args.includes('--count')) return '2\n';
+      return '';
+    });
+
+    const result = await handler({ branch: 'feat/test', maxCount: 5 });
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.commits).toHaveLength(2);
+    expect(parsed.commits[0]).toEqual({
+      hash: 'abc1234',
+      message: 'feat: add login',
+      date: '2026-03-13 10:00:00 +0800',
+      author: 'Alice',
+    });
+    expect(parsed.commits[1]).toEqual({
+      hash: 'def5678',
+      message: 'fix: typo',
+      date: '2026-03-13 09:00:00 +0800',
+      author: 'Bob',
+    });
+    expect(parsed.totalCommits).toBe(2);
+  });
+
+  it('should return empty commits for non-existent branch (git commands fail)', async () => {
+    // Both git log and rev-list throw for nonexistent branch
+    mocks.execFileSync.mockImplementation(() => {
+      throw new Error('fatal: bad revision');
+    });
+
+    const result = await handler({ branch: 'nonexistent/branch', maxCount: 20 });
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.commits).toEqual([]);
+    expect(parsed.totalCommits).toBe(0);
+    expect(result.isError).toBeUndefined();
+  });
+});
+
