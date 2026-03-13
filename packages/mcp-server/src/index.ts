@@ -1082,15 +1082,62 @@ server.resource('clone-list', 'lumi://clones', async (uri) => {
 // Clone: feat/res-clone-files
 // ---------------------------------------------------------------------------
 
-// TODO: Register dynamic resource 'clone-mission' at 'lumi://clones/{branch}/mission'
-// Reads .lumi/MISSION.md from the clone's worktree
-// Use: server.resource('clone-mission', new ResourceTemplate('lumi://clones/{branch}/mission', { list }), async (uri, { branch }) => { ... })
+/** Helper to read a .lumi/ file from a clone's worktree. */
+async function readCloneLumiFile(branch: string, filename: string) {
+  const git = new GitUtils(rootDir);
+  const rawEntries = await git.listWorktrees();
+  const clones = parseWorktrees(rawEntries, rootDir);
+  const decodedBranch = decodeURIComponent(branch);
+  const clone = clones.find(c => c.branch === decodedBranch);
+  if (!clone) {
+    return { contents: [{ uri: `lumi://clones/${branch}/${filename}`, text: `Error: no worktree found for branch "${decodedBranch}".` }] };
+  }
+  try {
+    const content = await fs.promises.readFile(path.join(clone.path, '.lumi', filename), 'utf-8');
+    return { contents: [{ uri: `lumi://clones/${branch}/${filename}`, text: content }] };
+  } catch {
+    return { contents: [{ uri: `lumi://clones/${branch}/${filename}`, text: `File not found: .lumi/${filename}` }] };
+  }
+}
 
-// TODO: Register dynamic resource 'clone-report' at 'lumi://clones/{branch}/report'
-// Reads .lumi/MISSION_COMPLETE.md from the clone's worktree
+/** Helper to list clones that have a specific .lumi/ file. */
+async function listClonesWithLumiFile(filename: string, resourceSuffix: string) {
+  const git = new GitUtils(rootDir);
+  const rawEntries = await git.listWorktrees();
+  const clones = parseWorktrees(rawEntries, rootDir);
+  return {
+    resources: clones
+      .filter(c => c.isShadow && fs.existsSync(path.join(c.path, '.lumi', filename)))
+      .map(c => ({
+        uri: `lumi://clones/${encodeURIComponent(c.branch)}/${resourceSuffix}`,
+        name: `${c.branch} — ${filename}`,
+      })),
+  };
+}
 
-// TODO: Register dynamic resource 'clone-feedback' at 'lumi://clones/{branch}/feedback'
-// Reads .lumi/REVIEW_FEEDBACK.md from the clone's worktree
+server.resource(
+  'clone-mission',
+  new ResourceTemplate('lumi://clones/{branch}/mission', {
+    list: async () => listClonesWithLumiFile('MISSION.md', 'mission'),
+  }),
+  async (uri, { branch }) => readCloneLumiFile(branch as string, 'MISSION.md'),
+);
+
+server.resource(
+  'clone-report',
+  new ResourceTemplate('lumi://clones/{branch}/report', {
+    list: async () => listClonesWithLumiFile('MISSION_COMPLETE.md', 'report'),
+  }),
+  async (uri, { branch }) => readCloneLumiFile(branch as string, 'MISSION_COMPLETE.md'),
+);
+
+server.resource(
+  'clone-feedback',
+  new ResourceTemplate('lumi://clones/{branch}/feedback', {
+    list: async () => listClonesWithLumiFile('REVIEW_FEEDBACK.md', 'feedback'),
+  }),
+  async (uri, { branch }) => readCloneLumiFile(branch as string, 'REVIEW_FEEDBACK.md'),
+);
 
 // ---------------------------------------------------------------------------
 // Resource 5-6: Prompt & Config Resources

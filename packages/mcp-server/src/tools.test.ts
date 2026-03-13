@@ -105,6 +105,10 @@ vi.mock('@lumi-ops/cli', () => ({
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: vi.fn(() => mocks.serverInstance),
+  ResourceTemplate: vi.fn().mockImplementation((uri: string, opts: any) => ({
+    uri,
+    list: opts?.list,
+  })),
 }));
 vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
   StdioServerTransport: vi.fn(),
@@ -784,12 +788,106 @@ describe('lumi://clones resource', () => {
 // Clone: feat/res-clone-files
 // ---------------------------------------------------------------------------
 
-// TODO: Add tests for 'clone-mission' resource
-// TODO: Add tests for 'clone-report' resource
-// TODO: Add tests for 'clone-feedback' resource
-// - Should read file from clone worktree
-// - Should handle missing file gracefully
-// - Should list available resources from existing clones
+describe('per-clone file resources (clone-mission, clone-report, clone-feedback)', () => {
+  const CLONE_PATH = path.join(ROOT_DIR, '.worktrees', 'feat/my-clone');
+
+  // Resource name → .lumi/ filename mapping
+  const resourceMap: Record<string, string> = {
+    'clone-mission': 'MISSION.md',
+    'clone-report': 'MISSION_COMPLETE.md',
+    'clone-feedback': 'REVIEW_FEEDBACK.md',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // ensureRootDir uses execSync to validate git repo
+    mocks.execSync.mockReturnValue('');
+    mocks.gitUtils.listWorktrees.mockResolvedValue([]);
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'feat/my-clone', branch: 'feat/my-clone', path: CLONE_PATH, dirName: 'feat/my-clone', isShadow: true },
+    ]);
+  });
+
+  for (const [resourceName, filename] of Object.entries(resourceMap)) {
+    describe(resourceName, () => {
+      it(`should read ${filename} from clone worktree successfully`, async () => {
+        const { handler } = getResourceHandler(resourceName);
+        const fileContent = `# ${filename} content`;
+        mocks.fsPromises.readFile.mockResolvedValue(fileContent);
+
+        const result = await handler(
+          new URL(`lumi://clones/${encodeURIComponent('feat/my-clone')}/${resourceName.replace('clone-', '')}`),
+          { branch: encodeURIComponent('feat/my-clone') },
+        );
+
+        expect(result.contents).toHaveLength(1);
+        expect(result.contents[0].text).toBe(fileContent);
+        expect(mocks.fsPromises.readFile).toHaveBeenCalledWith(
+          path.join(CLONE_PATH, '.lumi', filename),
+          'utf-8',
+        );
+      });
+
+      it('should handle missing file gracefully', async () => {
+        const { handler } = getResourceHandler(resourceName);
+        mocks.fsPromises.readFile.mockRejectedValue(new Error('ENOENT'));
+
+        const result = await handler(
+          new URL(`lumi://clones/${encodeURIComponent('feat/my-clone')}/${resourceName.replace('clone-', '')}`),
+          { branch: encodeURIComponent('feat/my-clone') },
+        );
+
+        expect(result.contents).toHaveLength(1);
+        expect(result.contents[0].text).toContain('File not found');
+      });
+
+      it('should handle non-existent clone', async () => {
+        const { handler } = getResourceHandler(resourceName);
+        mocks.parseWorktrees.mockReturnValue([]);
+
+        const result = await handler(
+          new URL(`lumi://clones/${encodeURIComponent('feat/nonexistent')}/${resourceName.replace('clone-', '')}`),
+          { branch: encodeURIComponent('feat/nonexistent') },
+        );
+
+        expect(result.contents).toHaveLength(1);
+        expect(result.contents[0].text).toContain('no worktree found');
+      });
+
+      it('should list clones that have the file', async () => {
+        const { listHandler } = getResourceHandler(resourceName);
+        expect(listHandler).toBeDefined();
+
+        // Import fs mock to control existsSync
+        const fs = await import('fs');
+        (fs.existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: string) => {
+          if (typeof p === 'string' && p.includes('.lumi') && p.includes(filename)) {
+            return true;
+          }
+          return false;
+        });
+
+        const result = await listHandler!();
+
+        expect(result.resources).toHaveLength(1);
+        expect(result.resources[0].name).toContain('feat/my-clone');
+        expect(result.resources[0].uri).toContain(encodeURIComponent('feat/my-clone'));
+      });
+
+      it('should return empty list when no clones have the file', async () => {
+        const { listHandler } = getResourceHandler(resourceName);
+        expect(listHandler).toBeDefined();
+
+        const fs = await import('fs');
+        (fs.existsSync as ReturnType<typeof vi.fn>).mockReturnValue(false);
+
+        const result = await listHandler!();
+
+        expect(result.resources).toHaveLength(0);
+      });
+    });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Prompt & Config resource tests
