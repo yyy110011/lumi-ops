@@ -1144,12 +1144,77 @@ server.resource(
 // Clone: feat/res-prompts-config
 // ---------------------------------------------------------------------------
 
-// TODO: Register dynamic resource 'prompt-content' at 'lumi://prompts/{scope}/{name}'
-// Reads a specific prompt file from global or project scope
-// Use: server.resource('prompt-content', new ResourceTemplate('lumi://prompts/{scope}/{name}', { list }), async (uri, { scope, name }) => { ... })
+server.resource(
+  'prompt-content',
+  new ResourceTemplate('lumi://prompts/{scope}/{name}', {
+    list: async () => {
+      const resources: { uri: string; name: string }[] = [];
+      for (const scope of ['global', 'project'] as const) {
+        const dir = promptDir(scope);
+        const files = await listPromptFiles(dir);
+        for (const f of files) {
+          const name = f.replace(/\.md$/, '');
+          resources.push({
+            uri: `lumi://prompts/${scope}/${encodeURIComponent(name)}`,
+            name: `[${scope}] ${name}`,
+          });
+        }
+        // Also list _generated/ prompts
+        const genDir = path.join(dir, '_generated');
+        const genFiles = await listPromptFiles(genDir);
+        for (const f of genFiles) {
+          const name = f.replace(/\.md$/, '');
+          resources.push({
+            uri: `lumi://prompts/${scope}/${encodeURIComponent('_generated/' + name)}`,
+            name: `[${scope}] _generated/${name}`,
+          });
+        }
+      }
+      return { resources };
+    },
+  }),
+  async (uri, { scope, name }) => {
+    if (scope !== 'global' && scope !== 'project') {
+      return {
+        contents: [{
+          uri: uri.href,
+          text: `Error: invalid scope "${scope}". Must be "global" or "project".`,
+        }],
+      };
+    }
+    const decodedName = decodeURIComponent(name as string);
+    const filePath = path.join(promptDir(scope), `${decodedName}.md`);
+    try {
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      return {
+        contents: [{
+          uri: uri.href,
+          text: content,
+        }],
+      };
+    } catch {
+      return {
+        contents: [{
+          uri: uri.href,
+          text: `Error: prompt "${decodedName}" not found in ${scope} scope.`,
+        }],
+      };
+    }
+  },
+);
 
-// TODO: Register static resource 'config' at 'lumi://config'
-// Returns { rootDir, rootDetectionMethod, version: __VERSION__ }
+server.resource('config', 'lumi://config', async (uri) => {
+  return {
+    contents: [{
+      uri: uri.href,
+      text: JSON.stringify({
+        rootDir,
+        rootDetectionMethod,
+        version: __VERSION__,
+      }, null, 2),
+    }],
+  };
+});
 
 // ===========================================================================
 // v0.4.4 — MCP Prompts (Workflow Templates)

@@ -105,10 +105,12 @@ vi.mock('@lumi-ops/cli', () => ({
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: vi.fn(() => mocks.serverInstance),
-  ResourceTemplate: vi.fn().mockImplementation((uri: string, opts: any) => ({
-    uri,
-    list: opts?.list,
-  })),
+  ResourceTemplate: class ResourceTemplate {
+    list?: () => Promise<any>;
+    constructor(public uriTemplate: string, opts?: { list?: () => Promise<any> }) {
+      this.list = opts?.list;
+    }
+  },
 }));
 vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
   StdioServerTransport: vi.fn(),
@@ -894,10 +896,79 @@ describe('per-clone file resources (clone-mission, clone-report, clone-feedback)
 // Clone: feat/res-prompts-config
 // ---------------------------------------------------------------------------
 
-// TODO: Add tests for 'prompt-content' resource
-// TODO: Add tests for 'config' resource
-// - Should list prompts from both scopes
-// - Should return config with rootDir, detection method, version
+describe('config resource', () => {
+  it('should return rootDir, detection method, and version', async () => {
+    const { handler } = getResourceHandler('config');
+    const uri = new URL('lumi://config');
+
+    const result = await handler(uri, {});
+
+    const parsed = JSON.parse(result.contents[0].text);
+    expect(parsed.rootDir).toBeDefined();
+    expect(parsed.rootDetectionMethod).toBeDefined();
+    expect(parsed.version).toBe('0.0.0-test');
+  });
+});
+
+describe('prompt-content resource', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should read prompt file content', async () => {
+    mocks.fsPromises.readFile.mockImplementation(async (p: string) => {
+      if (typeof p === 'string' && p.includes('.prompts') && p.endsWith('my-task.md')) {
+        return 'Task prompt content here';
+      }
+      throw new Error('ENOENT');
+    });
+
+    const { handler } = getResourceHandler('prompt-content');
+    const uri = new URL('lumi://prompts/project/my-task');
+
+    const result = await handler(uri, { scope: 'project', name: 'my-task' });
+
+    expect(result.contents[0].text).toBe('Task prompt content here');
+  });
+
+  it('should handle missing prompt gracefully', async () => {
+    mocks.fsPromises.readFile.mockRejectedValue(new Error('ENOENT'));
+
+    const { handler } = getResourceHandler('prompt-content');
+    const uri = new URL('lumi://prompts/project/nonexistent');
+
+    const result = await handler(uri, { scope: 'project', name: 'nonexistent' });
+
+    expect(result.contents[0].text).toContain('not found');
+  });
+
+  it('should enumerate prompts from both scopes', async () => {
+    mocks.fsPromises.readdir.mockImplementation(async (dir: string) => {
+      if (typeof dir === 'string' && dir.includes('.lumi-ops/.prompts') && !dir.includes('_generated')) {
+        return [
+          { name: 'global-task.md', isFile: () => true },
+        ];
+      }
+      if (typeof dir === 'string' && dir.endsWith('.prompts') && !dir.includes('_generated')) {
+        return [
+          { name: 'project-task.md', isFile: () => true },
+        ];
+      }
+      // _generated dirs — return empty
+      return [];
+    });
+
+    const { listHandler } = getResourceHandler('prompt-content');
+    expect(listHandler).toBeDefined();
+
+    const result = await listHandler!();
+
+    expect(result.resources.length).toBeGreaterThanOrEqual(2);
+    const uris = result.resources.map((r: any) => r.uri);
+    expect(uris).toContain('lumi://prompts/global/global-task');
+    expect(uris).toContain('lumi://prompts/project/project-task');
+  });
+});
 
 // ===========================================================================
 // v0.4.4 — MCP Prompt Tests
