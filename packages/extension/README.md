@@ -1,7 +1,10 @@
 # 👻 Lumi-Ops
 
-**Shadow Clone Protocol for AI Agents.**
-Scale your development by spawning isolated "Shadow Clones" for your AI Agents.
+**The workflow protocol for AI-assisted parallel development.**
+
+Equip your AI agent with a protocol for parallel development. Spawn isolated tasks, track state transitions, and enforce structured reviews before merging.
+
+Built on Git Worktrees. Works with Antigravity, Cursor, GitHub Copilot, and any MCP-compatible AI.
 
 [![CI Build](https://github.com/yyy110011/lumi-ops/actions/workflows/ci.yml/badge.svg)](https://github.com/yyy110011/lumi-ops/actions/workflows/ci.yml)
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/ZunRenYao.lumi-ops?style=flat&label=VS%20Code&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=ZunRenYao.lumi-ops)
@@ -24,7 +27,18 @@ Scale your development by spawning isolated "Shadow Clones" for your AI Agents.
 
 ## 💡 What is Lumi-Ops?
 
-Lumi-Ops enables a **Multi-Threaded Coding Workflow**. Instead of blocking your main editor while an AI Agent writes code, you can "Spawn a Shadow Clone" — an isolated **Git Worktree** with a `MISSION.md` file containing your instructions. Let AI work there, and squash merge it back when done.
+While physical workspace isolation is becoming standard in AI IDEs, managing multiple agents across these workspaces remains chaotic. You end up constantly switching windows, losing context, and manually checking if an agent has finished its task.
+
+**Lumi-Ops provides the rails.**
+
+It is not an AI agent. It is a workflow protocol that equips your existing IDE agents with the **Shadow Clone Protocol** — a standardized lifecycle for delegating, tracking, and reviewing parallel AI tasks.
+
+### The Core Protocol
+
+1. **Spawn & Assign** — Create an isolated Git Worktree ("Shadow Clone") and hand off a structured `MISSION.md` template.
+2. **Execute** — Your AI agent works independently in the clone window. Your main workspace context remains completely untouched.
+3. **Review & Revise (The Loop)** — When the agent finishes, it writes a `MISSION_COMPLETE.md` and sets its status to `needsReview`. You (or your root agent via MCP) can review the diff. If issues remain, issue a `request_revision` with feedback to send it back to work.
+4. **Merge** — Once approved, execute a clean squash-merge directly from the UI or via MCP.
 
 ![Sidebar Overview](https://raw.githubusercontent.com/yyy110011/lumi-ops/main/packages/extension/media/sidebar-overview.png)
 
@@ -46,7 +60,12 @@ Lumi-Ops enables a **Multi-Threaded Coding Workflow**. Instead of blocking your 
 
 ---
 
-## ✨ Features
+## ✨ Key Features
+
+- **🔄 Formalized Review Protocol** — Stop guessing if an agent is done. Rely on explicit state transitions (`inProgress` → `needsReview` → `needsRevision` → `done`).
+- **🔌 Universal MCP Integration** — `npx @lumi-ops/mcp-server` exposes the entire lifecycle to your AI. Your main agent can autonomously spawn clones, review their diffs, and merge them.
+- **📄 Mission Templates & Prompt Library** — Standardize how tasks are assigned to reduce agent hallucinations and enforce project-specific rules.
+- **👻 Git Worktree Isolation** — Physical directory separation ensures parallel agents never overwrite each other's files or break your local build.
 
 ### ⚡ Spawn in Seconds
 - **No Stashing** — Keep your current work as-is.
@@ -140,4 +159,4 @@ A multi-repo dashboard to monitor all your worktrees from a single panel.
 - [GitHub Repository](https://github.com/yyy110011/lumi-ops)
 - [Issues](https://github.com/yyy110011/lumi-ops/issues)
 
-**Enjoy Multi-Threaded Coding!** 👻
+**Give your agents structure.** 👻

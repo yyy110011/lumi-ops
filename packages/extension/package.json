@@ -1,7 +1,7 @@
 {
   "name": "lumi-ops",
   "displayName": "Lumi-Ops",
-  "description": "Shadow Clone Protocol - Git Worktree Automation for AI Agents",
+  "description": "The workflow protocol for AI-assisted parallel development. Spawn isolated tasks, track progress, and review before merging.",
   "version": "0.4.2",
   "publisher": "ZunRenYao",
   "engines": {
@@ -34,7 +34,7 @@
       "activitybar": [
         {
           "id": "lumi-ops",
-          "title": "Shadow Ops",
+          "title": "Lumi-Ops",
           "icon": "media/icon.svg"
         }
       ]
