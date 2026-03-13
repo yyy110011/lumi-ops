@@ -1039,8 +1039,76 @@ describe('resolve-conflict prompt', () => {
 // Clone: feat/mcp-prompts-spawn
 // ---------------------------------------------------------------------------
 
-// TODO: Add tests for 'spawn-with-context' prompt
-// TODO: Add tests for 'multi-clone-strategy' prompt
-// - Should return structured messages guiding the workflow
-// - Should include tool names in the prompt messages
+describe('spawn-with-context prompt', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getPromptHandler('spawn-with-context');
+  });
+
+  it('should return messages containing tool names', async () => {
+    const result = await handler({ task: 'Add user authentication' });
+
+    expect(result.messages).toHaveLength(1);
+    const text = result.messages[0].content.text;
+    expect(text).toContain('list_prompts');
+    expect(text).toContain('spawn_clone');
+    expect(text).toContain('save_prompt');
+  });
+
+  it('should include the task arg in the message', async () => {
+    const task = 'Implement OAuth2 login flow';
+    const result = await handler({ task });
+
+    const text = result.messages[0].content.text;
+    expect(text).toContain(task);
+  });
+
+  it('should reference branch naming conventions', async () => {
+    const result = await handler({ task: 'Fix login bug' });
+
+    const text = result.messages[0].content.text;
+    expect(text).toContain('feat/');
+    expect(text).toContain('fix/');
+    expect(text).toContain('refactor/');
+  });
+});
+
+describe('multi-clone-strategy prompt', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getPromptHandler('multi-clone-strategy');
+  });
+
+  it('should return messages with planning guidance', async () => {
+    const result = await handler({ goal: 'Migrate to new API' });
+
+    expect(result.messages).toHaveLength(1);
+    const text = result.messages[0].content.text;
+    expect(text).toContain('Break Down the Goal');
+    expect(text).toContain('parallelizable');
+    expect(text).toContain('merge conflicts');
+  });
+
+  it('should include the goal arg in the message', async () => {
+    const goal = 'Refactor the entire data layer to use GraphQL';
+    const result = await handler({ goal });
+
+    const text = result.messages[0].content.text;
+    expect(text).toContain(goal);
+  });
+
+  it('should reference related tools in the message content', async () => {
+    const result = await handler({ goal: 'Build v2.0 features' });
+
+    const text = result.messages[0].content.text;
+    expect(text).toContain('list_clones');
+    expect(text).toContain('spawn_clone');
+    expect(text).toContain('review_clone');
+  });
+});
+
 

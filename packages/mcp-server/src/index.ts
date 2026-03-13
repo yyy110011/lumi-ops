@@ -1316,13 +1316,89 @@ If new conflicts arise, repeat this process.`,
 // Clone: feat/mcp-prompts-spawn
 // ---------------------------------------------------------------------------
 
-// TODO: Register MCP prompt 'spawn-with-context'
-// Guides agent to spawn a clone from a task description
-// Args: { task: z.string() }
+server.prompt(
+  'spawn-with-context',
+  'Guide an agent through spawning a shadow clone for a given task. Checks for reusable prompts, picks a branch name, spawns the clone, and optionally saves the prompt for reuse.',
+  { task: z.string().describe('Task description or issue to work on') },
+  async ({ task }) => {
+    return {
+      messages: [
+        {
+          role: 'user' as const,
+          content: {
+            type: 'text' as const,
+            text: [
+              `You need to spawn a shadow clone to work on the following task:`,
+              ``,
+              `"${task}"`,
+              ``,
+              `## Step 1: Check for Existing Prompts`,
+              `Call \`list_prompts\` to see if there's already a prompt that matches this task.`,
+              ``,
+              `## Step 2: Choose a Branch Name`,
+              `Pick a descriptive branch name in kebab-case format:`,
+              `- Features: feat/short-description`,
+              `- Fixes: fix/short-description`,
+              `- Refactors: refactor/short-description`,
+              ``,
+              `## Step 3: Spawn the Clone`,
+              `Call \`spawn_clone\` with:`,
+              `- branch: your chosen branch name`,
+              `- description: a clear, actionable task description for the agent`,
+              `- Optionally: prompt + promptScope if reusing an existing prompt`,
+              ``,
+              `## Step 4: Save as Reusable Prompt (Optional)`,
+              `If this task pattern is likely to recur, use \`save_prompt\` to save it for future use.`,
+              `Set \`generated: true\` if it's auto-generated and should be cleaned up with the clone.`,
+            ].join('\n'),
+          },
+        },
+      ],
+    };
+  },
+);
 
-// TODO: Register MCP prompt 'multi-clone-strategy'
-// Guides root agent to plan and execute multi-clone parallel development
-// Args: { goal: z.string() }
+server.prompt(
+  'multi-clone-strategy',
+  'Guide a root agent through planning and executing a multi-clone parallel development strategy. Breaks down a high-level goal into independent tasks and spawns clones for each.',
+  { goal: z.string().describe('High-level goal requiring parallel development') },
+  async ({ goal }) => {
+    return {
+      messages: [
+        {
+          role: 'user' as const,
+          content: {
+            type: 'text' as const,
+            text: [
+              `You are the root agent planning a multi-clone parallel development strategy for:`,
+              ``,
+              `"${goal}"`,
+              ``,
+              `## Step 1: Break Down the Goal`,
+              `Analyze the goal and decompose it into independent, parallelizable tasks.`,
+              `For each task, determine:`,
+              `- Clear scope and deliverables`,
+              `- File dependencies (which files will be modified)`,
+              `- A descriptive branch name (feat/, fix/, refactor/)`,
+              ``,
+              `## Step 2: Check for Existing Work`,
+              `Call \`list_clones\` to check if any existing clones overlap with your planned tasks.`,
+              `Adjust your plan to avoid duplicate effort.`,
+              ``,
+              `## Step 3: Spawn Clones`,
+              `For each task, call \`spawn_clone\` with a clear, non-overlapping task description.`,
+              `Important: Clones that modify the same files will cause merge conflicts — plan to merge them sequentially.`,
+              ``,
+              `## Step 4: Monitor Progress`,
+              `Use \`list_clones\` to check overall status, and \`review_clone\` to inspect completed work.`,
+              `When a clone finishes (hasReport: true), review it and decide whether to merge or request revision.`,
+            ].join('\n'),
+          },
+        },
+      ],
+    };
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Start
