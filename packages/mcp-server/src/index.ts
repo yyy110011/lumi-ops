@@ -1040,9 +1040,42 @@ server.tool(
 // Clone: feat/res-clones-list
 // ---------------------------------------------------------------------------
 
-// TODO: Register static resource 'clone-list' at 'lumi://clones'
-// Returns enriched clone list (same data as list_clones tool)
-// Use: server.resource('clone-list', 'lumi://clones', async (uri) => { ... })
+server.resource('clone-list', 'lumi://clones', async (uri) => {
+  const rootErr = ensureRootDir();
+  if (rootErr) {
+    return { contents: [{ uri: uri.href, text: JSON.stringify({ error: 'No project root configured. Use set_project_root first.' }) }] };
+  }
+  try {
+    const git = new GitUtils(rootDir);
+    const rawEntries = await git.listWorktrees();
+    const clones = parseWorktrees(rawEntries, rootDir);
+    const metadata = await readMetadata();
+
+    // Enrich clones with metadata + hasReport
+    const enriched = clones.map((c) => {
+      const meta = metadata[c.dirName];
+      const hasReport = fs.existsSync(path.join(c.path, '.lumi', 'MISSION_COMPLETE.md'));
+      const base: ShadowClone & { hasReport: boolean } = { ...c, hasReport };
+      if (meta) {
+        return {
+          ...base,
+          baseBranch: meta.baseBranch || c.baseBranch,
+          description: meta.description,
+          reviewStatus: meta.reviewStatus,
+        };
+      }
+      return base;
+    });
+
+    return {
+      contents: [{ uri: uri.href, text: JSON.stringify({ repository: rootDir, clones: enriched }, null, 2) }],
+    };
+  } catch (error: any) {
+    return {
+      contents: [{ uri: uri.href, text: JSON.stringify({ error: `Error listing clones: ${error.message}` }) }],
+    };
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Resource 2-4: Per-clone file Resources

@@ -701,9 +701,83 @@ describe('read_clone_file tool', () => {
 // Clone: feat/res-clones-list
 // ---------------------------------------------------------------------------
 
-// TODO: Add tests for 'clone-list' resource
-// - Should return enriched clone list
-// - Should handle empty clone list
+describe('lumi://clones resource', () => {
+  let handler: (...args: any[]) => Promise<any>;
+  // Import fs mock reference for existsSync control
+  let existsSyncMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const entry = getResourceHandler('clone-list');
+    handler = entry.handler;
+    // Get the existsSync mock from the fs mock module
+    const fsMod = await import('fs');
+    existsSyncMock = fsMod.existsSync as ReturnType<typeof vi.fn>;
+    // Reset rootDir to ROOT_DIR via set_project_root (rootDir is module-level state)
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ROOT_DIR}/.git\n`;
+      }
+      return '';
+    });
+    await getToolHandler('set_project_root')({ path: ROOT_DIR });
+  });
+
+  it('should return enriched clone list with metadata and hasReport', async () => {
+    const clonePath1 = path.join(ROOT_DIR, '.worktrees', 'feat/alpha');
+    const clonePath2 = path.join(ROOT_DIR, '.worktrees', 'feat/beta');
+    mocks.gitUtils.listWorktrees.mockResolvedValue([]);
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'feat/alpha', branch: 'feat/alpha', path: clonePath1, dirName: 'feat/alpha', baseBranch: 'main' },
+      { currentBranch: 'feat/beta', branch: 'feat/beta', path: clonePath2, dirName: 'feat/beta', baseBranch: 'main' },
+    ]);
+    mocks.readMetadata.mockResolvedValue({
+      'feat/alpha': { baseBranch: 'develop', description: 'Alpha task', reviewStatus: 'needsReview' },
+    });
+    existsSyncMock.mockImplementation((p: string) => {
+      if (typeof p === 'string' && p.includes('feat/alpha') && p.includes('MISSION_COMPLETE.md')) return true;
+      return false;
+    });
+
+    const result = await handler(new URL('lumi://clones'), {});
+
+    const parsed = JSON.parse(result.contents[0].text);
+    expect(parsed.repository).toBe(ROOT_DIR);
+    expect(parsed.clones).toHaveLength(2);
+
+    const alpha = parsed.clones.find((c: any) => c.dirName === 'feat/alpha');
+    expect(alpha.hasReport).toBe(true);
+    expect(alpha.baseBranch).toBe('develop');
+    expect(alpha.description).toBe('Alpha task');
+    expect(alpha.reviewStatus).toBe('needsReview');
+
+    const beta = parsed.clones.find((c: any) => c.dirName === 'feat/beta');
+    expect(beta.hasReport).toBe(false);
+    expect(beta.description).toBeUndefined();
+  });
+
+  it('should handle empty clone list', async () => {
+    mocks.gitUtils.listWorktrees.mockResolvedValue([]);
+    mocks.parseWorktrees.mockReturnValue([]);
+    mocks.readMetadata.mockResolvedValue({});
+
+    const result = await handler(new URL('lumi://clones'), {});
+
+    const parsed = JSON.parse(result.contents[0].text);
+    expect(parsed.repository).toBe(ROOT_DIR);
+    expect(parsed.clones).toEqual([]);
+  });
+
+  it('should handle git errors gracefully', async () => {
+    mocks.gitUtils.listWorktrees.mockRejectedValue(new Error('git failed'));
+
+    const result = await handler(new URL('lumi://clones'), {});
+
+    const parsed = JSON.parse(result.contents[0].text);
+    expect(parsed.error).toContain('Error listing clones');
+    expect(parsed.error).toContain('git failed');
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Per-clone file resource tests
