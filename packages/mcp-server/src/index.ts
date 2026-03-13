@@ -147,6 +147,7 @@ server.tool(
       .default('all')
       .describe('Which scope to list prompts from'),
   },
+  { readOnlyHint: true },
   async ({ scope }) => {
     const prompts: { name: string; scope: string; fileName: string; generated: boolean }[] = [];
 
@@ -194,6 +195,7 @@ server.tool(
       .optional()
       .describe('If true, save to _generated/ subdirectory (agent-authored, auto-cleaned on kill)'),
   },
+  { idempotentHint: true },
   async ({ name, content, scope, generated }) => {
     const sanitized = toKebabCase(name);
     if (!sanitized) {
@@ -231,6 +233,7 @@ server.tool(
   {
     path: z.string().describe('Absolute path to the project root directory'),
   },
+  { idempotentHint: true },
   async ({ path: newPath }) => {
     try {
       const resolved = resolveMainRepoRoot(newPath);
@@ -271,6 +274,7 @@ server.tool(
       .optional()
       .describe('Scope of the prompt file'),
   },
+  {},
   async ({ branch, description, baseBranch, prompt, promptScope }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -348,7 +352,7 @@ server.tool(
 server.tool(
   'list_clones',
   'List all shadow clones with their metadata. Returns reviewStatus, description, and hasReport (indicates MISSION_COMPLETE.md exists, signaling review readiness). Use to find clones ready for review_clone or to check overall progress.',
-  {},
+  { readOnlyHint: true },
   async () => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -400,6 +404,7 @@ server.tool(
       .default(false)
       .describe('If true, keep the git branch after removing the worktree'),
   },
+  { destructiveHint: true },
   async ({ branch, keepBranch }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -448,6 +453,7 @@ server.tool(
     source: z.string().describe('Branch to merge FROM'),
     target: z.string().describe('Branch to merge INTO (your own branch)'),
   },
+  {},
   async ({ source, target }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -608,6 +614,7 @@ server.tool(
       .enum(['todo', 'inProgress', 'done', 'wontDo', 'needsReview', 'needsRevision'])
       .describe('New review status'),
   },
+  { idempotentHint: true },
   async ({ branch, status }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -640,6 +647,7 @@ server.tool(
   {
     branch: z.string().describe('Branch name of the clone to review'),
   },
+  { readOnlyHint: true },
   async ({ branch }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -748,6 +756,7 @@ server.tool(
     branch: z.string().describe('Branch name of the clone'),
     filepath: z.string().describe('Relative file path to diff (from repo root)'),
   },
+  { readOnlyHint: true },
   async ({ branch, filepath }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -795,6 +804,7 @@ server.tool(
     branch: z.string().describe('Branch name of the clone to send feedback to'),
     feedback: z.string().describe('Review feedback content (markdown)'),
   },
+  {},
   async ({ branch, feedback }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -829,7 +839,7 @@ server.tool(
 server.tool(
   'list_repos',
   'List all Git repositories registered with Lumi-Ops. Returns repo names and root paths from the global registry. Use this to discover available repositories before calling set_project_root to switch context.',
-  {},
+  { readOnlyHint: true },
   async () => {
     try {
       const registryPath = path.join(getLumiOpsHome(), '.registry.json');
@@ -879,6 +889,7 @@ server.tool(
       .default(20)
       .describe('Maximum number of commits to return'),
   },
+  { readOnlyHint: true },
   async ({ branch, maxCount }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -951,6 +962,7 @@ server.tool(
     branch: z.string().describe('Branch name of the clone'),
     filepath: z.string().describe('Relative file path from the worktree root'),
   },
+  { readOnlyHint: true },
   async ({ branch, filepath }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
