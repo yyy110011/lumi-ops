@@ -979,10 +979,60 @@ describe('prompt-content resource', () => {
 // Clone: feat/mcp-prompts-review
 // ---------------------------------------------------------------------------
 
-// TODO: Add tests for 'review-and-merge' prompt
-// TODO: Add tests for 'resolve-conflict' prompt
-// - Should return structured messages guiding the workflow
-// - Should include tool names in the prompt messages
+describe('review-and-merge prompt', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getPromptHandler('review-and-merge');
+  });
+
+  it('should return messages containing relevant tool names', async () => {
+    const result = await handler({ branch: 'feat/test-branch' });
+
+    expect(result.messages).toHaveLength(1);
+    const text = result.messages[0].content.text;
+    expect(text).toContain('review_clone');
+    expect(text).toContain('merge_clone');
+    expect(text).toContain('set_clone_status');
+    expect(text).toContain('request_revision');
+    expect(text).toContain('get_clone_file_diff');
+  });
+
+  it('should include the branch arg in the message text', async () => {
+    const result = await handler({ branch: 'feat/my-feature' });
+
+    const text = result.messages[0].content.text;
+    expect(text).toContain('feat/my-feature');
+  });
+});
+
+describe('resolve-conflict prompt', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getPromptHandler('resolve-conflict');
+  });
+
+  it('should return messages with conflict resolution guidance', async () => {
+    const result = await handler({ source: 'feat/src', target: 'main' });
+
+    expect(result.messages).toHaveLength(1);
+    const text = result.messages[0].content.text;
+    expect(text).toContain('get_clone_file_diff');
+    expect(text).toContain('read_clone_file');
+    expect(text).toContain('merge_clone');
+  });
+
+  it('should reference both source and target branches', async () => {
+    const result = await handler({ source: 'feat/source-branch', target: 'develop' });
+
+    const text = result.messages[0].content.text;
+    expect(text).toContain('feat/source-branch');
+    expect(text).toContain('develop');
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Spawn & Strategy MCP Prompt tests

@@ -1225,14 +1225,91 @@ server.resource('config', 'lumi://config', async (uri) => {
 // Clone: feat/mcp-prompts-review
 // ---------------------------------------------------------------------------
 
-// TODO: Register MCP prompt 'review-and-merge'
-// Guides agent through: review_clone → approve/request_revision → merge_clone → kill_clone
-// Args: { branch: z.string() }
-// Use: server.prompt('review-and-merge', 'description', { branch: z.string() }, async ({ branch }) => { messages: [...] })
+server.prompt(
+  'review-and-merge',
+  'Step-by-step guide to review a shadow clone\'s work, then approve+merge or request revisions. Use this when a clone has status needsReview.',
+  { branch: z.string().describe('Branch name of the clone to review') },
+  async ({ branch }) => {
+    return {
+      messages: [
+        {
+          role: 'user' as const,
+          content: {
+            type: 'text' as const,
+            text: `You are reviewing a shadow clone's work. Follow these steps:
 
-// TODO: Register MCP prompt 'resolve-conflict'
-// Guides agent through merge conflict resolution
-// Args: { source: z.string(), target: z.string() }
+## Step 1: Get Review Summary
+Call \`review_clone\` with branch "${branch}" to get:
+- MISSION_COMPLETE.md report (what the agent claims to have done)
+- Diff statistics (files changed, insertions, deletions)
+- Commit history
+
+## Step 2: Inspect Changes
+Use \`get_clone_file_diff\` for any files that need closer inspection.
+Focus on: correctness, code quality, test coverage, and adherence to the original mission.
+
+## Step 3: Make a Decision
+**If approved:**
+1. \`set_clone_status\` → "done"
+2. \`merge_clone\` with source="${branch}" into target branch
+3. If merge succeeds: \`kill_clone\` to clean up
+4. If merge conflicts: follow the resolve-conflict workflow
+
+**If changes needed:**
+1. \`request_revision\` with specific, actionable feedback
+2. The clone agent will address the feedback on its next run`,
+          },
+        },
+      ],
+    };
+  },
+);
+
+server.prompt(
+  'resolve-conflict',
+  'Step-by-step guide to resolve merge conflicts after merge_clone returns a conflict status. Use this when merge_clone reports conflicted files.',
+  {
+    source: z.string().describe('Source branch (being merged)'),
+    target: z.string().describe('Target branch (merge destination)'),
+  },
+  async ({ source, target }) => {
+    return {
+      messages: [
+        {
+          role: 'user' as const,
+          content: {
+            type: 'text' as const,
+            text: `You are resolving merge conflicts between branches. Follow these steps:
+
+## Context
+- Source branch (being merged): "${source}"
+- Target branch (merge destination): "${target}"
+
+## Step 1: Understand the Conflict
+Review the conflict response from \`merge_clone\`. It includes:
+- List of conflicted files
+- Diff statistics showing what each branch changed
+- Paths to the source clone's MISSION.md and MISSION_COMPLETE.md
+
+## Step 2: Inspect Both Sides
+Use \`get_clone_file_diff\` to understand what the source branch ("${source}") changed.
+Use \`read_clone_file\` to read the current state of conflicted files in the source clone.
+
+## Step 3: Resolve Conflicts
+For each conflicted file:
+1. Understand the intent of both changes
+2. Manually edit the target branch to incorporate both sets of changes
+3. Prefer keeping both changes when possible; only discard if truly incompatible
+
+## Step 4: Retry the Merge
+After resolving conflicts in the target branch, retry \`merge_clone\` with source="${source}" and target="${target}".
+If new conflicts arise, repeat this process.`,
+          },
+        },
+      ],
+    };
+  },
+);
 
 // ---------------------------------------------------------------------------
 // MCP Prompt 3-4: Spawn & Strategy
