@@ -22,6 +22,23 @@ const mocks = vi.hoisted(() => {
     const handler = args[args.length - 1];
     toolRegistry[name] = handler;
   });
+  // Persistent storage for resource registrations
+  const resourceRegistry: Record<string, { handler: (...args: any[]) => Promise<any>; listHandler?: () => Promise<any> }> = {};
+  const resourceFn = vi.fn((...args: any[]) => {
+    const name = args[0] as string;
+    const handler = args[args.length - 1];
+    // For ResourceTemplate-based resources, the 2nd arg is a ResourceTemplate with list
+    const templateOrUri = args[1];
+    const listHandler = templateOrUri?.list ? templateOrUri.list : undefined;
+    resourceRegistry[name] = { handler, listHandler };
+  });
+  // Persistent storage for prompt registrations
+  const promptRegistry: Record<string, (...args: any[]) => Promise<any>> = {};
+  const promptFn = vi.fn((...args: any[]) => {
+    const name = args[0] as string;
+    const handler = args[args.length - 1];
+    promptRegistry[name] = handler;
+  });
   const connectFn = vi.fn();
   // Low-level server mock (McpServer.server property)
   const lowLevelServer = {
@@ -52,8 +69,12 @@ const mocks = vi.hoisted(() => {
     tool: toolFn,
     connect: connectFn,
     lowLevelServer,
-    serverInstance: { tool: toolFn, connect: connectFn, server: lowLevelServer },
     toolRegistry,
+    resource: resourceFn,
+    prompt: promptFn,
+    resourceRegistry,
+    promptRegistry,
+    serverInstance: { tool: toolFn, connect: connectFn, server: lowLevelServer, resource: resourceFn, prompt: promptFn },
   };
 });
 
@@ -123,6 +144,24 @@ function getToolHandler(toolName: string): ToolHandler {
   if (!handler) {
     const registered = Object.keys(mocks.toolRegistry).join(', ');
     throw new Error(`Tool "${toolName}" not registered. Registered: ${registered}`);
+  }
+  return handler;
+}
+
+function getResourceHandler(resourceName: string): { handler: ToolHandler; listHandler?: () => Promise<any> } {
+  const entry = mocks.resourceRegistry[resourceName];
+  if (!entry) {
+    const registered = Object.keys(mocks.resourceRegistry).join(', ');
+    throw new Error(`Resource "${resourceName}" not registered. Registered: ${registered}`);
+  }
+  return entry;
+}
+
+function getPromptHandler(promptName: string): ToolHandler {
+  const handler = mocks.promptRegistry[promptName];
+  if (!handler) {
+    const registered = Object.keys(mocks.promptRegistry).join(', ');
+    throw new Error(`Prompt "${promptName}" not registered. Registered: ${registered}`);
   }
   return handler;
 }
@@ -652,3 +691,63 @@ describe('read_clone_file tool', () => {
     expect(mocks.fsPromises.stat).not.toHaveBeenCalled();
   });
 });
+
+// ===========================================================================
+// v0.4.4 — Resource Tests
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// lumi://clones resource tests
+// Clone: feat/res-clones-list
+// ---------------------------------------------------------------------------
+
+// TODO: Add tests for 'clone-list' resource
+// - Should return enriched clone list
+// - Should handle empty clone list
+
+// ---------------------------------------------------------------------------
+// Per-clone file resource tests
+// Clone: feat/res-clone-files
+// ---------------------------------------------------------------------------
+
+// TODO: Add tests for 'clone-mission' resource
+// TODO: Add tests for 'clone-report' resource
+// TODO: Add tests for 'clone-feedback' resource
+// - Should read file from clone worktree
+// - Should handle missing file gracefully
+// - Should list available resources from existing clones
+
+// ---------------------------------------------------------------------------
+// Prompt & Config resource tests
+// Clone: feat/res-prompts-config
+// ---------------------------------------------------------------------------
+
+// TODO: Add tests for 'prompt-content' resource
+// TODO: Add tests for 'config' resource
+// - Should list prompts from both scopes
+// - Should return config with rootDir, detection method, version
+
+// ===========================================================================
+// v0.4.4 — MCP Prompt Tests
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Review & Conflict MCP Prompt tests
+// Clone: feat/mcp-prompts-review
+// ---------------------------------------------------------------------------
+
+// TODO: Add tests for 'review-and-merge' prompt
+// TODO: Add tests for 'resolve-conflict' prompt
+// - Should return structured messages guiding the workflow
+// - Should include tool names in the prompt messages
+
+// ---------------------------------------------------------------------------
+// Spawn & Strategy MCP Prompt tests
+// Clone: feat/mcp-prompts-spawn
+// ---------------------------------------------------------------------------
+
+// TODO: Add tests for 'spawn-with-context' prompt
+// TODO: Add tests for 'multi-clone-strategy' prompt
+// - Should return structured messages guiding the workflow
+// - Should include tool names in the prompt messages
+

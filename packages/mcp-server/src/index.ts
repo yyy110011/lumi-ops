@@ -1,6 +1,6 @@
 declare const __VERSION__: string;
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { RootsListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
@@ -1030,6 +1030,77 @@ server.tool(
     }
   },
 );
+
+// ===========================================================================
+// v0.4.4 — MCP Resources
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Resource 1: lumi://clones (Clone List)
+// Clone: feat/res-clones-list
+// ---------------------------------------------------------------------------
+
+// TODO: Register static resource 'clone-list' at 'lumi://clones'
+// Returns enriched clone list (same data as list_clones tool)
+// Use: server.resource('clone-list', 'lumi://clones', async (uri) => { ... })
+
+// ---------------------------------------------------------------------------
+// Resource 2-4: Per-clone file Resources
+// Clone: feat/res-clone-files
+// ---------------------------------------------------------------------------
+
+// TODO: Register dynamic resource 'clone-mission' at 'lumi://clones/{branch}/mission'
+// Reads .lumi/MISSION.md from the clone's worktree
+// Use: server.resource('clone-mission', new ResourceTemplate('lumi://clones/{branch}/mission', { list }), async (uri, { branch }) => { ... })
+
+// TODO: Register dynamic resource 'clone-report' at 'lumi://clones/{branch}/report'
+// Reads .lumi/MISSION_COMPLETE.md from the clone's worktree
+
+// TODO: Register dynamic resource 'clone-feedback' at 'lumi://clones/{branch}/feedback'
+// Reads .lumi/REVIEW_FEEDBACK.md from the clone's worktree
+
+// ---------------------------------------------------------------------------
+// Resource 5-6: Prompt & Config Resources
+// Clone: feat/res-prompts-config
+// ---------------------------------------------------------------------------
+
+// TODO: Register dynamic resource 'prompt-content' at 'lumi://prompts/{scope}/{name}'
+// Reads a specific prompt file from global or project scope
+// Use: server.resource('prompt-content', new ResourceTemplate('lumi://prompts/{scope}/{name}', { list }), async (uri, { scope, name }) => { ... })
+
+// TODO: Register static resource 'config' at 'lumi://config'
+// Returns { rootDir, rootDetectionMethod, version: __VERSION__ }
+
+// ===========================================================================
+// v0.4.4 — MCP Prompts (Workflow Templates)
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// MCP Prompt 1-2: Review & Conflict Resolution
+// Clone: feat/mcp-prompts-review
+// ---------------------------------------------------------------------------
+
+// TODO: Register MCP prompt 'review-and-merge'
+// Guides agent through: review_clone → approve/request_revision → merge_clone → kill_clone
+// Args: { branch: z.string() }
+// Use: server.prompt('review-and-merge', 'description', { branch: z.string() }, async ({ branch }) => { messages: [...] })
+
+// TODO: Register MCP prompt 'resolve-conflict'
+// Guides agent through merge conflict resolution
+// Args: { source: z.string(), target: z.string() }
+
+// ---------------------------------------------------------------------------
+// MCP Prompt 3-4: Spawn & Strategy
+// Clone: feat/mcp-prompts-spawn
+// ---------------------------------------------------------------------------
+
+// TODO: Register MCP prompt 'spawn-with-context'
+// Guides agent to spawn a clone from a task description
+// Args: { task: z.string() }
+
+// TODO: Register MCP prompt 'multi-clone-strategy'
+// Guides root agent to plan and execute multi-clone parallel development
+// Args: { goal: z.string() }
 
 // ---------------------------------------------------------------------------
 // Start
