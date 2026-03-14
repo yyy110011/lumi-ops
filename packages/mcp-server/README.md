@@ -92,6 +92,12 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
+### Claude Code
+
+```bash
+claude mcp add lumi-ops -- npx -y @lumi-ops/mcp-server
+```
+
 > **Note:** The server auto-detects the Git repository root from `cwd`. If detection fails, see [Troubleshooting](#troubleshooting) below.
 
 ## Available Tools
