@@ -2,7 +2,7 @@
   "name": "lumi-ops",
   "displayName": "Lumi-Ops",
   "description": "The workflow protocol for AI-assisted parallel development. Spawn isolated tasks, track progress, and review before merging.",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "publisher": "ZunRenYao",
   "engines": {
     "vscode": "^1.85.0"
