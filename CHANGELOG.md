@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.4.4 (Unreleased)
+
+### ✨ Features
+- **MCP Resources** — 6 new read-only MCP Resources for agent context awareness:
+  - `lumi://clones` — Clone list with metadata and status
+  - `lumi://clones/{branch}/mission` — Read a clone's MISSION.md
+  - `lumi://clones/{branch}/report` — Read MISSION_COMPLETE.md
+  - `lumi://clones/{branch}/feedback` — Read REVIEW_FEEDBACK.md  
+  - `lumi://prompts/{scope}/{name}` — Read a specific prompt file
+  - `lumi://config` — Server configuration (rootDir, detection method, version)
+- **MCP Workflow Prompts** — 4 MCP Prompt templates that appear in the client's prompt menu:
+  - `review-and-merge` — Guide agent through review → approve/revise → merge flow
+  - `spawn-with-context` — Guide agent to spawn a clone from a task description
+  - `multi-clone-strategy` — Guide root agent to plan multi-clone parallel strategy
+  - `resolve-conflict` — Guide agent through merge conflict resolution
+
 ## v0.4.0 (Unreleased)
 
 ### ✨ Features
