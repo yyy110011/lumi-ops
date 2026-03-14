@@ -22,6 +22,8 @@ Built on Git Worktrees. Works with Antigravity, Cursor, GitHub Copilot, and any 
 - **Root Agent Mode & Clone Agent Rules** — Settings to inject role-specific rules for strategist (root) and executor (clone) agents.
 - **Rebase Conflict UX** — Manual conflict resolution instead of auto-abort. Sidebar shows a `🔀 rebasing` indicator.
 - **Review Tools** — `review_clone` and `get_clone_file_diff` MCP tools for structured code review.
+- **MCP Resources (v0.4.4)** — 6 read-only Resources (`lumi://clones`, `lumi://clones/{branch}/mission|report|feedback`, `lumi://prompts/{scope}/{name}`, `lumi://config`) for agent context awareness without side effects.
+- **MCP Workflow Prompts (v0.4.4)** — 4 Prompt templates (`review-and-merge`, `spawn-with-context`, `multi-clone-strategy`, `resolve-conflict`) that appear in your MCP client's prompt menu.
 
 ---
 
@@ -85,6 +87,8 @@ Try telling your agent:
 - *"Spawn a clone for this bug fix and write the implementation"*
 - *"Review the clone on branch feat/auth and merge it if it looks good"*
 - *"List all active clones and kill the ones that are done"*
+
+The MCP server also exposes **6 Resources** (read-only context like clone missions, reports, and config) and **4 Prompt templates** (guided workflows for review, spawn, strategy planning, and conflict resolution).
 
 Works with Antigravity, VS Code (Copilot), Cursor, Windsurf, and Claude Desktop. See the [MCP Server README](https://github.com/yyy110011/lumi-ops/tree/main/packages/mcp-server) for per-IDE configuration.
 
