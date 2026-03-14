@@ -36,7 +36,7 @@
 
 ---
 
-## v0.4.4 — MCP Resources & Prompts ✅
+## v0.4.3 — MCP Resources & Prompts ✅
 
 ### Resources (read-only data exposure)
 - [x] `lumi://clones` — Clone list (lighter than tool call for agent context)

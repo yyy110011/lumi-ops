@@ -22,8 +22,8 @@ Built on Git Worktrees. Works with Antigravity, Cursor, GitHub Copilot, and any 
 - **Root Agent Mode & Clone Agent Rules** — Settings to inject role-specific rules for strategist (root) and executor (clone) agents.
 - **Rebase Conflict UX** — Manual conflict resolution instead of auto-abort. Sidebar shows a `🔀 rebasing` indicator.
 - **Review Tools** — `review_clone` and `get_clone_file_diff` MCP tools for structured code review.
-- **MCP Resources (v0.4.4)** — 6 read-only Resources (`lumi://clones`, `lumi://clones/{branch}/mission|report|feedback`, `lumi://prompts/{scope}/{name}`, `lumi://config`) for agent context awareness without side effects.
-- **MCP Workflow Prompts (v0.4.4)** — 4 Prompt templates (`review-and-merge`, `spawn-with-context`, `multi-clone-strategy`, `resolve-conflict`) that appear in your MCP client's prompt menu.
+- **MCP Resources (v0.4.3)** — 6 read-only Resources (`lumi://clones`, `lumi://clones/{branch}/mission|report|feedback`, `lumi://prompts/{scope}/{name}`, `lumi://config`) for agent context awareness without side effects.
+- **MCP Workflow Prompts (v0.4.3)** — 4 Prompt templates (`review-and-merge`, `spawn-with-context`, `multi-clone-strategy`, `resolve-conflict`) that appear in your MCP client's prompt menu.
 
 ---
 

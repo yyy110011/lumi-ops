@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## v0.4.4 (Unreleased)
+## v0.4.3 (Unreleased)
 
 ### ✨ Features
 - **MCP Resources** — 6 new read-only MCP Resources for agent context awareness:
