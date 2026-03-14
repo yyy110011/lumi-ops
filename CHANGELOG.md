@@ -2,7 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
-## v0.4.3 (Unreleased)
+## v0.4.4 (Unreleased)
+
+### 🔧 Improvements
+- **MCP Server Modular Refactoring** — Split the monolithic `index.ts` (1437 lines) into focused modules:
+  - `state.ts` — Shared server state singleton (rootDir, metadata helpers)
+  - `tools/clone-ops.ts` — Clone lifecycle tools (spawn, list, kill, merge)
+  - `tools/prompt-ops.ts` — Prompt tools (list_prompts, save_prompt, set_project_root)
+  - `tools/review-ops.ts` — Review tools (set_status, review, diff, revision, log, read_file)
+  - `prompts.ts` — MCP Prompt templates (review-and-merge, resolve-conflict, spawn-with-context, multi-clone-strategy)
+  - `resources.ts` — MCP Resources (lumi://clones, clone files, prompts, config)
+
+### 🐛 Bug Fixes
+- **Fix `typedHandler is not a function`** — MCP SDK v1.27.1's `isZodRawShapeCompat()` treats empty `{}` as a Zod raw shape, causing `server.tool(name, desc, schema, {}, callback)` to misassign the handler. Removed all empty `{}` annotations from 6 tool registrations across 3 files. Affected tools: `spawn_clone`, `merge_clone`, `request_revision`.
+
+### 🧪 Tests
+- **SDK Regression Test** — New `sdk-regression.test.ts` using the real `McpServer` (not mocks) to verify tool handler registration patterns. Documents the SDK bug and protects against reintroduction.
+
+## v0.4.3
 
 ### ✨ Features
 - **MCP Resources** — 6 new read-only MCP Resources for agent context awareness:

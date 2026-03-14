@@ -36,6 +36,14 @@
 
 ---
 
+## v0.4.4 — MCP Server Refactoring & Bug Fix ✅
+
+- [x] **Modular Refactoring** — Split `index.ts` into `state.ts`, `tools/`, `prompts.ts`, `resources.ts`
+- [x] **Fix empty annotations bug** — `typedHandler is not a function` caused by SDK `isZodRawShapeCompat({})` treating `{}` as Zod schema
+- [x] **SDK regression test** — Real `McpServer` test to catch handler registration bugs
+
+---
+
 ## v0.4.3 — MCP Resources & Prompts ✅
 
 ### Resources (read-only data exposure)
