@@ -221,7 +221,6 @@ export function registerReviewOpsTools(server: McpServer): void {
       branch: z.string().describe('Branch name of the clone to send feedback to'),
       feedback: z.string().describe('Review feedback content (markdown)'),
     },
-    {},
     async ({ branch, feedback }) => {
       const rootErr = ensureRootDir();
       if (rootErr) return rootErr;

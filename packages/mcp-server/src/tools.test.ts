@@ -1111,4 +1111,23 @@ describe('multi-clone-strategy prompt', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Regression: all tool handlers must be functions (not {})
+// ---------------------------------------------------------------------------
+// The MCP SDK v1.27.1 has a bug where `isZodRawShapeCompat()` treats empty `{}`
+// as a valid Zod raw shape. When server.tool() is called with
+// `server.tool(name, desc, schema, {}, callback)`, the SDK misidentifies `{}`
+// as a second inputSchema. This causes `args[args.length - 1]` (used by our
+// mock) to extract `{}` instead of the actual handler function.
+// This regression test catches that exact scenario.
 
+describe('tool handler registration integrity', () => {
+  it('should register all tool handlers as functions (regression: empty {} annotations)', () => {
+    const registeredTools = Object.entries(mocks.toolRegistry);
+    expect(registeredTools.length).toBeGreaterThan(0);
+
+    for (const [toolName, handler] of registeredTools) {
+      expect(typeof handler, `Tool "${toolName}" handler should be a function, got ${typeof handler}`).toBe('function');
+    }
+  });
+});

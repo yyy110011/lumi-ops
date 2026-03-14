@@ -274,7 +274,6 @@ server.tool(
       .optional()
       .describe('Scope of the prompt file'),
   },
-  {},
   async ({ branch, description, baseBranch, prompt, promptScope }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -453,7 +452,6 @@ server.tool(
     source: z.string().describe('Branch to merge FROM'),
     target: z.string().describe('Branch to merge INTO (your own branch)'),
   },
-  {},
   async ({ source, target }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -804,7 +802,6 @@ server.tool(
     branch: z.string().describe('Branch name of the clone to send feedback to'),
     feedback: z.string().describe('Review feedback content (markdown)'),
   },
-  {},
   async ({ branch, feedback }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;

@@ -37,7 +37,6 @@ export function registerCloneOpsTools(server: McpServer): void {
         .optional()
         .describe('Scope of the prompt file'),
     },
-    {},
     async ({ branch, description, baseBranch, prompt, promptScope }) => {
       const rootErr = ensureRootDir();
       if (rootErr) return rootErr;
@@ -216,7 +215,6 @@ export function registerCloneOpsTools(server: McpServer): void {
       source: z.string().describe('Branch to merge FROM'),
       target: z.string().describe('Branch to merge INTO (your own branch)'),
     },
-    {},
     async ({ source, target }) => {
       const rootErr = ensureRootDir();
       if (rootErr) return rootErr;
