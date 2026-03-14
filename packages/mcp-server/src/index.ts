@@ -1,6 +1,6 @@
 declare const __VERSION__: string;
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { RootsListChangedNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
@@ -140,13 +140,14 @@ const server = new McpServer({
 
 server.tool(
   'list_prompts',
-  'List available prompts from global and/or project scope.',
+  'List available prompts from global and/or project scope. Use before spawn_clone to discover reusable task prompts. Pairs with save_prompt for creating new prompts and spawn_clone\'s `prompt` param to attach one during spawn.',
   {
     scope: z
       .enum(['global', 'project', 'all'])
       .default('all')
       .describe('Which scope to list prompts from'),
   },
+  { readOnlyHint: true },
   async ({ scope }) => {
     const prompts: { name: string; scope: string; fileName: string; generated: boolean }[] = [];
 
@@ -180,7 +181,7 @@ server.tool(
 
 server.tool(
   'save_prompt',
-  'Create or overwrite a prompt file.',
+  'Create or overwrite a prompt file. Use to persist reusable task descriptions that can be attached to clones via spawn_clone\'s `prompt` param. Set `generated: true` for agent-authored prompts — these are saved to `_generated/` and auto-cleaned when the clone is killed.',
   {
     name: z.string().describe('Prompt name (without .md extension)'),
     content: z.string().describe('Markdown content of the prompt'),
@@ -194,6 +195,7 @@ server.tool(
       .optional()
       .describe('If true, save to _generated/ subdirectory (agent-authored, auto-cleaned on kill)'),
   },
+  { idempotentHint: true },
   async ({ name, content, scope, generated }) => {
     const sanitized = toKebabCase(name);
     if (!sanitized) {
@@ -227,10 +229,11 @@ server.tool(
 
 server.tool(
   'set_project_root',
-  'Set the Git project root directory for all lumi-ops operations. Call this if git operations fail or if the server detected the wrong repository.',
+  'Set the Git project root directory for all lumi-ops operations. This is a recovery tool — call it when git operations fail or the server detected the wrong repository. Root is normally auto-detected via MCP Roots Protocol, LUMI_OPS_ROOT env var, or cwd.',
   {
     path: z.string().describe('Absolute path to the project root directory'),
   },
+  { idempotentHint: true },
   async ({ path: newPath }) => {
     try {
       const resolved = resolveMainRepoRoot(newPath);
@@ -260,7 +263,7 @@ server.tool(
 
 server.tool(
   'spawn_clone',
-  'Create a new shadow clone (worktree) with optional prompt content.',
+  'Create a new shadow clone (worktree) with optional prompt content. Use list_prompts first to find reusable prompts, or pass a `description` directly. After spawning, use set_clone_status to track progress through the review lifecycle.',
   {
     branch: z.string().describe('Branch name for the new clone'),
     description: z.string().optional().describe('Task description → MISSION.md'),
@@ -271,6 +274,7 @@ server.tool(
       .optional()
       .describe('Scope of the prompt file'),
   },
+  {},
   async ({ branch, description, baseBranch, prompt, promptScope }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -347,8 +351,8 @@ server.tool(
 
 server.tool(
   'list_clones',
-  'List all shadow clones with their metadata.',
-  {},
+  'List all shadow clones with their metadata. Returns reviewStatus, description, and hasReport (indicates MISSION_COMPLETE.md exists, signaling review readiness). Use to find clones ready for review_clone or to check overall progress.',
+  { readOnlyHint: true },
   async () => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -392,7 +396,7 @@ server.tool(
 
 server.tool(
   'kill_clone',
-  'Remove a shadow clone.',
+  'Remove a shadow clone. Use after merge_clone to clean up, or to discard abandoned work. Set `keepBranch: true` to preserve the git branch for manual recovery. Note: the branch currently checked out in the main workspace cannot be killed.',
   {
     branch: z.string().describe('Clone identifier (directory name, e.g. feat/my-task)'),
     keepBranch: z
@@ -400,6 +404,7 @@ server.tool(
       .default(false)
       .describe('If true, keep the git branch after removing the worktree'),
   },
+  { destructiveHint: true },
   async ({ branch, keepBranch }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -443,11 +448,12 @@ server.tool(
 
 server.tool(
   'merge_clone',
-  'Pull-only squash merge: merge source branch INTO target branch.',
+  'Pull-only squash merge: merge source branch INTO target branch. Use review_clone first to inspect changes before merging. On conflict, returns conflicted file list and diff stats for resolution. Excludes .lumi/ workflow artifacts from the merge commit.',
   {
     source: z.string().describe('Branch to merge FROM'),
     target: z.string().describe('Branch to merge INTO (your own branch)'),
   },
+  {},
   async ({ source, target }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -601,13 +607,14 @@ server.tool(
 
 server.tool(
   'set_clone_status',
-  'Update the review status of a clone.',
+  'Update the review status of a clone. Valid statuses: todo → inProgress → needsReview → done (or needsRevision → inProgress for revision cycles, wontDo to discard). Agents should set needsReview when work is complete; reviewers set done or use request_revision.',
   {
     branch: z.string().describe('Clone identifier (directory name, e.g. feat/my-task)'),
     status: z
       .enum(['todo', 'inProgress', 'done', 'wontDo', 'needsReview', 'needsRevision'])
       .describe('New review status'),
   },
+  { idempotentHint: true },
   async ({ branch, status }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -636,10 +643,11 @@ server.tool(
 
 server.tool(
   'review_clone',
-  'Get a structured review summary of a shadow clone: completion report, diff stats, and commit list.',
+  'Get a structured review summary of a shadow clone: completion report, diff stats, and commit list. Use as the first step when reviewing work — it returns MISSION_COMPLETE.md content, changed file stats, and commit history. Follow up with get_clone_file_diff to deep-dive into specific file changes.',
   {
     branch: z.string().describe('Branch name of the clone to review'),
   },
+  { readOnlyHint: true },
   async ({ branch }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -743,11 +751,12 @@ server.tool(
 
 server.tool(
   'get_clone_file_diff',
-  'Get the full diff of a specific file in a shadow clone compared to its current branch.',
+  'Get the full diff of a specific file in a shadow clone compared to its current branch. Use after review_clone to inspect specific file changes in detail. Provide a relative file path from the repo root (as shown in review_clone\'s diffStat.files list).',
   {
     branch: z.string().describe('Branch name of the clone'),
     filepath: z.string().describe('Relative file path to diff (from repo root)'),
   },
+  { readOnlyHint: true },
   async ({ branch, filepath }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -790,11 +799,12 @@ server.tool(
 
 server.tool(
   'request_revision',
-  'Send review feedback to a shadow clone for revision. Writes .lumi/REVIEW_FEEDBACK.md and sets status to needsRevision.',
+  'Send review feedback to a shadow clone for revision. Writes .lumi/REVIEW_FEEDBACK.md and automatically sets status to needsRevision. Use after review_clone when changes need corrections — the clone agent will read the feedback on its next run and address the issues.',
   {
     branch: z.string().describe('Branch name of the clone to send feedback to'),
     feedback: z.string().describe('Review feedback content (markdown)'),
   },
+  {},
   async ({ branch, feedback }) => {
     const rootErr = ensureRootDir();
     if (rootErr) return rootErr;
@@ -819,6 +829,574 @@ server.tool(
         isError: true,
       };
     }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Tool 11: list_repos
+// ---------------------------------------------------------------------------
+
+server.tool(
+  'list_repos',
+  'List all Git repositories registered with Lumi-Ops. Returns repo names and root paths from the global registry. Use this to discover available repositories before calling set_project_root to switch context.',
+  { readOnlyHint: true },
+  async () => {
+    try {
+      const registryPath = path.join(getLumiOpsHome(), '.registry.json');
+      let registry: Record<string, string> = {};
+      try {
+        const raw = await fs.promises.readFile(registryPath, 'utf-8');
+        registry = JSON.parse(raw);
+      } catch {
+        // Registry doesn't exist or is invalid — return empty list
+      }
+
+      const repos = Object.entries(registry).map(([name, repoPath]) => ({
+        name,
+        path: repoPath,
+        isCurrent: repoPath === rootDir,
+      }));
+
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({ currentRepo: rootDir, repos }, null, 2),
+          },
+        ],
+      };
+    } catch (error: any) {
+      return {
+        content: [{ type: 'text' as const, text: `Error listing repos: ${error.message}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Tool 12: get_clone_log
+// ---------------------------------------------------------------------------
+
+server.tool(
+  'get_clone_log',
+  "Get the recent git commit history for a shadow clone's branch. Use this to understand what changes an agent has made. Pair with review_clone for a full review summary, or get_clone_file_diff for specific file changes.",
+  {
+    branch: z.string().describe('Branch name of the clone'),
+    maxCount: z
+      .number()
+      .optional()
+      .default(20)
+      .describe('Maximum number of commits to return'),
+  },
+  { readOnlyHint: true },
+  async ({ branch, maxCount }) => {
+    const rootErr = ensureRootDir();
+    if (rootErr) return rootErr;
+    try {
+      // 1. Read metadata to get baseBranch
+      const metadata = await readMetadata();
+      const baseBranch = metadata[branch]?.baseBranch || 'main';
+
+      // 2. Get formatted commit log
+      let commits: { hash: string; message: string; date: string; author: string }[] = [];
+      try {
+        const logRaw = execFileSync(
+          'git',
+          ['log', `--format=%H%x00%s%x00%ai%x00%an`, `${baseBranch}..${branch}`, `-${maxCount}`],
+          { cwd: rootDir, encoding: 'utf-8' },
+        );
+        commits = logRaw
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => {
+            const [hash, message, date, author] = line.split('\0');
+            return { hash, message, date, author };
+          });
+      } catch {
+        // No commits or branch not found — return empty
+      }
+
+      // 3. Get total commit count
+      let totalCommits = 0;
+      try {
+        const countRaw = execFileSync(
+          'git',
+          ['rev-list', '--count', `${baseBranch}..${branch}`],
+          { cwd: rootDir, encoding: 'utf-8' },
+        );
+        totalCommits = parseInt(countRaw.trim(), 10) || 0;
+      } catch {
+        // Fallback to commits array length
+        totalCommits = commits.length;
+      }
+
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({ branch, baseBranch, commits, totalCommits }, null, 2),
+          },
+        ],
+      };
+    } catch (error: any) {
+      return {
+        content: [{ type: 'text' as const, text: `Error getting clone log: ${error.message}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Tool 13: read_clone_file
+// ---------------------------------------------------------------------------
+
+const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1 MB
+
+server.tool(
+  'read_clone_file',
+  "Read the contents of a file from a shadow clone's worktree. Use this to inspect code, configuration, or any file in a clone without requiring filesystem access. Pair with get_clone_file_diff to see changes, or review_clone for an overview.",
+  {
+    branch: z.string().describe('Branch name of the clone'),
+    filepath: z.string().describe('Relative file path from the worktree root'),
+  },
+  { readOnlyHint: true },
+  async ({ branch, filepath }) => {
+    const rootErr = ensureRootDir();
+    if (rootErr) return rootErr;
+    try {
+      // 1. Find the clone's worktree path
+      const git = new GitUtils(rootDir);
+      const rawEntries = await git.listWorktrees();
+      const clones = parseWorktrees(rawEntries, rootDir);
+      const clone = clones.find((c) => c.branch === branch);
+
+      if (!clone) {
+        return {
+          content: [{ type: 'text' as const, text: `Error: no worktree found for branch "${branch}". The clone may have been killed.` }],
+          isError: true,
+        };
+      }
+
+      // 2. Resolve path and guard against traversal
+      const resolvedPath = path.resolve(clone.path, filepath);
+      if (!resolvedPath.startsWith(clone.path + path.sep) && resolvedPath !== clone.path) {
+        return {
+          content: [{ type: 'text' as const, text: `Error: path "${filepath}" resolves outside the clone's worktree. Path traversal is not allowed.` }],
+          isError: true,
+        };
+      }
+
+      // 3. Check file existence and size
+      let stat: { size: number };
+      try {
+        stat = await fs.promises.stat(resolvedPath);
+      } catch {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ branch, filepath, content: null, note: 'File not found' }, null, 2) }],
+        };
+      }
+
+      if (stat.size > MAX_FILE_SIZE) {
+        return {
+          content: [{ type: 'text' as const, text: `Error: file is ${(stat.size / 1024 / 1024).toFixed(1)}MB, exceeding the 1MB limit. Use get_clone_file_diff for large files.` }],
+          isError: true,
+        };
+      }
+
+      // 4. Read the file
+      const buffer = await fs.promises.readFile(resolvedPath);
+
+      // 5. Binary detection — check first 8KB for null bytes
+      const sample = buffer.subarray(0, 8192);
+      if (sample.includes(0)) {
+        return {
+          content: [{ type: 'text' as const, text: `Error: "${filepath}" appears to be a binary file. Use get_clone_file_diff to inspect changes instead.` }],
+          isError: true,
+        };
+      }
+
+      const content = buffer.toString('utf-8');
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ branch, filepath, content, size: stat.size }, null, 2) }],
+      };
+    } catch (error: any) {
+      return {
+        content: [{ type: 'text' as const, text: `Error reading file: ${error.message}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ===========================================================================
+// v0.4.4 — MCP Resources
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Resource 1: lumi://clones (Clone List)
+// Clone: feat/res-clones-list
+// ---------------------------------------------------------------------------
+
+server.resource('clone-list', 'lumi://clones', async (uri) => {
+  const rootErr = ensureRootDir();
+  if (rootErr) {
+    return { contents: [{ uri: uri.href, text: JSON.stringify({ error: 'No project root configured. Use set_project_root first.' }) }] };
+  }
+  try {
+    const git = new GitUtils(rootDir);
+    const rawEntries = await git.listWorktrees();
+    const clones = parseWorktrees(rawEntries, rootDir);
+    const metadata = await readMetadata();
+
+    // Enrich clones with metadata + hasReport
+    const enriched = clones.map((c) => {
+      const meta = metadata[c.dirName];
+      const hasReport = fs.existsSync(path.join(c.path, '.lumi', 'MISSION_COMPLETE.md'));
+      const base: ShadowClone & { hasReport: boolean } = { ...c, hasReport };
+      if (meta) {
+        return {
+          ...base,
+          baseBranch: meta.baseBranch || c.baseBranch,
+          description: meta.description,
+          reviewStatus: meta.reviewStatus,
+        };
+      }
+      return base;
+    });
+
+    return {
+      contents: [{ uri: uri.href, text: JSON.stringify({ repository: rootDir, clones: enriched }, null, 2) }],
+    };
+  } catch (error: any) {
+    return {
+      contents: [{ uri: uri.href, text: JSON.stringify({ error: `Error listing clones: ${error.message}` }) }],
+    };
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Resource 2-4: Per-clone file Resources
+// Clone: feat/res-clone-files
+// ---------------------------------------------------------------------------
+
+/** Helper to read a .lumi/ file from a clone's worktree. */
+async function readCloneLumiFile(branch: string, filename: string) {
+  const git = new GitUtils(rootDir);
+  const rawEntries = await git.listWorktrees();
+  const clones = parseWorktrees(rawEntries, rootDir);
+  const decodedBranch = decodeURIComponent(branch);
+  const clone = clones.find(c => c.branch === decodedBranch);
+  if (!clone) {
+    return { contents: [{ uri: `lumi://clones/${branch}/${filename}`, text: `Error: no worktree found for branch "${decodedBranch}".` }] };
+  }
+  try {
+    const content = await fs.promises.readFile(path.join(clone.path, '.lumi', filename), 'utf-8');
+    return { contents: [{ uri: `lumi://clones/${branch}/${filename}`, text: content }] };
+  } catch {
+    return { contents: [{ uri: `lumi://clones/${branch}/${filename}`, text: `File not found: .lumi/${filename}` }] };
+  }
+}
+
+/** Helper to list clones that have a specific .lumi/ file. */
+async function listClonesWithLumiFile(filename: string, resourceSuffix: string) {
+  const git = new GitUtils(rootDir);
+  const rawEntries = await git.listWorktrees();
+  const clones = parseWorktrees(rawEntries, rootDir);
+  return {
+    resources: clones
+      .filter(c => c.isShadow && fs.existsSync(path.join(c.path, '.lumi', filename)))
+      .map(c => ({
+        uri: `lumi://clones/${encodeURIComponent(c.branch)}/${resourceSuffix}`,
+        name: `${c.branch} — ${filename}`,
+      })),
+  };
+}
+
+server.resource(
+  'clone-mission',
+  new ResourceTemplate('lumi://clones/{branch}/mission', {
+    list: async () => listClonesWithLumiFile('MISSION.md', 'mission'),
+  }),
+  async (uri, { branch }) => readCloneLumiFile(branch as string, 'MISSION.md'),
+);
+
+server.resource(
+  'clone-report',
+  new ResourceTemplate('lumi://clones/{branch}/report', {
+    list: async () => listClonesWithLumiFile('MISSION_COMPLETE.md', 'report'),
+  }),
+  async (uri, { branch }) => readCloneLumiFile(branch as string, 'MISSION_COMPLETE.md'),
+);
+
+server.resource(
+  'clone-feedback',
+  new ResourceTemplate('lumi://clones/{branch}/feedback', {
+    list: async () => listClonesWithLumiFile('REVIEW_FEEDBACK.md', 'feedback'),
+  }),
+  async (uri, { branch }) => readCloneLumiFile(branch as string, 'REVIEW_FEEDBACK.md'),
+);
+
+// ---------------------------------------------------------------------------
+// Resource 5-6: Prompt & Config Resources
+// Clone: feat/res-prompts-config
+// ---------------------------------------------------------------------------
+
+server.resource(
+  'prompt-content',
+  new ResourceTemplate('lumi://prompts/{scope}/{name}', {
+    list: async () => {
+      const resources: { uri: string; name: string }[] = [];
+      for (const scope of ['global', 'project'] as const) {
+        const dir = promptDir(scope);
+        const files = await listPromptFiles(dir);
+        for (const f of files) {
+          const name = f.replace(/\.md$/, '');
+          resources.push({
+            uri: `lumi://prompts/${scope}/${encodeURIComponent(name)}`,
+            name: `[${scope}] ${name}`,
+          });
+        }
+        // Also list _generated/ prompts
+        const genDir = path.join(dir, '_generated');
+        const genFiles = await listPromptFiles(genDir);
+        for (const f of genFiles) {
+          const name = f.replace(/\.md$/, '');
+          resources.push({
+            uri: `lumi://prompts/${scope}/${encodeURIComponent('_generated/' + name)}`,
+            name: `[${scope}] _generated/${name}`,
+          });
+        }
+      }
+      return { resources };
+    },
+  }),
+  async (uri, { scope, name }) => {
+    if (scope !== 'global' && scope !== 'project') {
+      return {
+        contents: [{
+          uri: uri.href,
+          text: `Error: invalid scope "${scope}". Must be "global" or "project".`,
+        }],
+      };
+    }
+    const decodedName = decodeURIComponent(name as string);
+    const filePath = path.join(promptDir(scope), `${decodedName}.md`);
+    try {
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      return {
+        contents: [{
+          uri: uri.href,
+          text: content,
+        }],
+      };
+    } catch {
+      return {
+        contents: [{
+          uri: uri.href,
+          text: `Error: prompt "${decodedName}" not found in ${scope} scope.`,
+        }],
+      };
+    }
+  },
+);
+
+server.resource('config', 'lumi://config', async (uri) => {
+  return {
+    contents: [{
+      uri: uri.href,
+      text: JSON.stringify({
+        rootDir,
+        rootDetectionMethod,
+        version: __VERSION__,
+      }, null, 2),
+    }],
+  };
+});
+
+// ===========================================================================
+// v0.4.4 — MCP Prompts (Workflow Templates)
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// MCP Prompt 1-2: Review & Conflict Resolution
+// Clone: feat/mcp-prompts-review
+// ---------------------------------------------------------------------------
+
+server.prompt(
+  'review-and-merge',
+  'Step-by-step guide to review a shadow clone\'s work, then approve+merge or request revisions. Use this when a clone has status needsReview.',
+  { branch: z.string().describe('Branch name of the clone to review') },
+  async ({ branch }) => {
+    return {
+      messages: [
+        {
+          role: 'user' as const,
+          content: {
+            type: 'text' as const,
+            text: `You are reviewing a shadow clone's work. Follow these steps:
+
+## Step 1: Get Review Summary
+Call \`review_clone\` with branch "${branch}" to get:
+- MISSION_COMPLETE.md report (what the agent claims to have done)
+- Diff statistics (files changed, insertions, deletions)
+- Commit history
+
+## Step 2: Inspect Changes
+Use \`get_clone_file_diff\` for any files that need closer inspection.
+Focus on: correctness, code quality, test coverage, and adherence to the original mission.
+
+## Step 3: Make a Decision
+**If approved:**
+1. \`set_clone_status\` → "done"
+2. \`merge_clone\` with source="${branch}" into target branch
+3. If merge succeeds: \`kill_clone\` to clean up
+4. If merge conflicts: follow the resolve-conflict workflow
+
+**If changes needed:**
+1. \`request_revision\` with specific, actionable feedback
+2. The clone agent will address the feedback on its next run`,
+          },
+        },
+      ],
+    };
+  },
+);
+
+server.prompt(
+  'resolve-conflict',
+  'Step-by-step guide to resolve merge conflicts after merge_clone returns a conflict status. Use this when merge_clone reports conflicted files.',
+  {
+    source: z.string().describe('Source branch (being merged)'),
+    target: z.string().describe('Target branch (merge destination)'),
+  },
+  async ({ source, target }) => {
+    return {
+      messages: [
+        {
+          role: 'user' as const,
+          content: {
+            type: 'text' as const,
+            text: `You are resolving merge conflicts between branches. Follow these steps:
+
+## Context
+- Source branch (being merged): "${source}"
+- Target branch (merge destination): "${target}"
+
+## Step 1: Understand the Conflict
+Review the conflict response from \`merge_clone\`. It includes:
+- List of conflicted files
+- Diff statistics showing what each branch changed
+- Paths to the source clone's MISSION.md and MISSION_COMPLETE.md
+
+## Step 2: Inspect Both Sides
+Use \`get_clone_file_diff\` to understand what the source branch ("${source}") changed.
+Use \`read_clone_file\` to read the current state of conflicted files in the source clone.
+
+## Step 3: Resolve Conflicts
+For each conflicted file:
+1. Understand the intent of both changes
+2. Manually edit the target branch to incorporate both sets of changes
+3. Prefer keeping both changes when possible; only discard if truly incompatible
+
+## Step 4: Retry the Merge
+After resolving conflicts in the target branch, retry \`merge_clone\` with source="${source}" and target="${target}".
+If new conflicts arise, repeat this process.`,
+          },
+        },
+      ],
+    };
+  },
+);
+
+// ---------------------------------------------------------------------------
+// MCP Prompt 3-4: Spawn & Strategy
+// Clone: feat/mcp-prompts-spawn
+// ---------------------------------------------------------------------------
+
+server.prompt(
+  'spawn-with-context',
+  'Guide an agent through spawning a shadow clone for a given task. Checks for reusable prompts, picks a branch name, spawns the clone, and optionally saves the prompt for reuse.',
+  { task: z.string().describe('Task description or issue to work on') },
+  async ({ task }) => {
+    return {
+      messages: [
+        {
+          role: 'user' as const,
+          content: {
+            type: 'text' as const,
+            text: [
+              `You need to spawn a shadow clone to work on the following task:`,
+              ``,
+              `"${task}"`,
+              ``,
+              `## Step 1: Check for Existing Prompts`,
+              `Call \`list_prompts\` to see if there's already a prompt that matches this task.`,
+              ``,
+              `## Step 2: Choose a Branch Name`,
+              `Pick a descriptive branch name in kebab-case format:`,
+              `- Features: feat/short-description`,
+              `- Fixes: fix/short-description`,
+              `- Refactors: refactor/short-description`,
+              ``,
+              `## Step 3: Spawn the Clone`,
+              `Call \`spawn_clone\` with:`,
+              `- branch: your chosen branch name`,
+              `- description: a clear, actionable task description for the agent`,
+              `- Optionally: prompt + promptScope if reusing an existing prompt`,
+              ``,
+              `## Step 4: Save as Reusable Prompt (Optional)`,
+              `If this task pattern is likely to recur, use \`save_prompt\` to save it for future use.`,
+              `Set \`generated: true\` if it's auto-generated and should be cleaned up with the clone.`,
+            ].join('\n'),
+          },
+        },
+      ],
+    };
+  },
+);
+
+server.prompt(
+  'multi-clone-strategy',
+  'Guide a root agent through planning and executing a multi-clone parallel development strategy. Breaks down a high-level goal into independent tasks and spawns clones for each.',
+  { goal: z.string().describe('High-level goal requiring parallel development') },
+  async ({ goal }) => {
+    return {
+      messages: [
+        {
+          role: 'user' as const,
+          content: {
+            type: 'text' as const,
+            text: [
+              `You are the root agent planning a multi-clone parallel development strategy for:`,
+              ``,
+              `"${goal}"`,
+              ``,
+              `## Step 1: Break Down the Goal`,
+              `Analyze the goal and decompose it into independent, parallelizable tasks.`,
+              `For each task, determine:`,
+              `- Clear scope and deliverables`,
+              `- File dependencies (which files will be modified)`,
+              `- A descriptive branch name (feat/, fix/, refactor/)`,
+              ``,
+              `## Step 2: Check for Existing Work`,
+              `Call \`list_clones\` to check if any existing clones overlap with your planned tasks.`,
+              `Adjust your plan to avoid duplicate effort.`,
+              ``,
+              `## Step 3: Spawn Clones`,
+              `For each task, call \`spawn_clone\` with a clear, non-overlapping task description.`,
+              `Important: Clones that modify the same files will cause merge conflicts — plan to merge them sequentially.`,
+              ``,
+              `## Step 4: Monitor Progress`,
+              `Use \`list_clones\` to check overall status, and \`review_clone\` to inspect completed work.`,
+              `When a clone finishes (hasReport: true), review it and decide whether to merge or request revision.`,
+            ].join('\n'),
+          },
+        },
+      ],
+    };
   },
 );
 

@@ -2,7 +2,7 @@
 
 MCP (Model Context Protocol) server for the **Shadow Clone Protocol** — Git Worktree automation for AI agents.
 
-This server exposes the full Lumi-Ops toolset over MCP stdio, enabling AI agents to spawn, manage, review, and merge shadow clones (Git Worktrees) as part of a parallelised development workflow.
+This server exposes the full Lumi-Ops toolset over MCP stdio — 14 tools, 6 read-only resources, and 4 workflow prompt templates, enabling AI agents to spawn, manage, review, and merge shadow clones (Git Worktrees) as part of a parallelised development workflow.
 
 ## Installation
 
@@ -109,6 +109,33 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 | `list_prompts` | List available prompt templates from global and/or project scope |
 | `save_prompt` | Create or overwrite a prompt template file |
 | `set_project_root` | Set the Git project root if auto-detection fails or picks the wrong repo |
+| `list_repos` | List all Git repositories registered with Lumi-Ops |
+| `get_clone_log` | Get recent git commit history for a clone's branch |
+| `read_clone_file` | Read a file from a clone's worktree (with path traversal protection) |
+
+## Available Resources
+
+Resources expose read-only data that agents can access without triggering side effects.
+
+| Resource URI | Description |
+|---|---|
+| `lumi://clones` | Clone list with metadata, status, and completion report flags |
+| `lumi://clones/{branch}/mission` | Read a clone's MISSION.md |
+| `lumi://clones/{branch}/report` | Read a clone's MISSION_COMPLETE.md |
+| `lumi://clones/{branch}/feedback` | Read a clone's REVIEW_FEEDBACK.md |
+| `lumi://prompts/{scope}/{name}` | Read a specific prompt file (scope: `global` or `project`) |
+| `lumi://config` | Server configuration: rootDir, detection method, version |
+
+## Workflow Prompts
+
+MCP Prompt templates that appear in your client's prompt menu, guiding agents through multi-step workflows.
+
+| Prompt | Description |
+|---|---|
+| `review-and-merge` | Guide agent through review → approve/revise → merge → cleanup |
+| `spawn-with-context` | Guide agent to spawn a clone from a task description |
+| `multi-clone-strategy` | Guide root agent to plan and execute multi-clone parallel strategy |
+| `resolve-conflict` | Guide agent through merge conflict resolution |
 
 ## How It Works
 
@@ -119,6 +146,8 @@ The MCP server wraps the `@lumi-ops/cli` library and exposes its functionality o
 3. **Review** diffs and completion reports
 4. **Merge** finished work back via squash merge
 5. **Coordinate** multi-agent workflows using prompts and status transitions
+6. **Discover** context via read-only Resources — browse clone missions, reports, and prompts without side effects
+7. **Follow** guided workflow Prompts for common multi-step operations (review, spawn, strategy planning)
 
 ## Troubleshooting
 

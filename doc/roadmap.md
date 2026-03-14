@@ -17,7 +17,7 @@
 ✅ **Worktree Manager (Beta)** (Multi-repo dashboard with global repo registry)
 ✅ **Copy on Spawn** (Configurable folders/files to copy from root to clone)
 ✅ **StatusEventBus** (Centralized cross-view sync for metadata changes)
-✅ **MCP Server** (11 tools: spawn, kill, list, merge, review, revision, status, prompts, file diff)
+✅ **MCP Server** (14 tools: spawn, kill, list, merge, review, revision, status, prompts, file diff)
 ✅ **Clone Agent Rules** (Auto-inject executor rules into clones)
 ✅ **Root Agent Mode** (Strategist rules for main workspace)
 ✅ **Auto-Status Transitions** (`todo` → `inProgress` on workspace open)
@@ -33,6 +33,24 @@
 - [ ] Clone-specific quick action bar (run tests, Git operations, etc.)
 - [ ] Show diff status against base branch
 - [ ] Prompt Library categorization (This Clone / Project / Global grouping)
+
+---
+
+## v0.4.4 — MCP Resources & Prompts ✅
+
+### Resources (read-only data exposure)
+- [x] `lumi://clones` — Clone list (lighter than tool call for agent context)
+- [x] `lumi://clones/{branch}/mission` — Read a clone's MISSION.md
+- [x] `lumi://clones/{branch}/report` — Read MISSION_COMPLETE.md
+- [x] `lumi://clones/{branch}/feedback` — Read REVIEW_FEEDBACK.md
+- [x] `lumi://prompts/{scope}/{name}` — Read a specific prompt file
+- [x] `lumi://config` — Server configuration (rootDir, detection method, version)
+
+### Prompts (workflow guidance)
+- [x] `review-and-merge` — Guide agent through review → approve/revise → merge flow
+- [x] `spawn-with-context` — Guide agent to spawn a clone from a task description
+- [x] `multi-clone-strategy` — Guide root agent to plan multi-clone parallel strategy
+- [x] `resolve-conflict` — Guide agent through merge conflict resolution
 
 ---
 

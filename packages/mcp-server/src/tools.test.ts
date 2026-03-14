@@ -22,6 +22,23 @@ const mocks = vi.hoisted(() => {
     const handler = args[args.length - 1];
     toolRegistry[name] = handler;
   });
+  // Persistent storage for resource registrations
+  const resourceRegistry: Record<string, { handler: (...args: any[]) => Promise<any>; listHandler?: () => Promise<any> }> = {};
+  const resourceFn = vi.fn((...args: any[]) => {
+    const name = args[0] as string;
+    const handler = args[args.length - 1];
+    // For ResourceTemplate-based resources, the 2nd arg is a ResourceTemplate with list
+    const templateOrUri = args[1];
+    const listHandler = templateOrUri?.list ? templateOrUri.list : undefined;
+    resourceRegistry[name] = { handler, listHandler };
+  });
+  // Persistent storage for prompt registrations
+  const promptRegistry: Record<string, (...args: any[]) => Promise<any>> = {};
+  const promptFn = vi.fn((...args: any[]) => {
+    const name = args[0] as string;
+    const handler = args[args.length - 1];
+    promptRegistry[name] = handler;
+  });
   const connectFn = vi.fn();
   // Low-level server mock (McpServer.server property)
   const lowLevelServer = {
@@ -43,6 +60,7 @@ const mocks = vi.hoisted(() => {
       mkdir: vi.fn(),
       readdir: vi.fn(),
       unlink: vi.fn(),
+      stat: vi.fn(),
     },
     readMetadata: vi.fn().mockResolvedValue({}),
     writeMetadata: vi.fn().mockResolvedValue(undefined),
@@ -51,8 +69,12 @@ const mocks = vi.hoisted(() => {
     tool: toolFn,
     connect: connectFn,
     lowLevelServer,
-    serverInstance: { tool: toolFn, connect: connectFn, server: lowLevelServer },
     toolRegistry,
+    resource: resourceFn,
+    prompt: promptFn,
+    resourceRegistry,
+    promptRegistry,
+    serverInstance: { tool: toolFn, connect: connectFn, server: lowLevelServer, resource: resourceFn, prompt: promptFn },
   };
 });
 
@@ -83,6 +105,12 @@ vi.mock('@lumi-ops/cli', () => ({
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: vi.fn(() => mocks.serverInstance),
+  ResourceTemplate: class ResourceTemplate {
+    list?: () => Promise<any>;
+    constructor(public uriTemplate: string, opts?: { list?: () => Promise<any> }) {
+      this.list = opts?.list;
+    }
+  },
 }));
 vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
   StdioServerTransport: vi.fn(),
@@ -122,6 +150,24 @@ function getToolHandler(toolName: string): ToolHandler {
   if (!handler) {
     const registered = Object.keys(mocks.toolRegistry).join(', ');
     throw new Error(`Tool "${toolName}" not registered. Registered: ${registered}`);
+  }
+  return handler;
+}
+
+function getResourceHandler(resourceName: string): { handler: ToolHandler; listHandler?: () => Promise<any> } {
+  const entry = mocks.resourceRegistry[resourceName];
+  if (!entry) {
+    const registered = Object.keys(mocks.resourceRegistry).join(', ');
+    throw new Error(`Resource "${resourceName}" not registered. Registered: ${registered}`);
+  }
+  return entry;
+}
+
+function getPromptHandler(promptName: string): ToolHandler {
+  const handler = mocks.promptRegistry[promptName];
+  if (!handler) {
+    const registered = Object.keys(mocks.promptRegistry).join(', ');
+    throw new Error(`Prompt "${promptName}" not registered. Registered: ${registered}`);
   }
   return handler;
 }
@@ -417,3 +463,652 @@ describe('set_project_root tool', () => {
     expect(result.content[0].text).toContain('not a valid git repository');
   });
 });
+
+// ---------------------------------------------------------------------------
+// list_repos tests
+// ---------------------------------------------------------------------------
+
+describe('list_repos tool', () => {
+  let handler: ToolHandler;
+  // Use a known rootDir for list_repos tests by resetting via set_project_root.
+  // The rootDir is module-level state that prior test suites may mutate.
+  const KNOWN_ROOT = '/home/user/test-repo';
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    handler = getToolHandler('list_repos');
+
+    // Reset rootDir to a known value via set_project_root
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${KNOWN_ROOT}/.git\n`;
+      }
+      return '';
+    });
+    await getToolHandler('set_project_root')({ path: KNOWN_ROOT });
+  });
+
+  it('should return empty repos when registry does not exist', async () => {
+    mocks.fsPromises.readFile.mockRejectedValue(new Error('ENOENT'));
+
+    const result = await handler({});
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.currentRepo).toBe(KNOWN_ROOT);
+    expect(parsed.repos).toEqual([]);
+    expect(result.isError).toBeUndefined();
+  });
+
+  it('should return registry contents with isCurrent flag', async () => {
+    const registry = {
+      'my-project': KNOWN_ROOT,
+      'other-project': '/home/user/other-project',
+    };
+    mocks.fsPromises.readFile.mockImplementation(async (p: string) => {
+      if (typeof p === 'string' && p.includes('.registry.json')) {
+        return JSON.stringify(registry);
+      }
+      throw new Error('ENOENT');
+    });
+
+    const result = await handler({});
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.currentRepo).toBe(KNOWN_ROOT);
+    expect(parsed.repos).toHaveLength(2);
+
+    const current = parsed.repos.find((r: any) => r.name === 'my-project');
+    expect(current).toBeDefined();
+    expect(current.path).toBe(KNOWN_ROOT);
+    expect(current.isCurrent).toBe(true);
+
+    const other = parsed.repos.find((r: any) => r.name === 'other-project');
+    expect(other).toBeDefined();
+    expect(other.path).toBe('/home/user/other-project');
+    expect(other.isCurrent).toBe(false);
+  });
+
+  it('should always include currentRepo in response', async () => {
+    // Registry exists but does not contain the current rootDir
+    const registry = {
+      'unrelated-repo': '/home/user/unrelated',
+    };
+    mocks.fsPromises.readFile.mockImplementation(async (p: string) => {
+      if (typeof p === 'string' && p.includes('.registry.json')) {
+        return JSON.stringify(registry);
+      }
+      throw new Error('ENOENT');
+    });
+
+    const result = await handler({});
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.currentRepo).toBe(KNOWN_ROOT);
+    expect(parsed.repos).toHaveLength(1);
+    expect(parsed.repos[0].isCurrent).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// get_clone_log tests
+// ---------------------------------------------------------------------------
+
+describe('get_clone_log tool', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getToolHandler('get_clone_log');
+    // ensureRootDir uses execSync to validate git repo
+    mocks.execSync.mockReturnValue('');
+    // Default: metadata returns baseBranch for look-up
+    mocks.readMetadata.mockResolvedValue({
+      'feat/test': { baseBranch: 'main' },
+    });
+  });
+
+  it('should return empty commits array when branch has no commits ahead', async () => {
+    // git log returns empty string (no commits)
+    mocks.execFileSync.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('log')) return '';
+      if (args.includes('--count')) return '0\n';
+      return '';
+    });
+
+    const result = await handler({ branch: 'feat/test', maxCount: 20 });
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.branch).toBe('feat/test');
+    expect(parsed.baseBranch).toBe('main');
+    expect(parsed.commits).toEqual([]);
+    expect(parsed.totalCommits).toBe(0);
+    expect(result.isError).toBeUndefined();
+  });
+
+  it('should respect maxCount parameter', async () => {
+    mocks.execFileSync.mockImplementation((_cmd: string, args: string[]) => {
+      if (args.includes('log')) {
+        // Verify maxCount is reflected in the args
+        expect(args).toContain('-5');
+        return [
+          'abc1234\x00feat: add login\x002026-03-13 10:00:00 +0800\x00Alice',
+          'def5678\x00fix: typo\x002026-03-13 09:00:00 +0800\x00Bob',
+        ].join('\n');
+      }
+      if (args.includes('--count')) return '2\n';
+      return '';
+    });
+
+    const result = await handler({ branch: 'feat/test', maxCount: 5 });
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.commits).toHaveLength(2);
+    expect(parsed.commits[0]).toEqual({
+      hash: 'abc1234',
+      message: 'feat: add login',
+      date: '2026-03-13 10:00:00 +0800',
+      author: 'Alice',
+    });
+    expect(parsed.commits[1]).toEqual({
+      hash: 'def5678',
+      message: 'fix: typo',
+      date: '2026-03-13 09:00:00 +0800',
+      author: 'Bob',
+    });
+    expect(parsed.totalCommits).toBe(2);
+  });
+
+  it('should return empty commits for non-existent branch (git commands fail)', async () => {
+    // Both git log and rev-list throw for nonexistent branch
+    mocks.execFileSync.mockImplementation(() => {
+      throw new Error('fatal: bad revision');
+    });
+
+    const result = await handler({ branch: 'nonexistent/branch', maxCount: 20 });
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.commits).toEqual([]);
+    expect(parsed.totalCommits).toBe(0);
+    expect(result.isError).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// read_clone_file tests
+// ---------------------------------------------------------------------------
+
+describe('read_clone_file tool', () => {
+  let handler: ToolHandler;
+
+  const CLONE_PATH = path.join(ROOT_DIR, '.worktrees', 'feat/my-clone');
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getToolHandler('read_clone_file');
+    // ensureRootDir calls execSync('git rev-parse --show-toplevel') — must succeed
+    mocks.execSync.mockReturnValue('');
+    mocks.gitUtils.listWorktrees.mockResolvedValue([]);
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'feat/my-clone', branch: 'feat/my-clone', path: CLONE_PATH, dirName: 'feat/my-clone' },
+    ]);
+  });
+
+  it('should successfully read a text file from a clone', async () => {
+    mocks.fsPromises.stat.mockResolvedValue({ size: 42 });
+    mocks.fsPromises.readFile.mockResolvedValue(Buffer.from('hello world'));
+
+    const result = await handler({ branch: 'feat/my-clone', filepath: 'src/index.ts' });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.branch).toBe('feat/my-clone');
+    expect(parsed.filepath).toBe('src/index.ts');
+    expect(parsed.content).toBe('hello world');
+    expect(parsed.size).toBe(42);
+  });
+
+  it('should return error for non-existent clone', async () => {
+    mocks.parseWorktrees.mockReturnValue([]);
+
+    const result = await handler({ branch: 'feat/nonexistent', filepath: 'README.md' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('no worktree found');
+  });
+
+  it('should return not-found for non-existent file', async () => {
+    mocks.fsPromises.stat.mockRejectedValue(new Error('ENOENT'));
+
+    const result = await handler({ branch: 'feat/my-clone', filepath: 'does-not-exist.txt' });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.content).toBeNull();
+    expect(parsed.note).toBe('File not found');
+  });
+
+  it('should block path traversal attempts', async () => {
+    const result = await handler({ branch: 'feat/my-clone', filepath: '../../../etc/passwd' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Path traversal is not allowed');
+    // readFile should never be called for traversal attempts
+    expect(mocks.fsPromises.readFile).not.toHaveBeenCalled();
+    expect(mocks.fsPromises.stat).not.toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
+// v0.4.4 — Resource Tests
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// lumi://clones resource tests
+// Clone: feat/res-clones-list
+// ---------------------------------------------------------------------------
+
+describe('lumi://clones resource', () => {
+  let handler: (...args: any[]) => Promise<any>;
+  // Import fs mock reference for existsSync control
+  let existsSyncMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const entry = getResourceHandler('clone-list');
+    handler = entry.handler;
+    // Get the existsSync mock from the fs mock module
+    const fsMod = await import('fs');
+    existsSyncMock = fsMod.existsSync as ReturnType<typeof vi.fn>;
+    // Reset rootDir to ROOT_DIR via set_project_root (rootDir is module-level state)
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ROOT_DIR}/.git\n`;
+      }
+      return '';
+    });
+    await getToolHandler('set_project_root')({ path: ROOT_DIR });
+  });
+
+  it('should return enriched clone list with metadata and hasReport', async () => {
+    const clonePath1 = path.join(ROOT_DIR, '.worktrees', 'feat/alpha');
+    const clonePath2 = path.join(ROOT_DIR, '.worktrees', 'feat/beta');
+    mocks.gitUtils.listWorktrees.mockResolvedValue([]);
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'feat/alpha', branch: 'feat/alpha', path: clonePath1, dirName: 'feat/alpha', baseBranch: 'main' },
+      { currentBranch: 'feat/beta', branch: 'feat/beta', path: clonePath2, dirName: 'feat/beta', baseBranch: 'main' },
+    ]);
+    mocks.readMetadata.mockResolvedValue({
+      'feat/alpha': { baseBranch: 'develop', description: 'Alpha task', reviewStatus: 'needsReview' },
+    });
+    existsSyncMock.mockImplementation((p: string) => {
+      if (typeof p === 'string' && p.includes('feat/alpha') && p.includes('MISSION_COMPLETE.md')) return true;
+      return false;
+    });
+
+    const result = await handler(new URL('lumi://clones'), {});
+
+    const parsed = JSON.parse(result.contents[0].text);
+    expect(parsed.repository).toBe(ROOT_DIR);
+    expect(parsed.clones).toHaveLength(2);
+
+    const alpha = parsed.clones.find((c: any) => c.dirName === 'feat/alpha');
+    expect(alpha.hasReport).toBe(true);
+    expect(alpha.baseBranch).toBe('develop');
+    expect(alpha.description).toBe('Alpha task');
+    expect(alpha.reviewStatus).toBe('needsReview');
+
+    const beta = parsed.clones.find((c: any) => c.dirName === 'feat/beta');
+    expect(beta.hasReport).toBe(false);
+    expect(beta.description).toBeUndefined();
+  });
+
+  it('should handle empty clone list', async () => {
+    mocks.gitUtils.listWorktrees.mockResolvedValue([]);
+    mocks.parseWorktrees.mockReturnValue([]);
+    mocks.readMetadata.mockResolvedValue({});
+
+    const result = await handler(new URL('lumi://clones'), {});
+
+    const parsed = JSON.parse(result.contents[0].text);
+    expect(parsed.repository).toBe(ROOT_DIR);
+    expect(parsed.clones).toEqual([]);
+  });
+
+  it('should handle git errors gracefully', async () => {
+    mocks.gitUtils.listWorktrees.mockRejectedValue(new Error('git failed'));
+
+    const result = await handler(new URL('lumi://clones'), {});
+
+    const parsed = JSON.parse(result.contents[0].text);
+    expect(parsed.error).toContain('Error listing clones');
+    expect(parsed.error).toContain('git failed');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-clone file resource tests
+// Clone: feat/res-clone-files
+// ---------------------------------------------------------------------------
+
+describe('per-clone file resources (clone-mission, clone-report, clone-feedback)', () => {
+  const CLONE_PATH = path.join(ROOT_DIR, '.worktrees', 'feat/my-clone');
+
+  // Resource name → .lumi/ filename mapping
+  const resourceMap: Record<string, string> = {
+    'clone-mission': 'MISSION.md',
+    'clone-report': 'MISSION_COMPLETE.md',
+    'clone-feedback': 'REVIEW_FEEDBACK.md',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // ensureRootDir uses execSync to validate git repo
+    mocks.execSync.mockReturnValue('');
+    mocks.gitUtils.listWorktrees.mockResolvedValue([]);
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'feat/my-clone', branch: 'feat/my-clone', path: CLONE_PATH, dirName: 'feat/my-clone', isShadow: true },
+    ]);
+  });
+
+  for (const [resourceName, filename] of Object.entries(resourceMap)) {
+    describe(resourceName, () => {
+      it(`should read ${filename} from clone worktree successfully`, async () => {
+        const { handler } = getResourceHandler(resourceName);
+        const fileContent = `# ${filename} content`;
+        mocks.fsPromises.readFile.mockResolvedValue(fileContent);
+
+        const result = await handler(
+          new URL(`lumi://clones/${encodeURIComponent('feat/my-clone')}/${resourceName.replace('clone-', '')}`),
+          { branch: encodeURIComponent('feat/my-clone') },
+        );
+
+        expect(result.contents).toHaveLength(1);
+        expect(result.contents[0].text).toBe(fileContent);
+        expect(mocks.fsPromises.readFile).toHaveBeenCalledWith(
+          path.join(CLONE_PATH, '.lumi', filename),
+          'utf-8',
+        );
+      });
+
+      it('should handle missing file gracefully', async () => {
+        const { handler } = getResourceHandler(resourceName);
+        mocks.fsPromises.readFile.mockRejectedValue(new Error('ENOENT'));
+
+        const result = await handler(
+          new URL(`lumi://clones/${encodeURIComponent('feat/my-clone')}/${resourceName.replace('clone-', '')}`),
+          { branch: encodeURIComponent('feat/my-clone') },
+        );
+
+        expect(result.contents).toHaveLength(1);
+        expect(result.contents[0].text).toContain('File not found');
+      });
+
+      it('should handle non-existent clone', async () => {
+        const { handler } = getResourceHandler(resourceName);
+        mocks.parseWorktrees.mockReturnValue([]);
+
+        const result = await handler(
+          new URL(`lumi://clones/${encodeURIComponent('feat/nonexistent')}/${resourceName.replace('clone-', '')}`),
+          { branch: encodeURIComponent('feat/nonexistent') },
+        );
+
+        expect(result.contents).toHaveLength(1);
+        expect(result.contents[0].text).toContain('no worktree found');
+      });
+
+      it('should list clones that have the file', async () => {
+        const { listHandler } = getResourceHandler(resourceName);
+        expect(listHandler).toBeDefined();
+
+        // Import fs mock to control existsSync
+        const fs = await import('fs');
+        (fs.existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: string) => {
+          if (typeof p === 'string' && p.includes('.lumi') && p.includes(filename)) {
+            return true;
+          }
+          return false;
+        });
+
+        const result = await listHandler!();
+
+        expect(result.resources).toHaveLength(1);
+        expect(result.resources[0].name).toContain('feat/my-clone');
+        expect(result.resources[0].uri).toContain(encodeURIComponent('feat/my-clone'));
+      });
+
+      it('should return empty list when no clones have the file', async () => {
+        const { listHandler } = getResourceHandler(resourceName);
+        expect(listHandler).toBeDefined();
+
+        const fs = await import('fs');
+        (fs.existsSync as ReturnType<typeof vi.fn>).mockReturnValue(false);
+
+        const result = await listHandler!();
+
+        expect(result.resources).toHaveLength(0);
+      });
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Prompt & Config resource tests
+// Clone: feat/res-prompts-config
+// ---------------------------------------------------------------------------
+
+describe('config resource', () => {
+  it('should return rootDir, detection method, and version', async () => {
+    const { handler } = getResourceHandler('config');
+    const uri = new URL('lumi://config');
+
+    const result = await handler(uri, {});
+
+    const parsed = JSON.parse(result.contents[0].text);
+    expect(parsed.rootDir).toBeDefined();
+    expect(parsed.rootDetectionMethod).toBeDefined();
+    expect(parsed.version).toBe('0.0.0-test');
+  });
+});
+
+describe('prompt-content resource', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should read prompt file content', async () => {
+    mocks.fsPromises.readFile.mockImplementation(async (p: string) => {
+      if (typeof p === 'string' && p.includes('.prompts') && p.endsWith('my-task.md')) {
+        return 'Task prompt content here';
+      }
+      throw new Error('ENOENT');
+    });
+
+    const { handler } = getResourceHandler('prompt-content');
+    const uri = new URL('lumi://prompts/project/my-task');
+
+    const result = await handler(uri, { scope: 'project', name: 'my-task' });
+
+    expect(result.contents[0].text).toBe('Task prompt content here');
+  });
+
+  it('should handle missing prompt gracefully', async () => {
+    mocks.fsPromises.readFile.mockRejectedValue(new Error('ENOENT'));
+
+    const { handler } = getResourceHandler('prompt-content');
+    const uri = new URL('lumi://prompts/project/nonexistent');
+
+    const result = await handler(uri, { scope: 'project', name: 'nonexistent' });
+
+    expect(result.contents[0].text).toContain('not found');
+  });
+
+  it('should enumerate prompts from both scopes', async () => {
+    mocks.fsPromises.readdir.mockImplementation(async (dir: string) => {
+      if (typeof dir === 'string' && dir.includes('.lumi-ops/.prompts') && !dir.includes('_generated')) {
+        return [
+          { name: 'global-task.md', isFile: () => true },
+        ];
+      }
+      if (typeof dir === 'string' && dir.endsWith('.prompts') && !dir.includes('_generated')) {
+        return [
+          { name: 'project-task.md', isFile: () => true },
+        ];
+      }
+      // _generated dirs — return empty
+      return [];
+    });
+
+    const { listHandler } = getResourceHandler('prompt-content');
+    expect(listHandler).toBeDefined();
+
+    const result = await listHandler!();
+
+    expect(result.resources.length).toBeGreaterThanOrEqual(2);
+    const uris = result.resources.map((r: any) => r.uri);
+    expect(uris).toContain('lumi://prompts/global/global-task');
+    expect(uris).toContain('lumi://prompts/project/project-task');
+  });
+});
+
+// ===========================================================================
+// v0.4.4 — MCP Prompt Tests
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Review & Conflict MCP Prompt tests
+// Clone: feat/mcp-prompts-review
+// ---------------------------------------------------------------------------
+
+describe('review-and-merge prompt', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getPromptHandler('review-and-merge');
+  });
+
+  it('should return messages containing relevant tool names', async () => {
+    const result = await handler({ branch: 'feat/test-branch' });
+
+    expect(result.messages).toHaveLength(1);
+    const text = result.messages[0].content.text;
+    expect(text).toContain('review_clone');
+    expect(text).toContain('merge_clone');
+    expect(text).toContain('set_clone_status');
+    expect(text).toContain('request_revision');
+    expect(text).toContain('get_clone_file_diff');
+  });
+
+  it('should include the branch arg in the message text', async () => {
+    const result = await handler({ branch: 'feat/my-feature' });
+
+    const text = result.messages[0].content.text;
+    expect(text).toContain('feat/my-feature');
+  });
+});
+
+describe('resolve-conflict prompt', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getPromptHandler('resolve-conflict');
+  });
+
+  it('should return messages with conflict resolution guidance', async () => {
+    const result = await handler({ source: 'feat/src', target: 'main' });
+
+    expect(result.messages).toHaveLength(1);
+    const text = result.messages[0].content.text;
+    expect(text).toContain('get_clone_file_diff');
+    expect(text).toContain('read_clone_file');
+    expect(text).toContain('merge_clone');
+  });
+
+  it('should reference both source and target branches', async () => {
+    const result = await handler({ source: 'feat/source-branch', target: 'develop' });
+
+    const text = result.messages[0].content.text;
+    expect(text).toContain('feat/source-branch');
+    expect(text).toContain('develop');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Spawn & Strategy MCP Prompt tests
+// Clone: feat/mcp-prompts-spawn
+// ---------------------------------------------------------------------------
+
+describe('spawn-with-context prompt', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getPromptHandler('spawn-with-context');
+  });
+
+  it('should return messages containing tool names', async () => {
+    const result = await handler({ task: 'Add user authentication' });
+
+    expect(result.messages).toHaveLength(1);
+    const text = result.messages[0].content.text;
+    expect(text).toContain('list_prompts');
+    expect(text).toContain('spawn_clone');
+    expect(text).toContain('save_prompt');
+  });
+
+  it('should include the task arg in the message', async () => {
+    const task = 'Implement OAuth2 login flow';
+    const result = await handler({ task });
+
+    const text = result.messages[0].content.text;
+    expect(text).toContain(task);
+  });
+
+  it('should reference branch naming conventions', async () => {
+    const result = await handler({ task: 'Fix login bug' });
+
+    const text = result.messages[0].content.text;
+    expect(text).toContain('feat/');
+    expect(text).toContain('fix/');
+    expect(text).toContain('refactor/');
+  });
+});
+
+describe('multi-clone-strategy prompt', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getPromptHandler('multi-clone-strategy');
+  });
+
+  it('should return messages with planning guidance', async () => {
+    const result = await handler({ goal: 'Migrate to new API' });
+
+    expect(result.messages).toHaveLength(1);
+    const text = result.messages[0].content.text;
+    expect(text).toContain('Break Down the Goal');
+    expect(text).toContain('parallelizable');
+    expect(text).toContain('merge conflicts');
+  });
+
+  it('should include the goal arg in the message', async () => {
+    const goal = 'Refactor the entire data layer to use GraphQL';
+    const result = await handler({ goal });
+
+    const text = result.messages[0].content.text;
+    expect(text).toContain(goal);
+  });
+
+  it('should reference related tools in the message content', async () => {
+    const result = await handler({ goal: 'Build v2.0 features' });
+
+    const text = result.messages[0].content.text;
+    expect(text).toContain('list_clones');
+    expect(text).toContain('spawn_clone');
+    expect(text).toContain('review_clone');
+  });
+});
+
+

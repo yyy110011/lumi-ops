@@ -9,12 +9,14 @@
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-☕-yellow?style=flat)](https://buymeacoffee.com/ryanzryao)
 
-**Lumi-Ops** (Luminescent Operations) is a **Shadow Clone Protocol** for AI Agents.
+**Lumi-Ops** — **The workflow protocol for AI-assisted parallel development.**
 
-Spawn isolated **Git Worktrees** ("Shadow Clones") so multiple AI Agents can work on different features simultaneously — without interfering with your main development environment.
+Equip your AI agent with a protocol for parallel development. Spawn isolated tasks, track state transitions, and enforce structured reviews before merging.
+
+Built on Git Worktrees. Works with Antigravity, Cursor, GitHub Copilot, and any MCP-compatible AI.
 
 ### 🆕 v0.4.0 — MCP Server & Review Protocol
-- **MCP Server** — New `@lumi-ops/mcp-server` package with 11 tools for spawn, kill, list, review, merge, and status management. Install via `npx @lumi-ops/mcp-server`. Works with Antigravity, VS Code, Cursor, Windsurf, and Claude Desktop.
+- **MCP Server** — New `@lumi-ops/mcp-server` package with 14 tools for the full clone lifecycle, plus 6 Resources and 4 Prompt templates for agent context and workflow guidance. Install via `npx @lumi-ops/mcp-server`. Works with Antigravity, VS Code, Cursor, Windsurf, and Claude Desktop.
 - **Agent-Driven Review Protocol** — Clone agent writes `MISSION_COMPLETE.md` → sets `needsReview` → root agent reviews via `review_clone` → approves or `request_revision` with feedback.
 - **Clone Agent Rules** — Auto-inject `.agents/rules/lumi-ops-clone-agent.md` into clones, teaching agents the review protocol.
 - **Root Agent Mode** — Inject strategist rules into the main workspace so your root agent plans and delegates instead of implementing directly.
@@ -31,7 +33,7 @@ packages/
 
 ## 🔌 MCP Server
 
-Let your AI agent spawn, review, and merge clones for you — hands-free. Connect any MCP-compatible agent:
+Let your AI agent spawn, review, and merge clones for you — hands-free. The server exposes 14 tools, 6 read-only Resources, and 4 workflow Prompt templates. Connect any MCP-compatible agent:
 
 ```bash
 npx @lumi-ops/mcp-server
@@ -50,20 +52,19 @@ Press **F5** in VS Code / Antigravity to launch the Extension Development Host.
 
 ## ✨ Features
 
-- **Spawn Shadow Clones** — Create a new branch + worktree instantly from the sidebar.
-- **Agent Context** — Auto-generates `MISSION.md` with the task objective for your AI Agent.
-- **Review Protocol** — Agent writes `MISSION_COMPLETE.md` and sets status to `needsReview`. Review diffs, approve, or request revision — via sidebar or MCP.
-- **Clone Agent Rules** — Auto-inject executor rules into clones so agents know when and how to submit for review.
-- **Root Agent Mode** — Inject strategist rules for the root workspace: plan, delegate, don't implement directly.
-- **Mission Templates** — Define reusable MISSION.md templates with Task / Rules / Instructions fields. Dual-scope (Global + Project), custom editor, fork & copy across scopes.
+- **🔄 Review Protocol** — Agent writes `MISSION_COMPLETE.md` and sets status to `needsReview`. Review diffs, approve, or request revision — via sidebar or MCP. Stop guessing if an agent is done.
+- **🔌 MCP Server** — `npx @lumi-ops/mcp-server` exposes 14 tools, 6 resources, and 4 prompt templates to your AI. Your main agent can autonomously spawn clones, review their diffs, and merge them.
+- **📄 Mission Templates** — Define reusable MISSION.md templates with Task / Rules / Instructions fields. Dual-scope (Global + Project), custom editor, fork & copy across scopes. Standardize how tasks are assigned to reduce agent hallucinations.
+- **🧠 Agent Rules** — Clone Agent Rules auto-inject executor rules into clones so agents know the review protocol. Root Agent Mode injects strategist rules for the main workspace: plan, delegate, don't implement directly.
+- **📚 Prompt Library** — Save and reuse task descriptions as templates. Dual-scope storage (Global `~/.lumi-ops/.prompts/` + Project `<repoRoot>/.prompts/`). Per-item scope badges, edit, copy, and delete actions. Cross-window sync.
+- **Auto-Status Transitions** — Clone status auto-transitions from `todo` → `inProgress` when the workspace opens.
+- **👻 Git Worktree Isolation** — Physical directory separation ensures parallel agents never overwrite each other's files. Spawn a new branch + worktree instantly from the sidebar. Auto-generates `MISSION.md` with the task objective for your AI Agent.
 - **Shadow Mode UI** — When opened inside a Shadow Clone, the UI is fully unified with Root Mode. All operations (Spawn, Kill, Merge) are available. Your current clone is marked with `★`.
-- **Prompt Library** — Save and reuse task descriptions as templates. Dual-scope storage (Global `~/.lumi-ops/.prompts/` + Project `<repoRoot>/.prompts/`). Per-item scope badges, edit, copy, and delete actions. Cross-window sync.
 - **Worktree Manager (Beta)** — Multi-repo dashboard showing all registered repos and worktrees in one panel. Review status cycling and inline notes.
 - **Non-Blocking** — Main window stays on your current branch. Spawn as many agents as you want.
 - **Squash & Merge** — Select a target branch and merge with one click. Base branch shown as `← recommended`.
 - **Conflict Detection** — Unresolved merge conflicts are detected and shown with ⚠️ in the sidebar.
 - **Copy on Spawn** — Configure folders/files to auto-copy from root to clone via `lumi-ops.copyOnSpawn` setting.
-- **Auto-Status Transitions** — Clone status auto-transitions from `todo` → `inProgress` when the workspace opens.
 - **Dropdown Search** — Branch Name and Base Branch inputs filter branches in real-time as you type. Press Esc to dismiss.
 - **Copy Branch Name** — Right-click any clone to copy its branch name to the clipboard.
 - **Current Branch Protection** — Your active branch cannot be accidentally killed from the sidebar.
