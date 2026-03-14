@@ -17,7 +17,7 @@
 ✅ **Worktree Manager (Beta)** (Multi-repo dashboard with global repo registry)
 ✅ **Copy on Spawn** (Configurable folders/files to copy from root to clone)
 ✅ **StatusEventBus** (Centralized cross-view sync for metadata changes)
-✅ **MCP Server** (14 tools: spawn, kill, list, merge, review, revision, status, prompts, file diff)
+✅ **MCP Server** (14 tools, 6 resources, 4 prompts — [strategy](./mcp-server-strategy.md))
 ✅ **Clone Agent Rules** (Auto-inject executor rules into clones)
 ✅ **Root Agent Mode** (Strategist rules for main workspace)
 ✅ **Auto-Status Transitions** (`todo` → `inProgress` on workspace open)
