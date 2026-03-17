@@ -2,7 +2,7 @@
 
 ## 現況盤點
 
-目前 `@lumi-ops/mcp-server` 提供 **14 個 Tools、6 個 Resources、4 個 MCP Prompts**，涵蓋 Shadow Clone 完整生命週期：
+目前 `@lumi-ops/mcp-server` 提供 **15 個 Tools、6 個 Resources、4 個 MCP Prompts**，涵蓋 Shadow Clone 完整生命週期：
 
 | 類別 | 現有 Tools |
 |------|-----------|
@@ -151,13 +151,13 @@ server.tool('exec_in_clone', {
 
 目前 MCP Server 是 **single-repo** 設計。要支援多 repo：
 
-| 方案 | 說明 | 複雜度 |
-|------|------|--------|
-| **A. 多實例** | 每個 repo 啟動一個 MCP Server | 低，Client 負責管理 |
-| **B. Single Server + Repo 切換** | `set_project_root` 已部分實現 | 中，需要防止狀態混淆 |
-| **C. 所有 Tool 加 `repo` 參數** | 每個 call 指定 repo | 高，API 變複雜 |
+| 方案 | 說明 | 複雜度 | 狀態 |
+|------|------|--------|------|
+| **A. 多實例** | 每個 repo 啟動一個 MCP Server | 低，Client 負責管理 | 可用 |
+| **B. Single Server + Repo 切換** | `set_project_root` 已部分實現 | 中，需要防止狀態混淆 | ✅ 已實現 |
+| **C. 所有 Tool 加 `repo` 參數** | 每個 call 指定 repo | 高，API 變複雜 | ✅ v0.4.4 |
 
-**建議**：維持方案 B，但加入 **`list_repos`** tool（讀取 `~/.lumi-ops/.registry.json`）讓 Agent 知道有哪些 repo 可以操作。 ✅ `list_repos` 已實現 (v0.4.3)
+**最終方案**：採用方案 C — 所有 branch-targeting tools 現在都支援 optional `repo` 參數（v0.4.4）。Worktree 路徑會自動解析到 main repo root，使 `set_project_root` 在多 repo 場景下不再必要。`list_repos` ✅ 已實現 (v0.4.3) 供 Agent 查詢可用的 repo。
 
 ---
 

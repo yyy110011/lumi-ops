@@ -38,6 +38,24 @@ export async function kill(identifier: string, options: { root: string; keepBran
       console.log(chalk.gray('✓ Cleaned up residual clone directory.'));
     }
 
+    // 2c. Clean up empty parent directories left by nested branch names (e.g. feat/xxx)
+    const clonesDir = getClonesDir(rootDir);
+    let parentDir = path.dirname(targetPath);
+    while (parentDir !== clonesDir && parentDir.startsWith(clonesDir)) {
+      try {
+        const entries = await fs.readdir(parentDir, { withFileTypes: true });
+        const hasSubdirs = entries.some((e: { isDirectory: () => boolean }) => e.isDirectory());
+        if (!hasSubdirs) {
+          await fs.remove(parentDir);
+          parentDir = path.dirname(parentDir);
+        } else {
+          break; // Parent still has child directories (other clones), stop climbing
+        }
+      } catch {
+        break; // Directory doesn't exist or not accessible, stop
+      }
+    }
+
     // 3. Delete branch (unless keepBranch is set)
     if (!options.keepBranch) {
       // Delete the actual current branch

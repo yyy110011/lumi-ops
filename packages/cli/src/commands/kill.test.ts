@@ -10,6 +10,7 @@ const { mockGitUtils, mockFs, mockExecSync } = vi.hoisted(() => ({
   },
   mockFs: {
     readJSON: vi.fn(),
+    readdir: vi.fn(),
     writeJSON: vi.fn(),
     unlinkSync: vi.fn(),
     pathExists: vi.fn(),
@@ -59,6 +60,7 @@ describe('kill', () => {
     mockFs.writeJSON.mockResolvedValue(undefined);
     mockFs.pathExists.mockResolvedValue(false);
     mockFs.remove.mockResolvedValue(undefined);
+    mockFs.readdir.mockRejectedValue(new Error('ENOENT'));
     // Default: actual branch matches identifier
     mockExecSync.mockReturnValue('feat/old-feature\n');
   });
@@ -238,5 +240,85 @@ describe('kill', () => {
 
     expect(mockFs.pathExists).toHaveBeenCalledWith(targetPath);
     expect(mockFs.remove).not.toHaveBeenCalled();
+  });
+
+  // --- Orphan parent directory cleanup tests ---
+
+  it('should clean up empty parent directories for nested branch names', async () => {
+    const nestedIdentifier = 'feat/my-feature';
+    const nestedTargetPath = path.join(getClonesDir(rootDir), nestedIdentifier);
+    const parentPath = path.join(getClonesDir(rootDir), 'feat');
+
+    mockFs.readdir.mockImplementation(async (dir: string) => {
+      if (dir === parentPath) return [];
+      throw new Error('ENOENT');
+    });
+
+    await kill(nestedIdentifier, { root: rootDir });
+
+    expect(mockFs.remove).toHaveBeenCalledWith(parentPath);
+  });
+
+  it('should NOT clean up parent directory if it still has siblings', async () => {
+    const nestedIdentifier = 'feat/a';
+    const parentPath = path.join(getClonesDir(rootDir), 'feat');
+
+    mockFs.readdir.mockImplementation(async (dir: string) => {
+      if (dir === parentPath) return [{ name: 'b', isDirectory: () => true }];
+      throw new Error('ENOENT');
+    });
+
+    await kill(nestedIdentifier, { root: rootDir });
+
+    // The only remove call should NOT be for the parent directory
+    const removeCalls = mockFs.remove.mock.calls.map((c: any[]) => c[0]);
+    expect(removeCalls).not.toContain(parentPath);
+  });
+
+  it('should NOT delete the clones directory root for non-nested branches', async () => {
+    const flatIdentifier = 'mybranch';
+    mockExecSync.mockReturnValue('mybranch\n');
+
+    await kill(flatIdentifier, { root: rootDir });
+
+    // remove should not have been called with the clones dir
+    const removeCalls = mockFs.remove.mock.calls.map((c: any[]) => c[0]);
+    expect(removeCalls).not.toContain(getClonesDir(rootDir));
+  });
+
+  it('should handle deeply nested branch names (a/b/c)', async () => {
+    const deepIdentifier = 'a/b/c';
+    const clonesDir = getClonesDir(rootDir);
+    const parentB = path.join(clonesDir, 'a', 'b');
+    const parentA = path.join(clonesDir, 'a');
+    mockExecSync.mockReturnValue('a/b/c\n');
+
+    mockFs.readdir.mockImplementation(async (dir: string) => {
+      if (dir === parentB || dir === parentA) return [];
+      throw new Error('ENOENT');
+    });
+
+    await kill(deepIdentifier, { root: rootDir });
+
+    // Both empty parents should be removed
+    expect(mockFs.remove).toHaveBeenCalledWith(parentB);
+    expect(mockFs.remove).toHaveBeenCalledWith(parentA);
+    // But NOT the clonesDir itself
+    const removeCalls = mockFs.remove.mock.calls.map((c: any[]) => c[0]);
+    expect(removeCalls).not.toContain(clonesDir);
+  });
+
+  it('should clean up parent directory containing only .DS_Store (no subdirectories)', async () => {
+    const nestedIdentifier = 'feat/ds-store-test';
+    const parentPath = path.join(getClonesDir(rootDir), 'feat');
+
+    mockFs.readdir.mockImplementation(async (dir: string) => {
+      if (dir === parentPath) return [{ name: '.DS_Store', isDirectory: () => false }];
+      throw new Error('ENOENT');
+    });
+
+    await kill(nestedIdentifier, { root: rootDir });
+
+    expect(mockFs.remove).toHaveBeenCalledWith(parentPath);
   });
 });

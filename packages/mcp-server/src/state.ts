@@ -37,19 +37,33 @@ export function detectRootDirFromCwd(): string {
 }
 
 /**
- * Validate that serverState.rootDir points to a valid git repository.
- * Returns an MCP error response if invalid, or null if valid.
+ * Resolve the effective repository root for a tool call.
+ * Always resolves the provided path to the main repo root (handling worktree paths).
  */
-export function ensureRootDir(): { content: { type: 'text'; text: string }[]; isError: true } | null {
+export function resolveEffectiveRoot(repo: string): string {
   try {
-    execSync('git rev-parse --show-toplevel', { cwd: serverState.rootDir, stdio: 'ignore' });
+    return resolveMainRepoRoot(repo);
+  } catch {
+    throw new Error(`Could not resolve repo root from path: '${repo}'. Ensure the path is inside a valid git repository.`);
+  }
+}
+
+/**
+ * Validate that a root directory points to a valid git repository.
+ * Returns an MCP error response if invalid, or null if valid.
+ * @param rootDir - Optional override; defaults to serverState.rootDir.
+ */
+export function ensureRootDir(rootDir?: string): { content: { type: 'text'; text: string }[]; isError: true } | null {
+  const effectiveDir = rootDir || serverState.rootDir;
+  try {
+    execSync('git rev-parse --show-toplevel', { cwd: effectiveDir, stdio: 'ignore' });
     return null;
   } catch {
     return {
       content: [
         {
           type: 'text' as const,
-          text: `No valid git repository at '${serverState.rootDir}'. Call 'set_project_root' with your project path to connect.`,
+          text: `No valid git repository at '${effectiveDir}'. Call 'set_project_root' with your project path to connect.`,
         },
       ],
       isError: true,
@@ -57,16 +71,22 @@ export function ensureRootDir(): { content: { type: 'text'; text: string }[]; is
   }
 }
 
-/** Read metadata for the current repo (delegates to CLI). */
-export async function readMetadata() {
-  return cliReadMetadata(serverState.rootDir);
+/** Read metadata for the current repo (delegates to CLI).
+ * @param rootDir - Optional override; defaults to serverState.rootDir.
+ */
+export async function readMetadata(rootDir?: string) {
+  return cliReadMetadata(rootDir || serverState.rootDir);
 }
 
-/** Write metadata for the current repo (delegates to CLI). */
+/** Write metadata for the current repo (delegates to CLI).
+ * @param metadata - The metadata record to write.
+ * @param rootDir - Optional override; defaults to serverState.rootDir.
+ */
 export async function writeMetadata(
   metadata: Record<string, { baseBranch?: string; description?: string; reviewStatus?: ReviewStatus; sourcePrompt?: string }>,
+  rootDir?: string,
 ) {
-  return cliWriteMetadata(serverState.rootDir, metadata);
+  return cliWriteMetadata(rootDir || serverState.rootDir, metadata);
 }
 
 /** List .md files in a directory, excluding subdirectories like _missions/. */

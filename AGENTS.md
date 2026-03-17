@@ -33,6 +33,16 @@ lumi-ops/
 │   │       ├── StatusEventBus.ts             # Centralized event bus for cross-view sync
 │   │       └── migrations.ts                # Settings migrations across versions
 │   └── mcp-server/           # MCP server (published as @lumi-ops/mcp-server)
+│       └── src/
+│           ├── index.ts          # Server bootstrap, MCP roots protocol integration
+│           ├── state.ts          # Shared server state singleton (rootDir, metadata helpers)
+│           ├── utils.ts          # Pure utility functions (parseDiffStat, extractTitle, etc.)
+│           ├── tools/
+│           │   ├── clone-ops.ts  # Clone lifecycle tools (spawn, list, describe, kill, merge)
+│           │   ├── review-ops.ts # Review tools (set_status, review, diff, revision, log, read_file)
+│           │   └── prompt-ops.ts # Prompt tools (list_prompts, save_prompt, set_project_root, list_repos)
+│           ├── prompts.ts        # MCP Prompt templates (4 workflow prompts)
+│           └── resources.ts      # MCP Resources (6 read-only resources)
 ├── .prompts/                 # Reusable task prompts (project scope)
 │   └── _missions/            # Mission templates (project scope)
 ├── doc/                      # Design documents and feature proposals
@@ -86,6 +96,12 @@ The extension auto-detects whether it's in a **root workspace** (shows Active Cl
 
 ### 7. Task prompts go in `.prompts/`
 When creating reusable task prompts for shadow clones, save them as `.md` files in the `.prompts/` directory at the project root. Use kebab-case naming (e.g., `fix-auth-bug.md`, `add-feature-x.md`). These prompts can be used by the Prompt Library to generate MISSION.md files for shadow clones.
+
+### 10. MCP Server (15 tools)
+- The MCP server exposes **15 tools**, 6 read-only resources, and 4 workflow prompt templates.
+- **All branch-targeting tools require a `repo` parameter** — pass any path inside a target repository. Worktree paths are automatically resolved to the main repo root via `resolveEffectiveRoot()` in `state.ts`.
+- `describe_clone` returns full details for a single clone (MISSION.md + MISSION_COMPLETE.md). Use after `list_clones` which returns a slim `title` field instead of the full description.
+- Shared utilities (`extractTitle`, `parseDiffStat`, etc.) live in `utils.ts` — never duplicate them in tool modules.
 
 ## Common Tasks
 

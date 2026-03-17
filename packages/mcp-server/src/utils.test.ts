@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { parseDiffStat, toKebabCase, silenceStdout, extractRootFromRootsResponse, resolveMainRepoRoot } from './utils';
+import { resolveEffectiveRoot, serverState } from './state';
 
 // ---------------------------------------------------------------------------
 // resolveMainRepoRoot
@@ -323,5 +324,50 @@ describe('silenceStdout', () => {
     // console.error should remain the same spy throughout
     expect(errorDuringExec).toBe(origError);
     errorSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveEffectiveRoot
+// ---------------------------------------------------------------------------
+
+describe('resolveEffectiveRoot', () => {
+  const ORIGINAL_ROOT = serverState.rootDir;
+
+  beforeEach(() => {
+    serverState.rootDir = '/home/user/default-repo';
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    serverState.rootDir = ORIGINAL_ROOT;
+  });
+
+  it('should resolve main repo root from a valid repo path', () => {
+    mockExecSync.mockReturnValueOnce('/home/user/target-repo/.git\n' as any);
+
+    const result = resolveEffectiveRoot('/home/user/target-repo');
+
+    expect(result).toBe('/home/user/target-repo');
+  });
+
+  it('should throw descriptive error for invalid path (non-git directory)', () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error('fatal: not a git repository');
+    });
+
+    expect(() => resolveEffectiveRoot('/some/invalid/path')).toThrow(
+      "Could not resolve repo root from path: '/some/invalid/path'"
+    );
+  });
+
+  it('should throw descriptive error for non-existent path', () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error('fatal: cannot change to /nonexistent/path');
+    });
+
+    expect(() => resolveEffectiveRoot('/nonexistent/path')).toThrow(
+      "Could not resolve repo root from path: '/nonexistent/path'"
+    );
   });
 });

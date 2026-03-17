@@ -17,7 +17,7 @@
 ✅ **Worktree Manager (Beta)** (Multi-repo dashboard with global repo registry)
 ✅ **Copy on Spawn** (Configurable folders/files to copy from root to clone)
 ✅ **StatusEventBus** (Centralized cross-view sync for metadata changes)
-✅ **MCP Server** (14 tools, 6 resources, 4 prompts — [strategy](./mcp-server-strategy.md))
+✅ **MCP Server** (15 tools, 6 resources, 4 prompts — [strategy](./mcp-server-strategy.md))
 ✅ **Clone Agent Rules** (Auto-inject executor rules into clones)
 ✅ **Root Agent Mode** (Strategist rules for main workspace)
 ✅ **Auto-Status Transitions** (`todo` → `inProgress` on workspace open)
@@ -33,6 +33,15 @@
 - [ ] Clone-specific quick action bar (run tests, Git operations, etc.)
 - [ ] Show diff status against base branch
 - [ ] Prompt Library categorization (This Clone / Project / Global grouping)
+
+---
+
+## v0.4.5 — Cross-Repo Operations
+
+- [x] **`repo` parameter on all tools** — All 13 branch-targeting tools now require a `repo` parameter for explicit repo context
+- [x] **`describe_clone` tool** — New read-only tool for full clone details (MISSION.md + MISSION_COMPLETE.md)
+- [x] **Slimmed `list_clones`** — Returns `title` instead of full description to reduce context waste
+- [x] **`resolveEffectiveRoot` error handling** — Descriptive error messages for invalid repo paths
 
 ---
 
@@ -110,9 +119,46 @@
 
 **Reference**: [feature-candidates.md](./feature-candidates.md)
 
+- [ ] **Auto-Close Clone Window on Kill** — see design below
 - [ ] Reveal in Finder + Copy Path
 - [ ] Post-spawn hooks (auto-run commands like `npm i`, `uv sync`, etc. after clone creation)
 - [x] ~~File copy patterns~~ → Implemented as `lumi-ops.copyOnSpawn` setting
 - [ ] Quick switch (Telescope / fuzzy search for clone directories)
 - [ ] Adopt existing worktrees (right-click → add metadata for manually-created worktrees)
 - [ ] i18n support
+
+---
+
+## Design: Auto-Close Clone Window on Kill
+
+**Problem**: When a clone is killed (from root workspace, MCP, or CLI), its VS Code window stays open pointing to a deleted directory — causing confusing errors as the filesystem is gone.
+
+**Approach**: File watcher self-destruct pattern. The clone window detects its own deletion and closes itself.
+
+### How It Works
+
+1. During `activate()`, the extension already detects clone workspaces via `.worktrees/` path matching (L121 in `extension.ts`).
+2. When `isCloneWorkspace` is true, register a **file watcher** on the clone's own `.git` file (the worktree link file, not a directory).
+3. When the file is deleted (i.e. the worktree is removed by `kill`), the watcher fires.
+4. Show a brief notification: `"⚡ This shadow clone has been removed."`, then execute `workbench.action.closeWindow` to close the VS Code window.
+
+### Implementation Details
+
+| Aspect | Detail |
+|---|---|
+| **Trigger file** | `<worktreePath>/.git` (a file in worktrees, not a dir) |
+| **Watch method** | `fs.watchFile()` (polling, works for deletions) or `vscode.workspace.createFileSystemWatcher` |
+| **Fallback** | If `fs.watchFile` misses the event, the existing 5s polling loop (L353) can also check `fs.existsSync(currentWorkspacePath)` |
+| **Guard** | Debounce + only trigger once (prevent double-close race) |
+| **Files changed** | 1 (`extension.ts`) — add ~20 lines in the `isCloneWorkspace` block |
+| **New tests** | 0 (pure VS Code API interaction, not unit-testable) |
+| **Effort** | ⭐ Minimal |
+| **Confidence** | 95% |
+
+### Why `fs.watchFile` over `fs.watch`
+
+`fs.watch` (used elsewhere in the extension) is efficient but doesn't reliably detect file **deletion** on all platforms. `fs.watchFile` uses stat polling (we can set a 2s interval) and reliably detects when the `.git` file disappears. Since this runs only in clone windows (not root), the single extra poll is negligible.
+
+### Alternative Considered
+
+Watching the metadata file for clone removal was considered, but the `.git` file approach is simpler — it doesn't require parsing metadata, and the `.git` file is guaranteed to be deleted by `git worktree remove`.
