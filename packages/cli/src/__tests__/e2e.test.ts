@@ -327,6 +327,86 @@ describe('e2e: kill', () => {
 });
 
 // ---------------------------------------------------------------------------
+// kill orphan parent cleanup
+// ---------------------------------------------------------------------------
+describe('e2e: kill orphan parent cleanup', () => {
+  it('should remove empty parent directory after killing nested branch', async () => {
+    await spawn('feat/orphan-test', { root: tmpDir });
+
+    const worktreePath = path.join(getClonesDir(tmpDir), 'feat/orphan-test');
+    expect(await fs.pathExists(worktreePath)).toBe(true);
+
+    await kill('feat/orphan-test', { root: tmpDir });
+
+    expect(await fs.pathExists(worktreePath)).toBe(false);
+    // The orphan parent 'feat/' should be cleaned up
+    expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'feat'))).toBe(false);
+  });
+
+  it('should NOT remove parent directory if sibling clones still exist', async () => {
+    await spawn('feat/sibling-a', { root: tmpDir });
+    await spawn('feat/sibling-b', { root: tmpDir });
+
+    await kill('feat/sibling-a', { root: tmpDir });
+
+    expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'feat/sibling-a'))).toBe(false);
+    // Parent 'feat/' should still exist because sibling-b is still there
+    expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'feat'))).toBe(true);
+    expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'feat/sibling-b'))).toBe(true);
+  });
+
+  it('should NEVER delete the .worktrees root directory', async () => {
+    await spawn('solo-branch', { root: tmpDir });
+
+    await kill('solo-branch', { root: tmpDir });
+
+    expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'solo-branch'))).toBe(false);
+    // The .worktrees root must NEVER be deleted
+    expect(await fs.pathExists(getClonesDir(tmpDir))).toBe(true);
+  });
+
+  it('should handle deeply nested branch names (a/b/c) and clean all empty parents', async () => {
+    await spawn('a/b/c', { root: tmpDir });
+
+    await kill('a/b/c', { root: tmpDir });
+
+    expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'a/b/c'))).toBe(false);
+    expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'a/b'))).toBe(false);
+    expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'a'))).toBe(false);
+    // Root clones dir must survive
+    expect(await fs.pathExists(getClonesDir(tmpDir))).toBe(true);
+  });
+
+  it('should only clean empty levels in partially nested structure', async () => {
+    await spawn('ns/deep/clone-a', { root: tmpDir });
+    await spawn('ns/keep-me', { root: tmpDir });
+
+    await kill('ns/deep/clone-a', { root: tmpDir });
+
+    expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'ns/deep/clone-a'))).toBe(false);
+    // 'ns/deep/' is empty after kill, should be removed
+    expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'ns/deep'))).toBe(false);
+    // 'ns/' still has 'keep-me', should survive
+    expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'ns'))).toBe(true);
+  });
+
+  it('should clean up parent directory even when .DS_Store exists', async () => {
+    await spawn('chore/ds-test', { root: tmpDir });
+
+    // Plant a .DS_Store in the parent directory before killing
+    const chorePath = path.join(getClonesDir(tmpDir), 'chore');
+    await fs.writeFile(path.join(chorePath, '.DS_Store'), '');
+
+    await kill('chore/ds-test', { root: tmpDir });
+
+    // Parent 'chore/' should be cleaned up despite .DS_Store
+    expect(await fs.pathExists(chorePath)).toBe(false);
+    // The .worktrees root must still exist
+    expect(await fs.pathExists(getClonesDir(tmpDir))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // list
 // ---------------------------------------------------------------------------
 describe('e2e: list', () => {

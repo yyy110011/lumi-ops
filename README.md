@@ -16,7 +16,7 @@ Equip your AI agent with a protocol for parallel development. Spawn isolated tas
 Built on Git Worktrees. Works with Antigravity, Cursor, GitHub Copilot, and any MCP-compatible AI.
 
 ### 🆕 v0.4.0 — MCP Server & Review Protocol
-- **MCP Server** — New `@lumi-ops/mcp-server` package with 14 tools for the full clone lifecycle, plus 6 Resources and 4 Prompt templates for agent context and workflow guidance. Install via `npx @lumi-ops/mcp-server`. Works with Antigravity, VS Code, Cursor, Windsurf, and Claude Desktop.
+- **MCP Server** — New `@lumi-ops/mcp-server` package with 15 tools for the full clone lifecycle, plus 6 Resources and 4 Prompt templates for agent context and workflow guidance. Install via `npx @lumi-ops/mcp-server`. Works with Antigravity, VS Code, Cursor, Windsurf, and Claude Desktop.
 - **Agent-Driven Review Protocol** — Clone agent writes `MISSION_COMPLETE.md` → sets `needsReview` → root agent reviews via `review_clone` → approves or `request_revision` with feedback.
 - **Clone Agent Rules** — Auto-inject `.agents/rules/lumi-ops-clone-agent.md` into clones, teaching agents the review protocol.
 - **Root Agent Mode** — Inject strategist rules into the main workspace so your root agent plans and delegates instead of implementing directly.
@@ -33,7 +33,7 @@ packages/
 
 ## 🔌 MCP Server
 
-Let your AI agent spawn, review, and merge clones for you — hands-free. The server exposes 14 tools, 6 read-only Resources, and 4 workflow Prompt templates. Connect any MCP-compatible agent:
+Let your AI agent spawn, review, and merge clones for you — hands-free. The server exposes 15 tools (with a required `repo` parameter for cross-repo support), 6 read-only Resources, and 4 workflow Prompt templates. Connect any MCP-compatible agent:
 
 ```bash
 npx @lumi-ops/mcp-server
@@ -53,7 +53,7 @@ Press **F5** in VS Code / Antigravity to launch the Extension Development Host.
 ## ✨ Features
 
 - **🔄 Review Protocol** — Agent writes `MISSION_COMPLETE.md` and sets status to `needsReview`. Review diffs, approve, or request revision — via sidebar or MCP. Stop guessing if an agent is done.
-- **🔌 MCP Server** — `npx @lumi-ops/mcp-server` exposes 14 tools, 6 resources, and 4 prompt templates to your AI. Your main agent can autonomously spawn clones, review their diffs, and merge them.
+- **🔌 MCP Server** — `npx @lumi-ops/mcp-server` exposes 15 tools, 6 resources, and 4 prompt templates to your AI. Your main agent can autonomously spawn clones, review their diffs, and merge them. Use `describe_clone` for detailed clone inspection. All branch-targeting tools require a `repo` parameter for cross-repo operations.
 - **📄 Mission Templates** — Define reusable MISSION.md templates with Task / Rules / Instructions fields. Dual-scope (Global + Project), custom editor, fork & copy across scopes. Standardize how tasks are assigned to reduce agent hallucinations.
 - **🧠 Agent Rules** — Clone Agent Rules auto-inject executor rules into clones so agents know the review protocol. Root Agent Mode injects strategist rules for the main workspace: plan, delegate, don't implement directly.
 - **📚 Prompt Library** — Save and reuse task descriptions as templates. Dual-scope storage (Global `~/.lumi-ops/.prompts/` + Project `<repoRoot>/.prompts/`). Per-item scope badges, edit, copy, and delete actions. Cross-window sync.

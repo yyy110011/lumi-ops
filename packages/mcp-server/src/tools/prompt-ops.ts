@@ -11,7 +11,7 @@ import * as fs from 'fs';
 import { getLumiOpsHome } from '@lumi-ops/cli';
 import { toKebabCase } from '../utils.js';
 import { resolveMainRepoRoot } from '../utils.js';
-import { serverState, promptDir, listPromptFiles } from '../state.js';
+import { serverState, promptDir, listPromptFiles, resolveEffectiveRoot } from '../state.js';
 
 export function registerPromptOpsTools(server: McpServer): void {
   // ---------------------------------------------------------------------------
@@ -26,13 +26,18 @@ export function registerPromptOpsTools(server: McpServer): void {
         .enum(['global', 'project', 'all'])
         .default('all')
         .describe('Which scope to list prompts from'),
+      repo: z.string().describe(
+        'Any path inside the target repository. Worktree paths are automatically resolved to the main repo root.'
+      ),
     },
     { readOnlyHint: true },
-    async ({ scope }) => {
+    async ({ scope, repo }) => {
       const prompts: { name: string; scope: string; fileName: string; generated: boolean }[] = [];
 
       const collectFromScope = async (s: 'global' | 'project') => {
-        const dir = promptDir(s);
+        const dir = (s === 'project' && repo)
+          ? path.join(resolveEffectiveRoot(repo), '.prompts')
+          : promptDir(s);
         // Collect top-level prompts
         const files = await listPromptFiles(dir);
         for (const f of files) {
@@ -74,9 +79,12 @@ export function registerPromptOpsTools(server: McpServer): void {
         .default(false)
         .optional()
         .describe('If true, save to _generated/ subdirectory (agent-authored, auto-cleaned on kill)'),
+      repo: z.string().describe(
+        'Any path inside the target repository. Worktree paths are automatically resolved to the main repo root.'
+      ),
     },
     { idempotentHint: true },
-    async ({ name, content, scope, generated }) => {
+    async ({ name, content, scope, generated, repo }) => {
       const sanitized = toKebabCase(name);
       if (!sanitized) {
         return {
@@ -85,7 +93,9 @@ export function registerPromptOpsTools(server: McpServer): void {
         };
       }
 
-      const baseDir = promptDir(scope);
+      const baseDir = (scope === 'project' && repo)
+        ? path.join(resolveEffectiveRoot(repo), '.prompts')
+        : promptDir(scope);
       const dir = generated ? path.join(baseDir, '_generated') : baseDir;
       await fs.promises.mkdir(dir, { recursive: true });
       const filePath = path.join(dir, `${sanitized}.md`);

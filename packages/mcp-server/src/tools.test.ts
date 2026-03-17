@@ -185,6 +185,13 @@ describe('spawn_clone tool', () => {
     mocks.fsPromises.readFile.mockRejectedValue(new Error('ENOENT'));
     mocks.fsPromises.writeFile.mockResolvedValue(undefined);
     mocks.fsPromises.mkdir.mockResolvedValue(undefined);
+    // resolveEffectiveRoot now always calls resolveMainRepoRoot which uses execSync
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ROOT_DIR}/.git\n`;
+      }
+      return '';
+    });
     handler = getToolHandler('spawn_clone');
   });
 
@@ -192,6 +199,7 @@ describe('spawn_clone tool', () => {
     const result = await handler({
       branch: 'feat/test',
       description: 'Build the widget',
+      repo: ROOT_DIR,
     });
 
     expect(mocks.spawn).toHaveBeenCalledWith('feat/test', {
@@ -214,6 +222,7 @@ describe('spawn_clone tool', () => {
       branch: 'feat/from-prompt',
       prompt: 'my-prompt',
       promptScope: 'project',
+      repo: ROOT_DIR,
     });
 
     expect(mocks.fsPromises.readFile).toHaveBeenCalledWith(
@@ -240,6 +249,7 @@ describe('spawn_clone tool', () => {
       branch: 'feat/global',
       prompt: 'global-prompt',
       promptScope: 'global',
+      repo: ROOT_DIR,
     });
 
     expect(mocks.fsPromises.readFile).toHaveBeenCalledWith(
@@ -254,6 +264,7 @@ describe('spawn_clone tool', () => {
     const result = await handler({
       branch: 'feat/missing',
       prompt: 'nonexistent',
+      repo: ROOT_DIR,
     });
 
     expect(result.isError).toBe(true);
@@ -277,6 +288,7 @@ describe('spawn_clone tool', () => {
     await handler({
       branch: 'feat/auto',
       prompt: '_generated/auto-prompt',
+      repo: ROOT_DIR,
     });
 
     expect(mocks.writeMetadata).toHaveBeenCalledWith(
@@ -300,11 +312,172 @@ describe('spawn_clone tool', () => {
     await handler({
       branch: 'feat/ext',
       prompt: 'my-prompt.md',
+      repo: ROOT_DIR,
     });
 
     expect(mocks.fsPromises.readFile).toHaveBeenCalledWith(
       path.join(ROOT_DIR, '.prompts', 'my-prompt.md'),
       'utf-8',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// repo parameter tests — spawn_clone
+// ---------------------------------------------------------------------------
+
+describe('spawn_clone with repo parameter', () => {
+  let handler: ToolHandler;
+  const ALT_REPO = '/home/user/other-repo';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.spawn.mockResolvedValue(undefined);
+    mocks.fsPromises.readFile.mockRejectedValue(new Error('ENOENT'));
+    mocks.fsPromises.writeFile.mockResolvedValue(undefined);
+    mocks.fsPromises.mkdir.mockResolvedValue(undefined);
+    handler = getToolHandler('spawn_clone');
+  });
+
+  it('should use resolved repo root when repo param is provided', async () => {
+    // resolveMainRepoRoot uses execSync to resolve the main repo root
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ALT_REPO}/.git\n`;
+      }
+      return '';
+    });
+
+    const result = await handler({
+      branch: 'feat/cross-repo',
+      description: 'Cross-repo task',
+      repo: `${ALT_REPO}.worktrees/feat/some-clone`,
+    });
+
+    expect(mocks.spawn).toHaveBeenCalledWith('feat/cross-repo', {
+      root: ALT_REPO,
+      description: 'Cross-repo task',
+      baseBranch: undefined,
+    });
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.path).toContain(ALT_REPO);
+  });
+
+  it('should resolve ROOT_DIR when repo param points to ROOT_DIR', async () => {
+    // ensureRootDir calls execSync — just allow it
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ROOT_DIR}/.git\n`;
+      }
+      return '';
+    });
+
+    const result = await handler({
+      branch: 'feat/default-repo',
+      description: 'Default repo task',
+      repo: ROOT_DIR,
+    });
+
+    expect(mocks.spawn).toHaveBeenCalledWith('feat/default-repo', {
+      root: ROOT_DIR,
+      description: 'Default repo task',
+      baseBranch: undefined,
+    });
+    expect(result.isError).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// repo parameter tests — list_clones
+// ---------------------------------------------------------------------------
+
+describe('list_clones with repo parameter', () => {
+  let handler: ToolHandler;
+  const ALT_REPO = '/home/user/other-repo';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getToolHandler('list_clones');
+    mocks.gitUtils.listWorktrees.mockResolvedValue([]);
+    mocks.parseWorktrees.mockReturnValue([]);
+    mocks.readMetadata.mockResolvedValue({});
+  });
+
+  it('should use resolved repo root and show it in response', async () => {
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ALT_REPO}/.git\n`;
+      }
+      return '';
+    });
+
+    const result = await handler({ repo: ALT_REPO });
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.repository).toBe(ALT_REPO);
+    expect(mocks.GitUtilsConstructor).toHaveBeenCalledWith(ALT_REPO);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// repo parameter tests — kill_clone
+// ---------------------------------------------------------------------------
+
+describe('kill_clone with repo parameter', () => {
+  let handler: ToolHandler;
+  const ALT_REPO = '/home/user/other-repo';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getToolHandler('kill_clone');
+    mocks.readMetadata.mockResolvedValue({});
+    mocks.kill.mockResolvedValue(undefined);
+  });
+
+  it('should use resolved repo root for kill operations', async () => {
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ALT_REPO}/.git\n`;
+      }
+      return '';
+    });
+
+    const result = await handler({
+      branch: 'feat/cross-repo-kill',
+      keepBranch: false,
+      repo: `${ALT_REPO}.worktrees/feat/some-clone`,
+    });
+
+    expect(mocks.kill).toHaveBeenCalledWith('feat/cross-repo-kill', {
+      root: ALT_REPO,
+      keepBranch: false,
+    });
+    expect(result.isError).toBeUndefined();
+  });
+
+  it('should clean up generated prompt from effective root on kill', async () => {
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ALT_REPO}/.git\n`;
+      }
+      return '';
+    });
+    mocks.readMetadata.mockResolvedValue({
+      'feat/gen-kill': { sourcePrompt: '_generated/auto-task.md' },
+    });
+    mocks.fsPromises.unlink.mockResolvedValue(undefined);
+
+    const result = await handler({
+      branch: 'feat/gen-kill',
+      keepBranch: false,
+      repo: ALT_REPO,
+    });
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.promptCleaned).toBe(true);
+    expect(mocks.fsPromises.unlink).toHaveBeenCalledWith(
+      path.join(ALT_REPO, '.prompts', '_generated/auto-task.md'),
     );
   });
 });
@@ -343,7 +516,7 @@ describe('merge_clone tool', () => {
       { currentBranch: 'develop', branch: 'develop', path: path.join(ROOT_DIR, '.worktrees/develop'), dirName: 'develop' },
     ]);
 
-    const result = await handler({ source: 'feat/done', target: 'develop' });
+    const result = await handler({ source: 'feat/done', target: 'develop', repo: ROOT_DIR });
 
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.status).toBe('merged');
@@ -358,7 +531,7 @@ describe('merge_clone tool', () => {
     ]);
     mocks.gitUtils.branchExists.mockResolvedValue(true);
 
-    const result = await handler({ source: 'feat/done', target: 'develop' });
+    const result = await handler({ source: 'feat/done', target: 'develop', repo: ROOT_DIR });
 
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.status).toBe('merged');
@@ -371,7 +544,7 @@ describe('merge_clone tool', () => {
     mocks.parseWorktrees.mockReturnValue([]);
     mocks.gitUtils.branchExists.mockResolvedValue(false);
 
-    const result = await handler({ source: 'feat/done', target: 'nonexistent' });
+    const result = await handler({ source: 'feat/done', target: 'nonexistent', repo: ROOT_DIR });
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('does not exist');
@@ -395,7 +568,7 @@ describe('merge_clone tool', () => {
       return '';
     });
 
-    const result = await handler({ source: 'feat/conflict', target: 'develop' });
+    const result = await handler({ source: 'feat/conflict', target: 'develop', repo: ROOT_DIR });
 
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.status).toBe('conflict');
@@ -410,7 +583,7 @@ describe('merge_clone tool', () => {
     mocks.gitUtils.branchExists.mockResolvedValue(true);
     mocks.gitUtils.mergeSquash.mockRejectedValue(new Error('unexpected git error'));
 
-    const result = await handler({ source: 'feat/broken', target: 'main' });
+    const result = await handler({ source: 'feat/broken', target: 'main', repo: ROOT_DIR });
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('unexpected git error');
@@ -575,7 +748,7 @@ describe('get_clone_log tool', () => {
       return '';
     });
 
-    const result = await handler({ branch: 'feat/test', maxCount: 20 });
+    const result = await handler({ branch: 'feat/test', maxCount: 20, repo: ROOT_DIR });
 
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.branch).toBe('feat/test');
@@ -599,7 +772,7 @@ describe('get_clone_log tool', () => {
       return '';
     });
 
-    const result = await handler({ branch: 'feat/test', maxCount: 5 });
+    const result = await handler({ branch: 'feat/test', maxCount: 5, repo: ROOT_DIR });
 
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.commits).toHaveLength(2);
@@ -624,7 +797,7 @@ describe('get_clone_log tool', () => {
       throw new Error('fatal: bad revision');
     });
 
-    const result = await handler({ branch: 'nonexistent/branch', maxCount: 20 });
+    const result = await handler({ branch: 'nonexistent/branch', maxCount: 20, repo: ROOT_DIR });
 
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.commits).toEqual([]);
@@ -657,7 +830,7 @@ describe('read_clone_file tool', () => {
     mocks.fsPromises.stat.mockResolvedValue({ size: 42 });
     mocks.fsPromises.readFile.mockResolvedValue(Buffer.from('hello world'));
 
-    const result = await handler({ branch: 'feat/my-clone', filepath: 'src/index.ts' });
+    const result = await handler({ branch: 'feat/my-clone', filepath: 'src/index.ts', repo: ROOT_DIR });
 
     expect(result.isError).toBeUndefined();
     const parsed = JSON.parse(result.content[0].text);
@@ -670,7 +843,7 @@ describe('read_clone_file tool', () => {
   it('should return error for non-existent clone', async () => {
     mocks.parseWorktrees.mockReturnValue([]);
 
-    const result = await handler({ branch: 'feat/nonexistent', filepath: 'README.md' });
+    const result = await handler({ branch: 'feat/nonexistent', filepath: 'README.md', repo: ROOT_DIR });
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('no worktree found');
@@ -679,7 +852,7 @@ describe('read_clone_file tool', () => {
   it('should return not-found for non-existent file', async () => {
     mocks.fsPromises.stat.mockRejectedValue(new Error('ENOENT'));
 
-    const result = await handler({ branch: 'feat/my-clone', filepath: 'does-not-exist.txt' });
+    const result = await handler({ branch: 'feat/my-clone', filepath: 'does-not-exist.txt', repo: ROOT_DIR });
 
     expect(result.isError).toBeUndefined();
     const parsed = JSON.parse(result.content[0].text);
@@ -688,7 +861,7 @@ describe('read_clone_file tool', () => {
   });
 
   it('should block path traversal attempts', async () => {
-    const result = await handler({ branch: 'feat/my-clone', filepath: '../../../etc/passwd' });
+    const result = await handler({ branch: 'feat/my-clone', filepath: '../../../etc/passwd', repo: ROOT_DIR });
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Path traversal is not allowed');
@@ -754,11 +927,13 @@ describe('lumi://clones resource', () => {
     const alpha = parsed.clones.find((c: any) => c.dirName === 'feat/alpha');
     expect(alpha.hasReport).toBe(true);
     expect(alpha.baseBranch).toBe('develop');
-    expect(alpha.description).toBe('Alpha task');
+    expect(alpha.title).toBe('Alpha task');
+    expect(alpha.description).toBeUndefined();
     expect(alpha.reviewStatus).toBe('needsReview');
 
     const beta = parsed.clones.find((c: any) => c.dirName === 'feat/beta');
     expect(beta.hasReport).toBe(false);
+    expect(beta.title).toBe('(no description)');
     expect(beta.description).toBeUndefined();
   });
 
@@ -1108,6 +1283,447 @@ describe('multi-clone-strategy prompt', () => {
     expect(text).toContain('list_clones');
     expect(text).toContain('spawn_clone');
     expect(text).toContain('review_clone');
+    expect(text).toContain('describe_clone');
   });
 });
 
+// ===========================================================================
+// describe_clone tests
+// ===========================================================================
+
+describe('describe_clone tool', () => {
+  let handler: ToolHandler;
+  const CLONE_PATH = path.join(ROOT_DIR, '.worktrees', 'feat/detail-me');
+  let existsSyncMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    handler = getToolHandler('describe_clone');
+    mocks.execSync.mockReturnValue('');
+    mocks.gitUtils.listWorktrees.mockResolvedValue([]);
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'feat/detail-me', branch: 'feat/detail-me', path: CLONE_PATH, dirName: 'feat/detail-me', baseBranch: 'main' },
+    ]);
+    mocks.readMetadata.mockResolvedValue({
+      'feat/detail-me': { baseBranch: 'develop', description: '# Mission: Implement OAuth\nDetailed steps here...', reviewStatus: 'inProgress' },
+    });
+    const fsMod = await import('fs');
+    existsSyncMock = fsMod.existsSync as ReturnType<typeof vi.fn>;
+  });
+
+  it('should return full clone details with description and title', async () => {
+    existsSyncMock.mockReturnValue(false);
+
+    const result = await handler({ branch: 'feat/detail-me', repo: ROOT_DIR });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.branch).toBe('feat/detail-me');
+    expect(parsed.title).toBe('Mission: Implement OAuth');
+    expect(parsed.description).toBe('# Mission: Implement OAuth\nDetailed steps here...');
+    expect(parsed.baseBranch).toBe('develop');
+    expect(parsed.reviewStatus).toBe('inProgress');
+    expect(parsed.hasReport).toBe(false);
+    expect(parsed.missionComplete).toBeNull();
+  });
+
+  it('should return missionComplete content when MISSION_COMPLETE.md exists', async () => {
+    existsSyncMock.mockImplementation((p: string) => {
+      if (typeof p === 'string' && p.includes('MISSION_COMPLETE.md')) return true;
+      return false;
+    });
+    mocks.fsPromises.readFile.mockResolvedValue('## Summary\nAll done!');
+
+    const result = await handler({ branch: 'feat/detail-me', repo: ROOT_DIR });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.hasReport).toBe(true);
+    expect(parsed.missionComplete).toBe('## Summary\nAll done!');
+  });
+
+  it('should return error for non-existent branch', async () => {
+    mocks.parseWorktrees.mockReturnValue([]);
+
+    const result = await handler({ branch: 'feat/nonexistent', repo: ROOT_DIR });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('no worktree found');
+    expect(result.content[0].text).toContain('feat/nonexistent');
+  });
+
+  it('should use resolved repo root when repo param is provided', async () => {
+    const ALT_REPO = '/home/user/other-repo';
+    const ALT_CLONE_PATH = path.join(ALT_REPO, '.worktrees', 'feat/detail-me');
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ALT_REPO}/.git\n`;
+      }
+      return '';
+    });
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'feat/detail-me', branch: 'feat/detail-me', path: ALT_CLONE_PATH, dirName: 'feat/detail-me', baseBranch: 'main' },
+    ]);
+    mocks.readMetadata.mockResolvedValue({
+      'feat/detail-me': { baseBranch: 'main', description: '# Cross-repo task' },
+    });
+    existsSyncMock.mockReturnValue(false);
+
+    const result = await handler({ branch: 'feat/detail-me', repo: `${ALT_REPO}.worktrees/feat/some-clone` });
+
+    expect(result.isError).toBeUndefined();
+    expect(mocks.GitUtilsConstructor).toHaveBeenCalledWith(ALT_REPO);
+    expect(mocks.parseWorktrees).toHaveBeenCalledWith(expect.anything(), ALT_REPO);
+    expect(mocks.readMetadata).toHaveBeenCalledWith(ALT_REPO);
+  });
+});
+
+// ===========================================================================
+// v0.4.5 — Per-Call `repo` Parameter Tests (review-ops)
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// set_clone_status with repo param
+// ---------------------------------------------------------------------------
+
+describe('set_clone_status with repo param', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getToolHandler('set_clone_status');
+    mocks.setCloneStatus.mockResolvedValue(undefined);
+  });
+
+  it('should resolve repo path and pass resolved root to setCloneStatus', async () => {
+    const REPO_PATH = '/home/user/other-repo.worktrees/feat/branch';
+    const RESOLVED_ROOT = '/home/user/other-repo';
+
+    mocks.execSync.mockImplementation((cmd: string, opts: any) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${RESOLVED_ROOT}/.git\n`;
+      }
+      // ensureRootDir check
+      return '';
+    });
+
+    const result = await handler({
+      branch: 'feat/test',
+      status: 'needsReview',
+      repo: REPO_PATH,
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(mocks.setCloneStatus).toHaveBeenCalledWith(
+      'feat/test',
+      'needsReview',
+      { root: RESOLVED_ROOT },
+    );
+  });
+
+  it('should resolve ROOT_DIR when repo param points to ROOT_DIR', async () => {
+    // ensureRootDir uses execSync — make it succeed
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ROOT_DIR}/.git\n`;
+      }
+      return '';
+    });
+
+    const result = await handler({
+      branch: 'feat/test',
+      status: 'done',
+      repo: ROOT_DIR,
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(mocks.setCloneStatus).toHaveBeenCalledWith(
+      'feat/test',
+      'done',
+      { root: ROOT_DIR },
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// review_clone with repo param
+// ---------------------------------------------------------------------------
+
+describe('review_clone with repo param', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getToolHandler('review_clone');
+  });
+
+  it('should use resolved repo root for GitUtils, metadata, and git commands', async () => {
+    const REPO_PATH = '/home/user/other-repo.worktrees/feat/work';
+    const RESOLVED_ROOT = '/home/user/other-repo';
+    const CLONE_PATH = path.join(RESOLVED_ROOT, '.worktrees', 'feat/review-me');
+
+    mocks.execSync.mockImplementation((cmd: string, opts: any) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${RESOLVED_ROOT}/.git\n`;
+      }
+      return '';
+    });
+
+    mocks.gitUtils.listWorktrees.mockResolvedValue([]);
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'feat/review-me', branch: 'feat/review-me', path: CLONE_PATH, dirName: 'feat/review-me' },
+    ]);
+    mocks.readMetadata.mockResolvedValue({
+      'feat/review-me': { baseBranch: 'main' },
+    });
+    mocks.fsPromises.readFile.mockRejectedValue(new Error('ENOENT'));
+    mocks.execFileSync.mockReturnValue('');
+
+    const result = await handler({ branch: 'feat/review-me', repo: REPO_PATH });
+
+    expect(result.isError).toBeUndefined();
+    // GitUtils should be constructed with resolved root
+    expect(mocks.GitUtilsConstructor).toHaveBeenCalledWith(RESOLVED_ROOT);
+    // parseWorktrees should be called with resolved root
+    expect(mocks.parseWorktrees).toHaveBeenCalledWith(expect.anything(), RESOLVED_ROOT);
+    // readMetadata should be called with resolved root
+    expect(mocks.readMetadata).toHaveBeenCalledWith(RESOLVED_ROOT);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// read_clone_file with repo param
+// ---------------------------------------------------------------------------
+
+describe('read_clone_file with repo param', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getToolHandler('read_clone_file');
+  });
+
+  it('should use resolved repo root for worktree lookup', async () => {
+    const REPO_PATH = '/home/user/other-repo.worktrees/feat/work';
+    const RESOLVED_ROOT = '/home/user/other-repo';
+    const CLONE_PATH = path.join(RESOLVED_ROOT, '.worktrees', 'feat/read-me');
+
+    mocks.execSync.mockImplementation((cmd: string, opts: any) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${RESOLVED_ROOT}/.git\n`;
+      }
+      return '';
+    });
+
+    mocks.gitUtils.listWorktrees.mockResolvedValue([]);
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'feat/read-me', branch: 'feat/read-me', path: CLONE_PATH, dirName: 'feat/read-me' },
+    ]);
+    mocks.fsPromises.stat.mockResolvedValue({ size: 42 });
+    mocks.fsPromises.readFile.mockResolvedValue(Buffer.from('file content'));
+
+    const result = await handler({ branch: 'feat/read-me', filepath: 'src/main.ts', repo: REPO_PATH });
+
+    expect(result.isError).toBeUndefined();
+    // GitUtils should be constructed with resolved root
+    expect(mocks.GitUtilsConstructor).toHaveBeenCalledWith(RESOLVED_ROOT);
+    // parseWorktrees should be called with resolved root
+    expect(mocks.parseWorktrees).toHaveBeenCalledWith(expect.anything(), RESOLVED_ROOT);
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.content).toBe('file content');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// repo parameter tests — list_prompts
+// ---------------------------------------------------------------------------
+
+describe('list_prompts with repo parameter', () => {
+  let handler: ToolHandler;
+  const ALT_REPO = '/home/user/other-repo';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getToolHandler('list_prompts');
+    mocks.fsPromises.readdir.mockResolvedValue([]);
+  });
+
+  it('should read project-scope prompts from resolved repo when repo param is provided', async () => {
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ALT_REPO}/.git\n`;
+      }
+      return '';
+    });
+
+    mocks.fsPromises.readdir.mockImplementation(async (dir: string) => {
+      if (typeof dir === 'string' && dir === path.join(ALT_REPO, '.prompts')) {
+        return [
+          { name: 'task-a.md', isFile: () => true },
+        ];
+      }
+      return [];
+    });
+
+    const result = await handler({ scope: 'project', repo: `${ALT_REPO}.worktrees/feat/clone` });
+
+    const parsed = JSON.parse(result.content[0].text);
+    const projectPrompts = parsed.prompts.filter((p: any) => p.scope === 'project');
+    expect(projectPrompts).toHaveLength(1);
+    expect(projectPrompts[0].name).toBe('task-a');
+  });
+
+  it('should not affect global scope when repo param is provided', async () => {
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ALT_REPO}/.git\n`;
+      }
+      return '';
+    });
+
+    mocks.fsPromises.readdir.mockImplementation(async (dir: string) => {
+      if (typeof dir === 'string' && dir === path.join('/home/user/.lumi-ops', '.prompts')) {
+        return [
+          { name: 'global-task.md', isFile: () => true },
+        ];
+      }
+      return [];
+    });
+
+    const result = await handler({ scope: 'global', repo: ALT_REPO });
+
+    const parsed = JSON.parse(result.content[0].text);
+    const globalPrompts = parsed.prompts.filter((p: any) => p.scope === 'global');
+    expect(globalPrompts).toHaveLength(1);
+    expect(globalPrompts[0].name).toBe('global-task');
+  });
+
+  it('should use default rootDir when repo resolves to ROOT_DIR', async () => {
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ROOT_DIR}/.git\n`;
+      }
+      return '';
+    });
+
+    mocks.fsPromises.readdir.mockImplementation(async (dir: string) => {
+      if (typeof dir === 'string' && dir === path.join(ROOT_DIR, '.prompts')) {
+        return [
+          { name: 'default-task.md', isFile: () => true },
+        ];
+      }
+      return [];
+    });
+
+    const result = await handler({ scope: 'project', repo: ROOT_DIR });
+
+    const parsed = JSON.parse(result.content[0].text);
+    const projectPrompts = parsed.prompts.filter((p: any) => p.scope === 'project');
+    expect(projectPrompts).toHaveLength(1);
+    expect(projectPrompts[0].name).toBe('default-task');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// repo parameter tests — save_prompt
+// ---------------------------------------------------------------------------
+
+describe('save_prompt with repo parameter', () => {
+  let handler: ToolHandler;
+  const ALT_REPO = '/home/user/other-repo';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getToolHandler('save_prompt');
+    mocks.fsPromises.mkdir.mockResolvedValue(undefined);
+    mocks.fsPromises.writeFile.mockResolvedValue(undefined);
+  });
+
+  it('should save project-scope prompt to resolved repo when repo param is provided', async () => {
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ALT_REPO}/.git\n`;
+      }
+      return '';
+    });
+
+    const result = await handler({
+      name: 'my task',
+      content: '# Task prompt',
+      scope: 'project',
+      repo: `${ALT_REPO}.worktrees/feat/clone`,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.path).toBe(path.join(ALT_REPO, '.prompts', 'my-task.md'));
+    expect(mocks.fsPromises.writeFile).toHaveBeenCalledWith(
+      path.join(ALT_REPO, '.prompts', 'my-task.md'),
+      '# Task prompt',
+    );
+  });
+
+  it('should not affect global scope when repo param is provided', async () => {
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ALT_REPO}/.git\n`;
+      }
+      return '';
+    });
+
+    const result = await handler({
+      name: 'global-thing',
+      content: '# Global prompt',
+      scope: 'global',
+      repo: ALT_REPO,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0].text);
+    // Global scope should use ~/.lumi-ops/.prompts/ regardless of repo param
+    expect(parsed.path).toBe(path.join('/home/user/.lumi-ops', '.prompts', 'global-thing.md'));
+  });
+
+  it('should use default rootDir when repo resolves to ROOT_DIR', async () => {
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ROOT_DIR}/.git\n`;
+      }
+      return '';
+    });
+
+    const result = await handler({
+      name: 'fallback task',
+      content: '# Fallback',
+      scope: 'project',
+      repo: ROOT_DIR,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.path).toBe(path.join(ROOT_DIR, '.prompts', 'fallback-task.md'));
+  });
+
+  it('should save generated prompt to _generated/ in resolved repo', async () => {
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ALT_REPO}/.git\n`;
+      }
+      return '';
+    });
+
+    const result = await handler({
+      name: 'auto prompt',
+      content: '# Generated',
+      scope: 'project',
+      generated: true,
+      repo: ALT_REPO,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.path).toBe(path.join(ALT_REPO, '.prompts', '_generated', 'auto-prompt.md'));
+    expect(parsed.generated).toBe(true);
+  });
+});

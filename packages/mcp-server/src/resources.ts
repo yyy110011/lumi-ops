@@ -3,11 +3,14 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { GitUtils, parseWorktrees } from '@lumi-ops/cli';
 import type { ShadowClone } from '@lumi-ops/cli';
-import { serverState, ensureRootDir, readMetadata, promptDir, listPromptFiles } from './state';
+import { extractTitle } from './utils.js';
+import { serverState, ensureRootDir, readMetadata, promptDir, listPromptFiles } from './state.js';
 
 // ---------------------------------------------------------------------------
 // Helpers (module-private)
 // ---------------------------------------------------------------------------
+
+
 
 /** Helper to read a .lumi/ file from a clone's worktree. */
 async function readCloneLumiFile(branch: string, filename: string) {
@@ -63,16 +66,19 @@ export function registerResources(server: McpServer, version: string): void {
       const clones = parseWorktrees(rawEntries, serverState.rootDir);
       const metadata = await readMetadata();
 
-      // Enrich clones with metadata + hasReport
+      // Enrich clones with metadata + hasReport (slim: title instead of full description)
       const enriched = clones.map((c) => {
         const meta = metadata[c.dirName];
         const hasReport = fs.existsSync(path.join(c.path, '.lumi', 'MISSION_COMPLETE.md'));
-        const base: ShadowClone & { hasReport: boolean } = { ...c, hasReport };
+        const base: ShadowClone & { hasReport: boolean; title: string } = {
+          ...c,
+          hasReport,
+          title: extractTitle(meta?.description),
+        };
         if (meta) {
           return {
             ...base,
             baseBranch: meta.baseBranch || c.baseBranch,
-            description: meta.description,
             reviewStatus: meta.reviewStatus,
           };
         }

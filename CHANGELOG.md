@@ -2,9 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## v0.4.4 (Unreleased)
+## v0.4.5 (Unreleased)
+
+### ⚠️ Breaking Changes
+- **`repo` parameter now required** — All branch-targeting MCP tools now require a `repo` parameter. If you were relying on auto-detected `rootDir` alone, you must now pass `repo` on every call. Tools affected: `spawn_clone`, `list_clones`, `kill_clone`, `merge_clone`, `set_clone_status`, `review_clone`, `get_clone_file_diff`, `request_revision`, `get_clone_log`, `read_clone_file`, `list_prompts`, `save_prompt`, `describe_clone`.
+
+### ✨ Features
+- **Cross-Repo Operations** — Pass any path inside a target repository as the `repo` parameter and it will be automatically resolved to the main repo root. Makes multi-repo workflows first-class — no more `set_project_root` switching.
+- **`describe_clone` Tool** — New read-only tool that returns full details for a single clone including MISSION.md description and MISSION_COMPLETE.md content. Use after `list_clones` to drill into specific clones.
+- **Slimmed `list_clones`** — Response now returns a `title` (first heading from description) instead of the full MISSION.md content, reducing context waste when scanning multiple clones.
 
 ### 🔧 Improvements
+- **`resolveEffectiveRoot` error handling** — Descriptive error messages when the `repo` parameter points to an invalid path: "Could not resolve repo root from path: '/path'. Ensure the path is inside a valid git repository."
 - **MCP Server Modular Refactoring** — Split the monolithic `index.ts` (1437 lines) into focused modules:
   - `state.ts` — Shared server state singleton (rootDir, metadata helpers)
   - `tools/clone-ops.ts` — Clone lifecycle tools (spawn, list, kill, merge)

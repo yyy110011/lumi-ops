@@ -16,8 +16,8 @@ import {
   getClonesDir,
 } from '@lumi-ops/cli';
 import type { ShadowClone } from '@lumi-ops/cli';
-import { parseDiffStat, silenceStdout } from '../utils.js';
-import { serverState, ensureRootDir, readMetadata, writeMetadata, promptDir } from '../state.js';
+import { parseDiffStat, silenceStdout, extractTitle } from '../utils.js';
+import { serverState, ensureRootDir, readMetadata, writeMetadata, promptDir, resolveEffectiveRoot } from '../state.js';
 
 export function registerCloneOpsTools(server: McpServer): void {
   // ---------------------------------------------------------------------------
@@ -36,9 +36,13 @@ export function registerCloneOpsTools(server: McpServer): void {
         .enum(['global', 'project'])
         .optional()
         .describe('Scope of the prompt file'),
+      repo: z.string().describe(
+        'Any path inside the target repository. Worktree paths are automatically resolved to the main repo root.'
+      ),
     },
-    async ({ branch, description, baseBranch, prompt, promptScope }) => {
-      const rootErr = ensureRootDir();
+    async ({ branch, description, baseBranch, prompt, promptScope, repo }) => {
+      const effectiveRoot = resolveEffectiveRoot(repo);
+      const rootErr = ensureRootDir(effectiveRoot);
       if (rootErr) return rootErr;
       try {
         let finalDescription = description;
@@ -46,8 +50,12 @@ export function registerCloneOpsTools(server: McpServer): void {
         // If prompt is specified, load it
         if (prompt) {
           const scope = promptScope || 'project';
+          // For project scope, resolve prompts relative to effectiveRoot
+          const promptBase = scope === 'project'
+            ? path.join(effectiveRoot, '.prompts')
+            : promptDir('global');
           const promptPath = path.join(
-            promptDir(scope),
+            promptBase,
             prompt.endsWith('.md') ? prompt : `${prompt}.md`,
           );
           try {
@@ -67,7 +75,7 @@ export function registerCloneOpsTools(server: McpServer): void {
 
         await silenceStdout(() =>
           spawn(branch, {
-            root: serverState.rootDir,
+            root: effectiveRoot,
             description: finalDescription,
             baseBranch,
           }),
@@ -79,10 +87,10 @@ export function registerCloneOpsTools(server: McpServer): void {
           // Determine the resolved prompt path (may include _generated/ prefix)
           const isGenerated = promptName.startsWith('_generated/');
           if (isGenerated) {
-            const metadata = await readMetadata();
+            const metadata = await readMetadata(effectiveRoot);
             if (!metadata[branch]) metadata[branch] = {};
             metadata[branch].sourcePrompt = promptName;
-            await writeMetadata(metadata);
+            await writeMetadata(metadata, effectiveRoot);
           }
         }
 
@@ -91,7 +99,7 @@ export function registerCloneOpsTools(server: McpServer): void {
             {
               type: 'text' as const,
               text: JSON.stringify(
-                { branch, path: path.join(getClonesDir(serverState.rootDir), branch), baseBranch: baseBranch || 'current' },
+                { branch, path: path.join(getClonesDir(effectiveRoot), branch), baseBranch: baseBranch || 'current' },
                 null,
                 2,
               ),
@@ -113,27 +121,32 @@ export function registerCloneOpsTools(server: McpServer): void {
 
   server.tool(
     'list_clones',
-    'List all shadow clones with their metadata. Returns reviewStatus, description, and hasReport (indicates MISSION_COMPLETE.md exists, signaling review readiness). Use to find clones ready for review_clone or to check overall progress.',
+    'List all shadow clones with their metadata. Returns reviewStatus, title, and hasReport (indicates MISSION_COMPLETE.md exists, signaling review readiness). Use to find clones ready for review_clone or to check overall progress. Use describe_clone for full details on a specific clone.',
+    {
+      repo: z.string().describe(
+        'Any path inside the target repository. Worktree paths are automatically resolved to the main repo root.'
+      ),
+    },
     { readOnlyHint: true },
-    async () => {
-      const rootErr = ensureRootDir();
+    async ({ repo }) => {
+      const effectiveRoot = resolveEffectiveRoot(repo);
+      const rootErr = ensureRootDir(effectiveRoot);
       if (rootErr) return rootErr;
       try {
-        const git = new GitUtils(serverState.rootDir);
+        const git = new GitUtils(effectiveRoot);
         const rawEntries = await git.listWorktrees();
-        const clones = parseWorktrees(rawEntries, serverState.rootDir);
-        const metadata = await readMetadata();
+        const clones = parseWorktrees(rawEntries, effectiveRoot);
+        const metadata = await readMetadata(effectiveRoot);
 
-        // Enrich clones with metadata + hasReport
+        // Enrich clones with metadata + hasReport (slim: title instead of full description)
         const enriched = clones.map((c) => {
           const meta = metadata[c.dirName];
           const hasReport = fs.existsSync(path.join(c.path, '.lumi', 'MISSION_COMPLETE.md'));
-          const base: ShadowClone & { hasReport: boolean } = { ...c, hasReport };
+          const base: ShadowClone & { hasReport: boolean; title: string } = { ...c, hasReport, title: extractTitle(meta?.description) };
           if (meta) {
             return {
               ...base,
               baseBranch: meta.baseBranch || c.baseBranch,
-              description: meta.description,
               reviewStatus: meta.reviewStatus,
             };
           }
@@ -141,11 +154,81 @@ export function registerCloneOpsTools(server: McpServer): void {
         });
 
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ repository: serverState.rootDir, clones: enriched }, null, 2) }],
+          content: [{ type: 'text' as const, text: JSON.stringify({ repository: effectiveRoot, clones: enriched }, null, 2) }],
         };
       } catch (error: any) {
         return {
           content: [{ type: 'text' as const, text: `Error listing clones: ${error.message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // Tool: describe_clone
+  // ---------------------------------------------------------------------------
+
+  server.tool(
+    'describe_clone',
+    'Get full details for a single shadow clone, including the complete MISSION.md description and MISSION_COMPLETE.md content. Use after list_clones to drill into a specific clone.',
+    {
+      branch: z.string().describe('Branch name of the clone'),
+      repo: z.string().describe(
+        'Any path inside the target repository. Worktree paths are automatically resolved to the main repo root.'
+      ),
+    },
+    { readOnlyHint: true },
+    async ({ branch, repo }) => {
+      const effectiveRoot = resolveEffectiveRoot(repo);
+      const rootErr = ensureRootDir(effectiveRoot);
+      if (rootErr) return rootErr;
+      try {
+        // 1. Find the clone's worktree
+        const git = new GitUtils(effectiveRoot);
+        const rawEntries = await git.listWorktrees();
+        const clones = parseWorktrees(rawEntries, effectiveRoot);
+        const clone = clones.find((c) => c.branch === branch);
+
+        if (!clone) {
+          return {
+            content: [{ type: 'text' as const, text: `Error: no worktree found for branch "${branch}". The clone may have been killed.` }],
+            isError: true,
+          };
+        }
+
+        // 2. Read metadata
+        const metadata = await readMetadata(effectiveRoot);
+        const meta = metadata[clone.dirName];
+        const hasReport = fs.existsSync(path.join(clone.path, '.lumi', 'MISSION_COMPLETE.md'));
+
+        // 3. Read MISSION_COMPLETE.md if it exists
+        let missionComplete: string | null = null;
+        if (hasReport) {
+          try {
+            missionComplete = await fs.promises.readFile(path.join(clone.path, '.lumi', 'MISSION_COMPLETE.md'), 'utf-8');
+          } catch {
+            // File may have been deleted between check and read
+          }
+        }
+
+        // 4. Build full result
+        const result: Record<string, unknown> = {
+          ...clone,
+          hasReport,
+          title: extractTitle(meta?.description),
+          description: meta?.description || null,
+          baseBranch: meta?.baseBranch || clone.baseBranch,
+          reviewStatus: meta?.reviewStatus || null,
+          missionComplete,
+        };
+
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (error: any) {
+        return {
+          content: [{ type: 'text' as const, text: `Error describing clone: ${error.message}` }],
           isError: true,
         };
       }
@@ -165,23 +248,27 @@ export function registerCloneOpsTools(server: McpServer): void {
         .boolean()
         .default(false)
         .describe('If true, keep the git branch after removing the worktree'),
+      repo: z.string().describe(
+        'Any path inside the target repository. Worktree paths are automatically resolved to the main repo root.'
+      ),
     },
     { destructiveHint: true },
-    async ({ branch, keepBranch }) => {
-      const rootErr = ensureRootDir();
+    async ({ branch, keepBranch, repo }) => {
+      const effectiveRoot = resolveEffectiveRoot(repo);
+      const rootErr = ensureRootDir(effectiveRoot);
       if (rootErr) return rootErr;
       try {
         // Read metadata BEFORE kill (kill deletes the metadata entry)
-        const metadata = await readMetadata();
+        const metadata = await readMetadata(effectiveRoot);
         const meta = metadata[branch];
         const sourcePrompt = meta?.sourcePrompt;
 
-        await silenceStdout(() => kill(branch, { root: serverState.rootDir, keepBranch }));
+        await silenceStdout(() => kill(branch, { root: effectiveRoot, keepBranch }));
 
         // Clean up generated prompt file if tracked
         let promptCleaned = false;
         if (sourcePrompt && sourcePrompt.startsWith('_generated/')) {
-          const promptPath = path.join(serverState.rootDir, '.prompts', sourcePrompt);
+          const promptPath = path.join(effectiveRoot, '.prompts', sourcePrompt);
           try {
             await fs.promises.unlink(promptPath);
             promptCleaned = true;
@@ -214,16 +301,20 @@ export function registerCloneOpsTools(server: McpServer): void {
     {
       source: z.string().describe('Branch to merge FROM'),
       target: z.string().describe('Branch to merge INTO (your own branch)'),
+      repo: z.string().describe(
+        'Any path inside the target repository. Worktree paths are automatically resolved to the main repo root.'
+      ),
     },
-    async ({ source, target }) => {
-      const rootErr = ensureRootDir();
+    async ({ source, target, repo }) => {
+      const effectiveRoot = resolveEffectiveRoot(repo);
+      const rootErr = ensureRootDir(effectiveRoot);
       if (rootErr) return rootErr;
       try {
-        const git = new GitUtils(serverState.rootDir);
+        const git = new GitUtils(effectiveRoot);
 
         // Find worktree for target branch
         const rawEntries = await git.listWorktrees();
-        const clones = parseWorktrees(rawEntries, serverState.rootDir);
+        const clones = parseWorktrees(rawEntries, effectiveRoot);
         const targetClone = clones.find((c) => c.currentBranch === target);
 
         let mergeCwd: string;
@@ -233,8 +324,8 @@ export function registerCloneOpsTools(server: McpServer): void {
           mergeCwd = targetClone.path;
         } else {
           // Create a temporary worktree for the target branch
-          const tempPath = path.join(getClonesDir(serverState.rootDir), `_merge-temp-${Date.now()}`);
-          const targetGit = new GitUtils(serverState.rootDir);
+          const tempPath = path.join(getClonesDir(effectiveRoot), `_merge-temp-${Date.now()}`);
+          const targetGit = new GitUtils(effectiveRoot);
           const branchExists = await targetGit.branchExists(target);
           if (branchExists) {
             await targetGit.addWorktreeExisting(tempPath, target);
@@ -268,7 +359,7 @@ export function registerCloneOpsTools(server: McpServer): void {
 
           // Clean up temp worktree on success
           if (usedTempWorktree) {
-            const cleanupGit = new GitUtils(serverState.rootDir);
+            const cleanupGit = new GitUtils(effectiveRoot);
             await cleanupGit.removeWorktree(mergeCwd, true);
             await cleanupGit.pruneWorktrees();
           }
@@ -307,7 +398,7 @@ export function registerCloneOpsTools(server: McpServer): void {
             let sourceDiff = '';
             try {
               sourceDiff = execSync(`git diff --stat ${target}...${source}`, {
-                cwd: serverState.rootDir,
+                cwd: effectiveRoot,
                 encoding: 'utf-8',
               });
             } catch {
@@ -318,7 +409,7 @@ export function registerCloneOpsTools(server: McpServer): void {
             if (usedTempWorktree) {
               try {
                 execSync('git merge --abort', { cwd: mergeCwd });
-                const cleanupGit = new GitUtils(serverState.rootDir);
+                const cleanupGit = new GitUtils(effectiveRoot);
                 await cleanupGit.removeWorktree(mergeCwd, true);
                 await cleanupGit.pruneWorktrees();
               } catch {
@@ -343,7 +434,7 @@ export function registerCloneOpsTools(server: McpServer): void {
           // Non-conflict error — clean up temp worktree
           if (usedTempWorktree) {
             try {
-              const cleanupGit = new GitUtils(serverState.rootDir);
+              const cleanupGit = new GitUtils(effectiveRoot);
               await cleanupGit.removeWorktree(mergeCwd, true);
               await cleanupGit.pruneWorktrees();
             } catch {

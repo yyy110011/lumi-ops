@@ -65,7 +65,7 @@ It is not an AI agent. It is a workflow protocol that equips your existing IDE a
 ## ✨ Key Features
 
 - **🔄 Formalized Review Protocol** — Stop guessing if an agent is done. Rely on explicit state transitions (`inProgress` → `needsReview` → `needsRevision` → `done`).
-- **🔌 Universal MCP Integration** — `npx @lumi-ops/mcp-server` exposes the entire lifecycle to your AI. Your main agent can autonomously spawn clones, review their diffs, and merge them.
+- **🔌 Universal MCP Integration** — `npx @lumi-ops/mcp-server` exposes 15 tools for the entire lifecycle. All branch-targeting tools require a `repo` parameter for cross-repo operations. Use `describe_clone` for detailed clone inspection.
 - **📄 Mission Templates & Prompt Library** — Standardize how tasks are assigned to reduce agent hallucinations and enforce project-specific rules.
 - **👻 Git Worktree Isolation** — Physical directory separation ensures parallel agents never overwrite each other's files or break your local build.
 
@@ -88,7 +88,7 @@ Try telling your agent:
 - *"Review the clone on branch feat/auth and merge it if it looks good"*
 - *"List all active clones and kill the ones that are done"*
 
-The MCP server also exposes **6 Resources** (read-only context like clone missions, reports, and config) and **4 Prompt templates** (guided workflows for review, spawn, strategy planning, and conflict resolution).
+The MCP server exposes **15 tools** (all requiring a `repo` parameter for cross-repo support), **6 Resources** (read-only context like clone missions, reports, and config), and **4 Prompt templates** (guided workflows for review, spawn, strategy planning, and conflict resolution). Use `describe_clone` after `list_clones` to drill into specific clone details.
 
 Works with Antigravity, VS Code (Copilot), Cursor, Windsurf, and Claude Desktop. See the [MCP Server README](https://github.com/yyy110011/lumi-ops/tree/main/packages/mcp-server) for per-IDE configuration.
 

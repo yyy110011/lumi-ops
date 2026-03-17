@@ -2,7 +2,7 @@
 
 MCP (Model Context Protocol) server for the **Shadow Clone Protocol** — Git Worktree automation for AI agents.
 
-This server exposes the full Lumi-Ops toolset over MCP stdio — 14 tools, 6 read-only resources, and 4 workflow prompt templates, enabling AI agents to spawn, manage, review, and merge shadow clones (Git Worktrees) as part of a parallelised development workflow.
+This server exposes the full Lumi-Ops toolset over MCP stdio — 15 tools, 6 read-only resources, and 4 workflow prompt templates, enabling AI agents to spawn, manage, review, and merge shadow clones (Git Worktrees) as part of a parallelised development workflow.
 
 ## Installation
 
@@ -105,7 +105,8 @@ claude mcp add lumi-ops -- npx -y @lumi-ops/mcp-server
 | Tool | Description |
 |------|-------------|
 | `spawn_clone` | Create a new shadow clone (worktree) with optional prompt/description |
-| `list_clones` | List all shadow clones with metadata, status, and completion reports |
+| `list_clones` | List all shadow clones with slim metadata (title, status, flags). Use `describe_clone` for full details |
+| `describe_clone` | Get full details for a single clone (MISSION.md + MISSION_COMPLETE.md) |
 | `kill_clone` | Remove a shadow clone and optionally delete its branch |
 | `merge_clone` | Squash-merge a source branch into a target branch |
 | `set_clone_status` | Update review status (`todo`, `inProgress`, `needsReview`, `done`, etc.) |
@@ -118,6 +119,15 @@ claude mcp add lumi-ops -- npx -y @lumi-ops/mcp-server
 | `list_repos` | List all Git repositories registered with Lumi-Ops |
 | `get_clone_log` | Get recent git commit history for a clone's branch |
 | `read_clone_file` | Read a file from a clone's worktree (with path traversal protection) |
+
+### Cross-Repo Operations
+
+All branch-targeting tools require a `repo` parameter:
+
+- Pass **any path** inside a target repository (worktree paths are auto-resolved to the main repo root)
+- Makes repo context explicit on every call — no hidden state to manage
+- Makes `set_project_root` unnecessary for multi-repo workflows — just pass `repo` on each call
+- Affected tools: `spawn_clone`, `list_clones`, `kill_clone`, `merge_clone`, `set_clone_status`, `review_clone`, `get_clone_file_diff`, `request_revision`, `get_clone_log`, `read_clone_file`, `list_prompts`, `save_prompt`, `describe_clone`
 
 ## Available Resources
 
@@ -181,6 +191,13 @@ The server auto-detects the Git repo root from `cwd`. If it starts in a non-git 
 
 ```
 set_project_root({ path: "/absolute/path/to/your/project" })
+```
+
+**Option C — Per-call `repo` parameter:** For multi-repo workflows, pass the `repo` parameter directly on each tool call instead of switching `set_project_root`:
+
+```
+list_clones({ repo: "/path/to/other/project" })
+spawn_clone({ branch: "feat/new", repo: "/path/to/other/project" })
 ```
 
 ## Links

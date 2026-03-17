@@ -17,7 +17,7 @@ import {
 } from '@lumi-ops/cli';
 import type { ReviewStatus } from '@lumi-ops/cli';
 import { parseDiffStat } from '../utils.js';
-import { serverState, ensureRootDir, readMetadata } from '../state.js';
+import { ensureRootDir, readMetadata, resolveEffectiveRoot } from '../state.js';
 
 export function registerReviewOpsTools(server: McpServer): void {
   // ---------------------------------------------------------------------------
@@ -32,13 +32,17 @@ export function registerReviewOpsTools(server: McpServer): void {
       status: z
         .enum(['todo', 'inProgress', 'done', 'wontDo', 'needsReview', 'needsRevision'])
         .describe('New review status'),
+      repo: z.string().describe(
+        'Any path inside the target repository. Worktree paths are automatically resolved to the main repo root.'
+      ),
     },
     { idempotentHint: true },
-    async ({ branch, status }) => {
-      const rootErr = ensureRootDir();
+    async ({ branch, status, repo }) => {
+      const effectiveRoot = resolveEffectiveRoot(repo);
+      const rootErr = ensureRootDir(effectiveRoot);
       if (rootErr) return rootErr;
       try {
-        await setCloneStatus(branch, status as ReviewStatus, { root: serverState.rootDir });
+        await setCloneStatus(branch, status as ReviewStatus, { root: effectiveRoot });
 
         return {
           content: [
@@ -63,16 +67,20 @@ export function registerReviewOpsTools(server: McpServer): void {
     'Get a structured review summary of a shadow clone: completion report, diff stats, and commit list. Use as the first step when reviewing work — it returns MISSION_COMPLETE.md content, changed file stats, and commit history. Follow up with get_clone_file_diff to deep-dive into specific file changes.',
     {
       branch: z.string().describe('Branch name of the clone to review'),
+      repo: z.string().describe(
+        'Any path inside the target repository. Worktree paths are automatically resolved to the main repo root.'
+      ),
     },
     { readOnlyHint: true },
-    async ({ branch }) => {
-      const rootErr = ensureRootDir();
+    async ({ branch, repo }) => {
+      const effectiveRoot = resolveEffectiveRoot(repo);
+      const rootErr = ensureRootDir(effectiveRoot);
       if (rootErr) return rootErr;
       try {
         // 1. Find the clone's worktree path
-        const git = new GitUtils(serverState.rootDir);
+        const git = new GitUtils(effectiveRoot);
         const rawEntries = await git.listWorktrees();
-        const clones = parseWorktrees(rawEntries, serverState.rootDir);
+        const clones = parseWorktrees(rawEntries, effectiveRoot);
         const clone = clones.find((c) => c.branch === branch);
 
         if (!clone) {
@@ -91,14 +99,14 @@ export function registerReviewOpsTools(server: McpServer): void {
         }
 
         // 3. Look up baseBranch from metadata
-        const metadata = await readMetadata();
+        const metadata = await readMetadata(effectiveRoot);
         const baseBranch = metadata[branch]?.baseBranch || 'main';
 
         // 4. Get diff stat
         let diffStat: ReturnType<typeof parseDiffStat> = { filesChanged: 0, insertions: 0, deletions: 0, files: [] };
         try {
           const diffStatRaw = execFileSync('git', ['diff', '--numstat', `HEAD...${branch}`], {
-            cwd: serverState.rootDir,
+            cwd: effectiveRoot,
             encoding: 'utf-8',
             maxBuffer: 10 * 1024 * 1024,
           });
@@ -121,7 +129,7 @@ export function registerReviewOpsTools(server: McpServer): void {
         let commits: { hash: string; message: string }[] = [];
         try {
           const logRaw = execFileSync('git', ['log', '--oneline', `HEAD..${branch}`], {
-            cwd: serverState.rootDir,
+            cwd: effectiveRoot,
             encoding: 'utf-8',
           });
           commits = logRaw
@@ -172,16 +180,20 @@ export function registerReviewOpsTools(server: McpServer): void {
     {
       branch: z.string().describe('Branch name of the clone'),
       filepath: z.string().describe('Relative file path to diff (from repo root)'),
+      repo: z.string().describe(
+        'Any path inside the target repository. Worktree paths are automatically resolved to the main repo root.'
+      ),
     },
     { readOnlyHint: true },
-    async ({ branch, filepath }) => {
-      const rootErr = ensureRootDir();
+    async ({ branch, filepath, repo }) => {
+      const effectiveRoot = resolveEffectiveRoot(repo);
+      const rootErr = ensureRootDir(effectiveRoot);
       if (rootErr) return rootErr;
       try {
         let diff: string;
         try {
           diff = execFileSync('git', ['diff', `HEAD...${branch}`, '--', filepath], {
-            cwd: serverState.rootDir,
+            cwd: effectiveRoot,
             encoding: 'utf-8',
             maxBuffer: 10 * 1024 * 1024,
           });
@@ -220,12 +232,16 @@ export function registerReviewOpsTools(server: McpServer): void {
     {
       branch: z.string().describe('Branch name of the clone to send feedback to'),
       feedback: z.string().describe('Review feedback content (markdown)'),
+      repo: z.string().describe(
+        'Any path inside the target repository. Worktree paths are automatically resolved to the main repo root.'
+      ),
     },
-    async ({ branch, feedback }) => {
-      const rootErr = ensureRootDir();
+    async ({ branch, feedback, repo }) => {
+      const effectiveRoot = resolveEffectiveRoot(repo);
+      const rootErr = ensureRootDir(effectiveRoot);
       if (rootErr) return rootErr;
       try {
-        const { feedbackPath } = await requestRevision(branch, feedback, { root: serverState.rootDir });
+        const { feedbackPath } = await requestRevision(branch, feedback, { root: effectiveRoot });
 
         return {
           content: [
@@ -262,14 +278,18 @@ export function registerReviewOpsTools(server: McpServer): void {
         .optional()
         .default(20)
         .describe('Maximum number of commits to return'),
+      repo: z.string().describe(
+        'Any path inside the target repository. Worktree paths are automatically resolved to the main repo root.'
+      ),
     },
     { readOnlyHint: true },
-    async ({ branch, maxCount }) => {
-      const rootErr = ensureRootDir();
+    async ({ branch, maxCount, repo }) => {
+      const effectiveRoot = resolveEffectiveRoot(repo);
+      const rootErr = ensureRootDir(effectiveRoot);
       if (rootErr) return rootErr;
       try {
         // 1. Read metadata to get baseBranch
-        const metadata = await readMetadata();
+        const metadata = await readMetadata(effectiveRoot);
         const baseBranch = metadata[branch]?.baseBranch || 'main';
 
         // 2. Get formatted commit log
@@ -278,7 +298,7 @@ export function registerReviewOpsTools(server: McpServer): void {
           const logRaw = execFileSync(
             'git',
             ['log', `--format=%H%x00%s%x00%ai%x00%an`, `${baseBranch}..${branch}`, `-${maxCount}`],
-            { cwd: serverState.rootDir, encoding: 'utf-8' },
+            { cwd: effectiveRoot, encoding: 'utf-8' },
           );
           commits = logRaw
             .trim()
@@ -298,7 +318,7 @@ export function registerReviewOpsTools(server: McpServer): void {
           const countRaw = execFileSync(
             'git',
             ['rev-list', '--count', `${baseBranch}..${branch}`],
-            { cwd: serverState.rootDir, encoding: 'utf-8' },
+            { cwd: effectiveRoot, encoding: 'utf-8' },
           );
           totalCommits = parseInt(countRaw.trim(), 10) || 0;
         } catch {
@@ -335,16 +355,20 @@ export function registerReviewOpsTools(server: McpServer): void {
     {
       branch: z.string().describe('Branch name of the clone'),
       filepath: z.string().describe('Relative file path from the worktree root'),
+      repo: z.string().describe(
+        'Any path inside the target repository. Worktree paths are automatically resolved to the main repo root.'
+      ),
     },
     { readOnlyHint: true },
-    async ({ branch, filepath }) => {
-      const rootErr = ensureRootDir();
+    async ({ branch, filepath, repo }) => {
+      const effectiveRoot = resolveEffectiveRoot(repo);
+      const rootErr = ensureRootDir(effectiveRoot);
       if (rootErr) return rootErr;
       try {
         // 1. Find the clone's worktree path
-        const git = new GitUtils(serverState.rootDir);
+        const git = new GitUtils(effectiveRoot);
         const rawEntries = await git.listWorktrees();
-        const clones = parseWorktrees(rawEntries, serverState.rootDir);
+        const clones = parseWorktrees(rawEntries, effectiveRoot);
         const clone = clones.find((c) => c.branch === branch);
 
         if (!clone) {

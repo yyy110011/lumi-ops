@@ -73,6 +73,17 @@ export async function silenceStdout<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 // ---------------------------------------------------------------------------
+// extractTitle
+// ---------------------------------------------------------------------------
+
+/** Extract the first markdown heading as a title, or return a fallback. */
+export function extractTitle(description?: string): string {
+  if (!description) return '(no description)';
+  const match = description.match(/^#\s+(.+)$/m);
+  return match ? match[1].trim() : description.slice(0, 80).trim() || '(no description)';
+}
+
+// ---------------------------------------------------------------------------
 // resolveMainRepoRoot
 // ---------------------------------------------------------------------------
 
