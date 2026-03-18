@@ -1,6 +1,6 @@
 {
   "name": "@lumi-ops/mcp-server",
-  "version": "0.4.5",
+  "version": "0.5.4",
   "description": "MCP server for the Shadow Clone Protocol — Git Worktree automation for AI agents",
   "license": "GPL-3.0-or-later",
   "author": "ZunRenYao",
