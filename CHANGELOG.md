@@ -2,7 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## v0.4.5 (Unreleased)
+## v0.5.4
+
+### ✨ Features
+- **Auto-Close Clone Window** — Clone VS Code windows now automatically close when the worktree is killed via `fs.watch` on the parent directory. Extracted into testable `autoCloseWatcher.ts` module with 10 unit tests.
+- **Beta CI Pipeline** — New `publish-beta.yml` workflow auto-publishes pre-release to VS Code Marketplace on every push to `develop` branch. Open VSX is excluded (does not support pre-release channels).
+- **Develop Branch** — New `develop` branch for integrating features before stable release.
+
+### 🐛 Bug Fixes
+- **Kill Orphan Parent Cleanup** — Fixed orphan parent directories not being cleaned up due to `.DS_Store` files.
+
+## v0.4.5
 
 ### ⚠️ Breaking Changes
 - **`repo` parameter now required** — All branch-targeting MCP tools now require a `repo` parameter. If you were relying on auto-detected `rootDir` alone, you must now pass `repo` on every call. Tools affected: `spawn_clone`, `list_clones`, `kill_clone`, `merge_clone`, `set_clone_status`, `review_clone`, `get_clone_file_diff`, `request_revision`, `get_clone_log`, `read_clone_file`, `list_prompts`, `save_prompt`, `describe_clone`.

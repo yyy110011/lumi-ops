@@ -165,7 +165,9 @@ cd packages/extension && npm run watch
 
 ## Release Process
 
-Releases are triggered by **pushing a Git tag** (e.g., `git tag v0.2.6 && git push origin v0.2.6`). CI automatically builds, bumps versions, and publishes to the VS Code Marketplace and Open VSX.
+Releases are triggered by **pushing a Git tag** (e.g., `git tag v0.5.5 && git push origin v0.5.5`). CI automatically builds, bumps versions, and publishes to the VS Code Marketplace and Open VSX.
+
+**Beta releases** are triggered by pushing to the `develop` branch. CI auto-publishes pre-release to VS Code Marketplace only (Open VSX does not support pre-release channels).
 
 **Before tagging a release, you MUST update user-facing documentation:**
 
