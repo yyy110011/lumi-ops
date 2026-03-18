@@ -1,0 +1,87 @@
+name: Publish Beta
+
+on:
+  push:
+    branches: [develop]
+
+concurrency:
+  group: publish-beta
+  cancel-in-progress: true
+
+jobs:
+  publish-beta:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Derive beta version
+        id: version
+        run: |
+          BASE=$(node -p "require('./packages/extension/package.json').version")
+          VERSION="${BASE}-beta.${GITHUB_RUN_NUMBER}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Publishing beta version: $VERSION"
+
+      - name: Set version in package.json
+        run: |
+          cd packages/cli
+          npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version
+          cd ../extension
+          npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version
+          cd ../mcp-server
+          npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run CLI Tests
+        run: pnpm --filter @lumi-ops/cli test
+
+      - name: Build CLI (shared dependency)
+        run: pnpm --filter @lumi-ops/cli build
+
+      - name: Test MCP Server
+        run: pnpm --filter @lumi-ops/mcp-server test
+
+      - name: Build MCP Server
+        run: pnpm --filter @lumi-ops/mcp-server build
+
+      - name: Build Extension
+        run: pnpm --filter lumi-ops build
+
+      - name: Publish to Open VSX (Pre-Release)
+        uses: HaaLeo/publish-vscode-extension@v2
+        with:
+          pat: ${{ secrets.OVSX_PAT }}
+          registryUrl: https://open-vsx.org
+          packagePath: packages/extension
+          dependencies: false
+          preRelease: true
+
+      - name: Publish to VS Code Marketplace (Pre-Release)
+        uses: HaaLeo/publish-vscode-extension@v2
+        with:
+          pat: ${{ secrets.AZURE_PAT }}
+          registryUrl: https://marketplace.visualstudio.com
+          packagePath: packages/extension
+          dependencies: false
+          preRelease: true
+
+      - name: Publish MCP Server to npm (beta tag)
+        run: npm publish --access public --tag beta
+        working-directory: packages/mcp-server
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
