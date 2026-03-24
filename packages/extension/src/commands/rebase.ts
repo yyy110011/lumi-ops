@@ -13,10 +13,13 @@ export function registerRebaseCommands(
 
   return [
     vscode.commands.registerCommand('lumi-ops.rebase', async (item?: ShadowItem) => {
-      if (!rootPath || !item) return;
+      if (!item || !item.clone) return;
+      // Resolve root from clone metadata (multi-root support) or fallback
+      const effectiveRoot = (item.clone as any).repoRoot || rootPath;
+      if (!effectiveRoot) return;
 
       const branch = item.clone.branch;
-      const metadataPath = path.join(getRepoStorageDir(rootPath), METADATA_FILE);
+      const metadataPath = path.join(getRepoStorageDir(effectiveRoot), METADATA_FILE);
 
       // Read baseBranch from metadata
       let metadata: Record<string, any> = {};
@@ -61,7 +64,7 @@ export function registerRebaseCommands(
     }),
 
     vscode.commands.registerCommand('lumi-ops.abortRebase', async (item?: ShadowItem) => {
-      if (!rootPath || !item) return;
+      if (!item || !item.clone) return;
       const clonePath = item.clone.path;
       const git = new GitUtils(clonePath);
       try {

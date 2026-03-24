@@ -12,18 +12,11 @@ Built on Git Worktrees. Works with Antigravity, Cursor, GitHub Copilot, and any 
 [![Downloads](https://img.shields.io/open-vsx/dt/ZunRenYao/lumi-ops?style=flat&label=Downloads)](https://open-vsx.org/extension/ZunRenYao/lumi-ops)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-☕-yellow?style=flat)](https://buymeacoffee.com/ryanzryao)
 
-### 🆕 What's New in v0.4
+### 🆕 What's New in v0.5
 
-- **MCP Server** — AI agents can now spawn, manage, review, and merge clones programmatically via the `@lumi-ops/mcp-server` package.
-- **Review Protocol** — Structured review workflow: agent writes `MISSION_COMPLETE.md` → sets status to `needsReview` → reviewer approves or requests revision → squash merge.
-- **Auto-Status Transitions** — Clone status auto-transitions from `todo` → `inProgress` when the workspace opens.
-- **Status-Aware Copy Prompt** — "Copy Prompt" content adapts based on clone status — includes revision feedback when in a revision cycle.
-- **Merge Improvements** — Squash merges now auto-exclude `.lumi/` artifacts and IDE ephemeral files.
-- **Root Agent Mode & Clone Agent Rules** — Settings to inject role-specific rules for strategist (root) and executor (clone) agents.
-- **Rebase Conflict UX** — Manual conflict resolution instead of auto-abort. Sidebar shows a `🔀 rebasing` indicator.
-- **Review Tools** — `review_clone` and `get_clone_file_diff` MCP tools for structured code review.
-- **MCP Resources (v0.4.3)** — 6 read-only Resources (`lumi://clones`, `lumi://clones/{branch}/mission|report|feedback`, `lumi://prompts/{scope}/{name}`, `lumi://config`) for agent context awareness without side effects.
-- **MCP Workflow Prompts (v0.4.3)** — 4 Prompt templates (`review-and-merge`, `spawn-with-context`, `multi-clone-strategy`, `resolve-conflict`) that appear in your MCP client's prompt menu.
+- **Multi-Root Workspace Support** — Extension now detects and aggregates clones across all workspace folders, with clones grouped by repo in the sidebar.
+- **Auto-Close Clone Window** — Clone VS Code windows automatically close when the worktree is killed, keeping your workspace tidy.
+- **Beta CI Pipeline** — `develop` branch builds and uploads `.vsix` artifacts for manual testing before stable release.
 
 ---
 
@@ -67,6 +60,8 @@ It is not an AI agent. It is a workflow protocol that equips your existing IDE a
 - **🔄 Formalized Review Protocol** — Stop guessing if an agent is done. Rely on explicit state transitions (`inProgress` → `needsReview` → `needsRevision` → `done`).
 - **🔌 Universal MCP Integration** — `npx @lumi-ops/mcp-server` exposes 15 tools for the entire lifecycle. All branch-targeting tools require a `repo` parameter for cross-repo operations. Use `describe_clone` for detailed clone inspection.
 - **📄 Mission Templates & Prompt Library** — Standardize how tasks are assigned to reduce agent hallucinations and enforce project-specific rules.
+- **🪟 Multi-Root Workspace** — Works with VS Code multi-root workspaces — clones from all workspace folders are detected and grouped by repo in the sidebar tree.
+- **🚪 Auto-Close Clone Window** — Clone windows automatically close when the worktree is killed, so you don't accumulate stale windows.
 - **👻 Git Worktree Isolation** — Physical directory separation ensures parallel agents never overwrite each other's files or break your local build.
 
 ### ⚡ Spawn in Seconds
@@ -145,6 +140,7 @@ A multi-repo dashboard to monitor all your worktrees from a single panel.
 ![Worktree Manager](https://raw.githubusercontent.com/yyy110011/lumi-ops/main/packages/extension/media/worktree-manager.png)
 
 ### 🔍 Other Features
+- **Auto-Close Window** — Clone windows auto-close when the worktree is killed via filesystem watcher.
 - **Dropdown Search** — Branch inputs filter in real-time as you type.
 - **Copy Branch Name** — Right-click any clone to copy its branch name.
 - **Current Branch Protection** — Your active branch cannot be accidentally killed.

@@ -374,4 +374,67 @@ describe('registerMergeCommands', () => {
       expect(mockRefresh).toHaveBeenCalled();
     });
   });
+
+  describe('multi-root: clone.repoRoot', () => {
+    it('uses clone.repoRoot for merge when available', async () => {
+      const handler = getCommandHandler();
+      mockShowQuickPick.mockResolvedValue({ label: 'main', targetBranch: 'main' });
+      mockShowInputBox.mockResolvedValue('test commit');
+      mockWithProgress.mockImplementation(async (_opts: any, cb: Function) => cb());
+      mockMerge.mockResolvedValue(undefined);
+      mockShowInformationMessage.mockResolvedValue('No');
+
+      await handler({ clone: { currentBranch: 'feat/test', dirName: 'feat/test', repoRoot: '/other-repo' } });
+
+      expect(mockMerge).toHaveBeenCalledWith('feat/test', expect.objectContaining({
+        root: '/other-repo',
+      }));
+    });
+
+    it('falls back to rootPath when clone.repoRoot is absent', async () => {
+      const handler = getCommandHandler();
+      mockShowQuickPick.mockResolvedValue({ label: 'main', targetBranch: 'main' });
+      mockShowInputBox.mockResolvedValue('test commit');
+      mockWithProgress.mockImplementation(async (_opts: any, cb: Function) => cb());
+      mockMerge.mockResolvedValue(undefined);
+      mockShowInformationMessage.mockResolvedValue('No');
+
+      await handler({ clone: { currentBranch: 'feat/test', dirName: 'feat/test' } });
+
+      expect(mockMerge).toHaveBeenCalledWith('feat/test', expect.objectContaining({
+        root: '/repo',
+      }));
+    });
+
+    it('uses clone.repoRoot for kill after merge', async () => {
+      const mockContext = { subscriptions: [] } as any;
+      const mockRefresh = vi.fn();
+      const mockDeps = {
+        rootPath: '/repo',
+        allRoots: ['/repo'],
+        shadowTreeProvider: { refresh: mockRefresh },
+        creatorProvider: { resetForm: vi.fn() },
+        promptLibraryProvider: {},
+        promptLibraryViewProvider: {},
+        missionTemplateProvider: {},
+        statusBus: { fire: vi.fn() },
+      } as any;
+
+      registerMergeCommands(mockContext, mockDeps);
+      const call = mockRegisterCommand.mock.calls.find((c: any[]) => c[0] === 'lumi-ops.merge');
+      const handler = call![1];
+
+      mockShowQuickPick.mockResolvedValue({ label: 'main', targetBranch: 'main' });
+      mockShowInputBox.mockResolvedValue('test commit');
+      mockWithProgress.mockImplementation(async (_opts: any, cb: Function) => cb());
+      mockMerge.mockResolvedValue(undefined);
+      mockKill.mockResolvedValue(undefined);
+      mockShowInformationMessage.mockResolvedValue('Yes, Delete It');
+
+      await handler({ clone: { currentBranch: 'feat/test', dirName: 'feat/test', repoRoot: '/other-repo' } });
+
+      // kill should use the clone's repoRoot, not the default rootPath
+      expect(mockKill).toHaveBeenCalledWith('feat/test', { root: '/other-repo' });
+    });
+  });
 });

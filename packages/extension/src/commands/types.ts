@@ -7,6 +7,7 @@ import { StatusEventBus } from '../StatusEventBus';
 
 export interface CommandDeps {
   rootPath: string | undefined;
+  allRoots: string[];
   shadowTreeProvider: ShadowTreeProvider;
   creatorProvider: ShadowCreatorProvider;
   promptLibraryProvider: PromptLibraryProvider;
