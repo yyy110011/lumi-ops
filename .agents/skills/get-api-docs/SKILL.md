@@ -77,6 +77,15 @@ Available labels: `outdated`, `inaccurate`, `incomplete`, `wrong-examples`,
 | List notes | `chub annotate --list` |
 | Rate a doc | `chub feedback stripe/api up` |
 
+## Troubleshooting
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `command not found: chub` | chub CLI not installed | Install with `npm i -g chub` or check PATH |
+| No results from `chub search` | Library not indexed yet | Try broader terms, or fall back to official docs via web search |
+| `rate limit exceeded` | Too many requests | Wait a moment and retry; cache results locally if needed |
+| Wrong API shape in fetched docs | Outdated doc version | Use `chub feedback <id> down --label outdated` and cross-check with official docs |
+
 ## Notes
 
 - `chub search` with no query lists everything available

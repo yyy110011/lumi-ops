@@ -1,6 +1,6 @@
 ---
 name: lumi-ops-tui
-description: Architecture, protocol types, OSS references, and development patterns for the Lumi-Ops TUI dashboard (Rust + ratatui). Read this FIRST before touching any TUI source file.
+description: Architecture, protocol types, OSS references, and development patterns for the Lumi-Ops TUI dashboard (Rust + ratatui). Use when implementing TUI panels, protocol parsers, tmux integration, modifying the event loop, adding key bindings, or working on any file under packages/tui/src/. Read this FIRST before touching any TUI source file.
 ---
 
 # Lumi-Ops TUI — Development Skill
@@ -16,11 +16,15 @@ description: Architecture, protocol types, OSS references, and development patte
 | Async Runtime | tokio (rt-multi-thread) |
 | Package Path | `packages/tui/` |
 | Binary Name | `lumi-tui` |
-| Design Doc | [design.md](file:///packages/tui/doc/design.md) |
+| Design Doc | `packages/tui/doc/design.md` |
 
 ---
 
-## Architecture — The TUI is a Consumer
+## Instructions
+
+### Step 1: Understand the Architecture
+
+The TUI is a **pure consumer** of file-based state. It never calls git directly.
 
 ```
 ┌────────────────────────────────────┐
@@ -41,14 +45,11 @@ description: Architecture, protocol types, OSS references, and development patte
   └───────────────┘
 ```
 
-**Core rules:**
-1. TUI **never** calls git directly — all mutations go through `lumi-ops` CLI subprocess
-2. tmux interaction: `capture-pane -p -e -J` (read) + `send-keys` (write)
-3. State refresh via **2-second polling loop** reading file-based state
+For protocol types and Rust struct definitions, consult `references/protocol-types.md`.
 
----
+### Step 2: Know the Layout
 
-## Layout — 4 Panels
+4-panel layout:
 
 ```
 ┌─────────────┬────────────────────────┬──────────────────────┐
@@ -62,143 +63,7 @@ description: Architecture, protocol types, OSS references, and development patte
 └─────────────────────────────────────────────────────────────┘
 ```
 
----
-
-## Protocol Types (from CLI — must mirror in Rust)
-
-### `.lumi-metadata.json` — Per-repo metadata
-
-```json
-{
-  "feat/my-task": {
-    "baseBranch": "main",
-    "description": "Add auth module",
-    "reviewStatus": "inProgress",
-    "sourcePrompt": "add-auth.md"
-  }
-}
-```
-
-**Rust struct:**
-```rust
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CloneMetadata {
-    pub base_branch: Option<String>,
-    pub description: Option<String>,
-    pub review_status: Option<ReviewStatus>,
-    pub source_prompt: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ReviewStatus {
-    Todo,
-    InProgress,
-    Done,
-    WontDo,
-    NeedsReview,
-    NeedsRevision,
-}
-```
-
-### `~/.lumi-ops/.registry.json` — Global repo registry
-
-```json
-{
-  "lumi-ops": "/Users/ryan/project_in_progress/lumi-ops",
-  "lumadient": "/Users/ryan/project_in_progress/lumadient"
-}
-```
-
-**Rust struct:**
-```rust
-pub type RepoRegistry = std::collections::HashMap<String, String>;
-// key = repo name, value = absolute root path
-```
-
-### Computed: Clone directory layout
-
-```
-<repoRoot>.worktrees/
-├── .lumi-metadata.json      ← centralized metadata for ALL clones
-├── feat/my-task/             ← worktree directory
-│   ├── .lumi/
-│   │   ├── MISSION.md
-│   │   ├── MISSION_COMPLETE.md
-│   │   └── REVIEW_FEEDBACK.md
-│   └── (source code)
-└── fix/bug-123/
-```
-
-- Clone ID = relative path under `.worktrees/` (e.g., `feat/my-task`)
-- Metadata path = `<repoRoot>.worktrees/.lumi-metadata.json`
-- Mission path = `<worktreePath>/.lumi/MISSION.md`
-
----
-
-## Cargo.toml — Recommended Dependencies
-
-Based on Grove (MIT) reference + design requirements:
-
-```toml
-[package]
-name = "lumi-tui"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-# TUI
-ratatui = "0.29"
-crossterm = { version = "0.28", features = ["event-stream"] }
-ansi-to-tui = "7"          # Render ANSI from tmux capture-pane
-
-# Async
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process"] }
-
-# Serialization
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-
-# Error handling
-anyhow = "1"
-
-# Logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-# Time
-chrono = { version = "0.4", features = ["serde"] }
-
-# Markdown rendering
-pulldown-cmark = "0.12"
-
-# Tree widget
-tui-tree-widget = "0.22"
-
-# Text input
-tui-textarea = "0.7"
-
-# Fuzzy search
-fuzzy-matcher = "0.3"
-
-# Dirs
-dirs = "5"
-
-# UUID (for agent tracking)
-uuid = { version = "1", features = ["v4", "serde"] }
-
-# Regex (for agent status detection)
-regex = "1"
-```
-
-> **Note:** `git2` is optional — TUI reads file state directly. Only needed if we want branch listing without `lumi-ops list --json`.
-
----
-
-## Module Structure
+### Step 3: Know the Module Structure
 
 ```
 packages/tui/src/
@@ -209,13 +74,13 @@ packages/tui/src/
 │   └── config.rs              # User config (optional toml)
 ├── protocol/                  # Lumi Protocol parsers (pure, testable)
 │   ├── mod.rs
-│   ├── metadata.rs            # Parse .lumi-metadata.json → HashMap<String, CloneMetadata>
-│   ├── registry.rs            # Parse ~/.lumi-ops/.registry.json → RepoRegistry
-│   ├── mission.rs             # Read MISSION.md / MISSION_COMPLETE.md / REVIEW_FEEDBACK.md
-│   └── worktree.rs            # Parse `lumi-ops list --json` output → Vec<ShadowClone>
+│   ├── metadata.rs            # Parse .lumi-metadata.json
+│   ├── registry.rs            # Parse ~/.lumi-ops/.registry.json
+│   ├── mission.rs             # Read MISSION.md / MISSION_COMPLETE.md
+│   └── worktree.rs            # Parse `lumi-ops list --json` output
 ├── tmux/
 │   ├── mod.rs
-│   └── session.rs             # TmuxSession: create, capture_pane, send_keys, attach, kill, exists
+│   └── session.rs             # TmuxSession: create, capture_pane, send_keys
 ├── cli/
 │   ├── mod.rs
 │   └── subprocess.rs          # Async subprocess calls to `lumi-ops` CLI
@@ -228,176 +93,28 @@ packages/tui/src/
 │   └── status_bar.rs          # Bottom: shortcut hints
 ```
 
----
+### Step 4: Adding a New Panel
 
-## Open Source Reference — Borrowable Code
+1. Create `ui/<panel_name>.rs` with a render function taking `&AppState` and `Frame`/`Rect`
+2. Add relevant state fields to `AppState` in `app/mod.rs`
+3. Add the panel's `FocusedPanel` variant to the enum
+4. Wire into the root layout in `ui/mod.rs`
+5. Add keyboard shortcuts in `app/actions.rs`
 
-### 🥇 Grove (ZiiMs/Grove) — MIT License ✅
+### Step 5: Adding a New Key Binding
 
-**GitHub:** https://github.com/ZiiMs/Grove
-**Tech match:** Rust + ratatui 0.29 + crossterm 0.28 + tokio + tmux
+1. Add a variant to the `Action` enum in `app/actions.rs`
+2. Map the key in `handle_key()` (respect `FocusedPanel` for context-sensitive bindings)
+3. Handle the action in the main loop or `app.apply_action()`
+4. Update the status bar hints in `ui/status_bar.rs`
 
-#### Borrow: `tmux/session.rs`
-tmux wrapper with: `create(working_dir, command)`, `exists()`, `capture_pane(lines)`, `send_keys(keys)`, `send_keys_raw(keys)`, `attach()`, `kill()`, `pane_current_command()`, `pane_size()`.
+### Step 6: Consult Reference Material
 
-Key pattern — capture with ANSI preserved:
-```rust
-Command::new("tmux")
-    .args(["capture-pane", "-t", &self.name, "-p", "-e", "-J", "-S", &format!("-{}", lines)])
-```
+Before writing code, consult the detailed references:
 
-#### Borrow: `agent/model.rs`
-Agent struct with: `id (UUID)`, `branch`, `worktree_path`, `tmux_session`, `status`, `output_buffer`, `created_at`, `last_activity`, `activity_history (VecDeque<bool>)`, `checklist_progress`.
-
-Sparkline pattern:
-```rust
-pub fn sparkline_data(&self) -> Vec<u64> {
-    self.activity_history.iter().map(|&active| if active { 1 } else { 0 }).collect()
-}
-```
-
-#### Borrow: `agent/detector.rs`
-Status detection via regex patterns on tmux output for Claude/Gemini/Codex. Uses `LazyLock<Regex>` for compiled patterns.
-
-#### Borrow: Entry point pattern (main.rs)
-- `enable_raw_mode()` + `EnterAlternateScreen` + `EnableMouseCapture`
-- Event loop with `poll(Duration)` + `crossterm::event::read()`
-- `tokio::spawn` for background polling tasks
-- `watch::channel` for shared state updates
-
-### 🥈 Pertmux Architecture (for future v2)
-
-**Daemon/Client via Unix Socket:**
-```
-pertmux serve → background daemon → polls tmux/metadata/forge every 2-60s
-                                   → broadcasts DashboardSnapshot
-                                   → TUI clients connect via /tmp/pertmux-{USER}.sock
-```
-
-**Skip for Phase 1** — use direct file reads. Consider for Phase 2 if we need multi-client support (VS Code extension + TUI reading same state).
-
----
-
-## Event Loop Pattern (from Grove)
-
-```rust
-#[tokio::main]
-async fn main() -> Result<()> {
-    // 1. Setup terminal
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-
-    // 2. Create app state
-    let mut app = AppState::new();
-
-    // 3. Spawn background pollers
-    let (tx, mut rx) = mpsc::channel(32);
-    tokio::spawn(poll_metadata(tx.clone()));      // 2s interval
-    tokio::spawn(poll_agent_status(tx.clone()));   // 2s interval
-
-    // 4. Main loop
-    loop {
-        terminal.draw(|f| ui::render(f, &app))?;
-
-        // Check for keyboard events with short timeout
-        if poll(Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
-                match app.handle_key(key) {
-                    Action::Quit => break,
-                    Action::SpawnClone(desc) => { /* subprocess */ },
-                    // ...
-                    _ => {}
-                }
-            }
-        }
-
-        // Drain background updates
-        while let Ok(update) = rx.try_recv() {
-            app.apply_update(update);
-        }
-    }
-
-    // 5. Cleanup
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
-    terminal.show_cursor()?;
-    Ok(())
-}
-```
-
----
-
-## CLI Subprocess Pattern
-
-All mutations via `lumi-ops` CLI:
-
-```rust
-use tokio::process::Command;
-use anyhow::Result;
-
-pub async fn spawn_clone(root: &str, branch: &str, description: &str) -> Result<String> {
-    let output = Command::new("lumi-ops")
-        .args(["spawn", branch, "--root", root, "--description", description])
-        .output()
-        .await?;
-    if !output.status.success() {
-        anyhow::bail!("spawn failed: {}", String::from_utf8_lossy(&output.stderr));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
-}
-
-pub async fn list_clones_json(root: &str) -> Result<Vec<ShadowClone>> {
-    let output = Command::new("lumi-ops")
-        .args(["list", "--root", root, "--json"])
-        .output()
-        .await?;
-    let clones: Vec<ShadowClone> = serde_json::from_slice(&output.stdout)?;
-    Ok(clones)
-}
-
-pub async fn kill_clone(root: &str, branch: &str) -> Result<()> { /* ... */ }
-pub async fn merge_clone(root: &str, branch: &str, target: &str) -> Result<()> { /* ... */ }
-```
-
----
-
-## Status Icons
-
-| ReviewStatus | Icon |
-|-------------|------|
-| `todo` | 🟡 |
-| `inProgress` | 🔵 |
-| `needsReview` | 🟣 |
-| `needsRevision` | 🟠 |
-| `done` | ✅ |
-| `wontDo` | ⬛ |
-
-| Agent Status | Icon |
-|-------------|------|
-| Running | 🤖 |
-| Waiting (input) | ⏳ |
-| Completed | ✅ |
-| Failed | ❌ |
-| Idle (no tmux) | 💤 |
-
----
-
-## Key Crate Documentation References
-
-| Crate | Docs |
-|-------|------|
-| ratatui | https://docs.rs/ratatui/latest |
-| crossterm | https://docs.rs/crossterm/latest |
-| ansi-to-tui | https://docs.rs/ansi-to-tui/latest |
-| tui-tree-widget | https://docs.rs/tui-tree-widget/latest |
-| tui-textarea | https://docs.rs/tui-textarea/latest |
-| pulldown-cmark | https://docs.rs/pulldown-cmark/latest |
-| fuzzy-matcher | https://docs.rs/fuzzy-matcher/latest |
-
----
+- **Protocol types & Rust structs**: `references/protocol-types.md`
+- **Event loop, CLI subprocess, tmux patterns**: `references/code-patterns.md`
+- **Cargo.toml dependencies & crate docs**: `references/dependencies.md`
 
 ## Keyboard Shortcuts
 
@@ -416,27 +133,6 @@ pub async fn merge_clone(root: &str, branch: &str, target: &str) -> Result<()> {
 | `/` | Fuzzy search |
 | `?` | Help overlay |
 
----
-
-## Build & Run
-
-```bash
-# Development
-cd packages/tui
-cargo run
-
-# Release build
-cargo build --release
-
-# Run with specific repo
-cargo run -- /path/to/repo
-
-# Debug logging
-RUST_LOG=lumi_tui=debug cargo run 2>/tmp/lumi-tui.log
-```
-
----
-
 ## Important Rules
 
 1. **Pure consumer** — TUI never writes to `.lumi-metadata.json` or git. All mutations go through `lumi-ops` CLI.
@@ -444,3 +140,24 @@ RUST_LOG=lumi_tui=debug cargo run 2>/tmp/lumi-tui.log
 3. **Graceful degradation** — All file reads and tmux calls should handle "not found" / "not running" gracefully with `Option<T>`.
 4. **ANSI passthrough** — Use `ansi-to-tui` to render tmux output with color codes preserved. Use `-e` flag on `capture-pane`.
 5. **No blocking** — All subprocess calls must be `tokio::process::Command`, never `std::process::Command` in the event loop.
+
+## Build & Run
+
+```bash
+cd packages/tui
+cargo run                                              # Development
+cargo build --release                                  # Release build
+cargo run -- /path/to/repo                             # Run with specific repo
+RUST_LOG=lumi_tui=debug cargo run 2>/tmp/lumi-tui.log  # Debug logging
+```
+
+## Troubleshooting
+
+| Symptom | Cause | Solution |
+|---------|-------|----------|
+| No repos listed | Registry file missing or empty | Run `lumi-ops spawn` once from the target repo to auto-register |
+| tmux pane shows nothing | tmux session not running | Check `tmux ls`; agent may have exited — verify with `tmux has-session -t <name>` |
+| Metadata parse error | JSON format mismatch with CLI | Ensure `serde(rename_all = "camelCase")` matches CLI's JSON output; check `references/protocol-types.md` |
+| ANSI colors garbled | Missing `-e` flag on capture-pane | Ensure `capture-pane` uses `-p -e -J` flags |
+| Compile error on crossterm | Version mismatch with ratatui | Check `references/dependencies.md` for compatible versions |
+| Stale data in UI | Polling not running | Verify the 2s polling tokio::spawn tasks are active; check for channel errors |
