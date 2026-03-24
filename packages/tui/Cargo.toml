@@ -16,7 +16,7 @@ crossterm = { version = "0.28", features = ["event-stream"] }
 ansi-to-tui = "7"
 
 # Async
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "fs"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
