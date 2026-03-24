@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "lumi-ops": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${workspaceFolder}/packages/mcp-server/dist/index.js"]
+    }
+  }
+}

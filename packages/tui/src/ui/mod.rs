@@ -1,19 +1,24 @@
 //! User interface — 4-panel layout with status bar.
 //!
-//! Each panel is a separate render function called from `render()`.
+//! Each panel is a separate module with its own render function.
+
+pub mod agent_list;
+pub mod file_viewer;
+pub mod projects;
+pub mod terminal;
 
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::Paragraph,
     Frame,
 };
 
 use crate::app::{AppState, FocusedPanel};
 
 /// Main render function called from the event loop.
-pub fn render(frame: &mut Frame, app: &AppState) {
+pub fn render(frame: &mut Frame, app: &mut AppState) {
     // Top-level vertical split: main area + status bar
     let outer = Layout::default()
         .direction(Direction::Vertical)
@@ -40,88 +45,105 @@ pub fn render(frame: &mut Frame, app: &AppState) {
         .split(columns[1]);
 
     // Render each panel
-    render_projects_panel(frame, columns[0], app);
-    render_file_viewer(frame, center[0], app);
-    render_agent_list(frame, center[1], app);
-    render_terminal_panel(frame, columns[2], app);
+    projects::render_projects(frame, columns[0], app);
+    file_viewer::render_file_viewer(frame, center[0], app);
+    agent_list::render_agent_list(frame, center[1], app);
+    terminal::render_terminal(frame, columns[2], app);
     render_status_bar(frame, outer[1], app);
 }
 
-/// Helper to determine block border style based on focus.
-fn panel_block(title: &str, focused: bool) -> Block<'_> {
-    let style = if focused {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::DarkGray)
+fn render_status_bar(frame: &mut Frame, area: Rect, app: &AppState) {
+    // Left: current repo name
+    let repo_name = app
+        .repos
+        .first()
+        .map(|r| r.name.as_str())
+        .unwrap_or("No repo");
+
+    // Right: clone count
+    let clone_count = format!(" {} clones ", app.clones.len());
+
+    // Center: context-aware shortcuts based on focused panel
+    let shortcuts = match app.focused {
+        FocusedPanel::Projects => vec![
+            shortcut_span("j/k", "Navigate"),
+            shortcut_span("Enter", "Select"),
+            shortcut_span("h/l", "Fold"),
+        ],
+        FocusedPanel::FileViewer => vec![
+            shortcut_span("j/k", "Scroll"),
+        ],
+        FocusedPanel::AgentList => vec![
+            shortcut_span("j/k", "Navigate"),
+            shortcut_span("r", "Review"),
+            shortcut_span("d", "Diff"),
+            shortcut_span("m", "Merge"),
+            shortcut_span("K", "Kill"),
+        ],
+        FocusedPanel::Terminal => vec![
+            shortcut_span("j/k", "Scroll"),
+            shortcut_span("a", "Attach"),
+            shortcut_span("s", "Stop"),
+        ],
     };
-    Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" {} ", title))
-        .border_style(style)
-}
 
-fn render_projects_panel(frame: &mut Frame, area: Rect, app: &AppState) {
-    let focused = app.focused == FocusedPanel::Projects;
-    let block = panel_block("Projects", focused);
+    let mut spans: Vec<Span<'_>> = Vec::new();
 
-    // TODO: Replace with tui-tree-widget in impl-ui clone
-    let placeholder = Paragraph::new("No repos loaded")
-        .block(block)
-        .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(placeholder, area);
-}
+    // Left section: repo name
+    spans.push(Span::styled(
+        format!(" {} ", repo_name),
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD),
+    ));
+    spans.push(Span::styled("│", Style::default().fg(Color::DarkGray)));
 
-fn render_file_viewer(frame: &mut Frame, area: Rect, app: &AppState) {
-    let focused = app.focused == FocusedPanel::FileViewer;
-    let block = panel_block("MISSION.md", focused);
-
-    // TODO: Replace with markdown renderer in impl-ui clone
-    let placeholder = Paragraph::new("Select a clone to view its mission")
-        .block(block)
-        .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(placeholder, area);
-}
-
-fn render_agent_list(frame: &mut Frame, area: Rect, app: &AppState) {
-    let focused = app.focused == FocusedPanel::AgentList;
-    let block = panel_block("Agents", focused);
-
-    // TODO: Replace with table widget in impl-ui clone
-    let placeholder = Paragraph::new("No active agents")
-        .block(block)
-        .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(placeholder, area);
-}
-
-fn render_terminal_panel(frame: &mut Frame, area: Rect, app: &AppState) {
-    let focused = app.focused == FocusedPanel::Terminal;
-    let block = panel_block("Terminal", focused);
-
-    // TODO: Replace with ANSI renderer in impl-ui clone
-    let placeholder = Paragraph::new("Attach to an agent to view output")
-        .block(block)
-        .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(placeholder, area);
-}
-
-fn render_status_bar(frame: &mut Frame, area: Rect, _app: &AppState) {
-    let keys = vec![
-        Span::styled(" q", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-        Span::raw(" Quit  "),
-        Span::styled("Tab", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-        Span::raw(" Focus  "),
-        Span::styled("j/k", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-        Span::raw(" Navigate  "),
-        Span::styled("n", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-        Span::raw(" Spawn  "),
-        Span::styled("K", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-        Span::raw(" Kill  "),
-        Span::styled("a", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-        Span::raw(" Attach  "),
-        Span::styled("?", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+    // Global shortcuts
+    spans.extend(vec![
+        shortcut_key(" q"),
+        Span::raw(" Quit "),
+        shortcut_key("Tab"),
+        Span::raw(" Focus "),
+        shortcut_key("n"),
+        Span::raw(" Spawn "),
+        shortcut_key("?"),
         Span::raw(" Help"),
-    ];
-    let status = Paragraph::new(Line::from(keys))
+    ]);
+
+    // Separator
+    spans.push(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
+
+    // Panel-specific shortcuts
+    for shortcut in shortcuts {
+        spans.extend(shortcut);
+    }
+
+    // Fill remaining space, then clone count on the right
+    // We approximate by just appending the clone count
+    spans.push(Span::styled(
+        format!("  {}", clone_count),
+        Style::default().fg(Color::DarkGray),
+    ));
+
+    let status = Paragraph::new(Line::from(spans))
         .style(Style::default().bg(Color::DarkGray).fg(Color::White));
     frame.render_widget(status, area);
+}
+
+/// Build a shortcut key span (highlighted).
+fn shortcut_key(key: &str) -> Span<'_> {
+    Span::styled(
+        key,
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
+    )
+}
+
+/// Build a [key] description pair.
+fn shortcut_span<'a>(key: &'a str, desc: &'a str) -> Vec<Span<'a>> {
+    vec![
+        shortcut_key(key),
+        Span::raw(format!(" {} ", desc)),
+    ]
 }

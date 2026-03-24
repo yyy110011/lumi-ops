@@ -18,6 +18,13 @@ pub enum StateUpdate {
     TerminalOutput { branch: String, content: String },
 }
 
+/// A registered repository entry.
+#[derive(Debug, Clone)]
+pub struct RepoEntry {
+    pub name: String,
+    pub root_path: String,
+}
+
 /// Which panel currently has keyboard focus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FocusedPanel {
@@ -69,7 +76,7 @@ pub struct AppState {
     pub focused: FocusedPanel,
     pub should_quit: bool,
 
-    // --- Data fields ---
+    // --- Data fields (from registry + metadata) ---
     /// Registered repos: (name, root_dir) from `~/.lumi-ops/.registry.json`
     pub repos: Vec<(String, String)>,
     /// Shadow clones for the currently selected repo
@@ -84,6 +91,16 @@ pub struct AppState {
     pub terminal_content: String,
     /// Root directory of the currently selected repo
     pub current_repo_root: Option<String>,
+
+    // --- Panel-specific UI state (from impl-ui) ---
+    /// Selected index in the Projects panel list (combined repo+clone tree).
+    pub tree_selected_idx: usize,
+    /// Scroll offset for the file viewer panel.
+    pub file_scroll: u16,
+    /// Scroll offset for the terminal panel.
+    pub terminal_scroll: u16,
+    /// Whether the terminal should auto-scroll to bottom.
+    pub terminal_auto_scroll: bool,
 }
 
 impl AppState {
@@ -98,13 +115,14 @@ impl AppState {
             mission_content: None,
             terminal_content: String::new(),
             current_repo_root: None,
+            tree_selected_idx: 0,
+            file_scroll: 0,
+            terminal_scroll: 0,
+            terminal_auto_scroll: true,
         }
     }
 
     /// Load registered repos from the global registry.
-    ///
-    /// Populates `self.repos` sorted by name, and sets `current_repo_root`
-    /// to the first repo if available.
     pub fn load_repos(&mut self) {
         let registry = crate::protocol::registry::read_registry();
         let mut repos: Vec<(String, String)> = registry.into_iter().collect();
@@ -115,9 +133,6 @@ impl AppState {
     }
 
     /// Load clones for the current repo by reading metadata + discovering worktree dirs.
-    ///
-    /// This is a synchronous file-read approach. For the polling path,
-    /// the poller calls `cli::list_clones()` async and sends `ClonesRefreshed`.
     pub fn load_clones(&mut self) {
         let Some(repo_root) = &self.current_repo_root else {
             self.clones.clear();
@@ -130,7 +145,6 @@ impl AppState {
         let storage_path = std::path::Path::new(&storage_dir);
         let metadata_map = crate::protocol::metadata::read_metadata(storage_path);
 
-        // Build clone entries from metadata
         let mut clones: Vec<ShadowClone> = metadata_map
             .into_iter()
             .map(|(branch, meta)| {
@@ -163,6 +177,12 @@ impl AppState {
         self.clones.get(self.selected_clone)
     }
 
+    /// Get the currently selected clone (alias used by UI).
+    #[allow(unused)]
+    pub fn selected_clone(&self) -> Option<&ShadowClone> {
+        self.clones.get(self.selected_clone)
+    }
+
     /// Get a reference to the currently selected repo as (name, root).
     pub fn selected_repo_ref(&self) -> Option<&(String, String)> {
         self.repos.get(self.selected_repo)
@@ -179,14 +199,14 @@ impl AppState {
             .selected_clone_ref()
             .and_then(|clone| {
                 let worktree_path = std::path::Path::new(&clone.path);
-                // Prefer MISSION_COMPLETE.md if it exists (clone finished work),
-                // otherwise show MISSION.md
                 crate::protocol::mission::read_mission_complete(worktree_path)
                     .or_else(|| crate::protocol::mission::read_mission(worktree_path))
             });
+        self.file_scroll = 0; // Reset scroll on new content
     }
 
     /// Get the display status icon for a review status.
+    #[allow(unused)]
     pub fn status_icon(status: &Option<ReviewStatus>) -> &'static str {
         match status {
             Some(ReviewStatus::Todo) => "🟡",
@@ -263,7 +283,6 @@ impl AppState {
                 if self.selected_repo > 0 {
                     self.selected_repo -= 1;
                     self.update_current_repo_root();
-                    // Reset clone selection when switching repos
                     self.clones.clear();
                     self.selected_clone = 0;
                     self.mission_content = None;
@@ -276,7 +295,6 @@ impl AppState {
                     self.load_selected_mission();
                 }
             }
-            // FileViewer and Terminal don't have list navigation (scroll is future work)
             _ => {}
         }
     }
@@ -288,7 +306,6 @@ impl AppState {
                 if !self.repos.is_empty() && self.selected_repo < self.repos.len() - 1 {
                     self.selected_repo += 1;
                     self.update_current_repo_root();
-                    // Reset clone selection when switching repos
                     self.clones.clear();
                     self.selected_clone = 0;
                     self.mission_content = None;
@@ -301,7 +318,6 @@ impl AppState {
                     self.load_selected_mission();
                 }
             }
-            // FileViewer and Terminal don't have list navigation (scroll is future work)
             _ => {}
         }
     }
@@ -311,14 +327,12 @@ impl AppState {
         match update {
             StateUpdate::ClonesRefreshed(new_clones) => {
                 tracing::debug!(count = new_clones.len(), "Clones refreshed");
-                // Preserve selection if possible
                 let previously_selected = self
                     .selected_clone_ref()
                     .map(|c| c.branch.clone());
 
                 self.clones = new_clones;
 
-                // Restore selection by branch name
                 if let Some(prev_branch) = previously_selected {
                     self.selected_clone = self
                         .clones
@@ -334,15 +348,18 @@ impl AppState {
             StateUpdate::MissionLoaded(content) => {
                 tracing::debug!("Mission content loaded");
                 self.mission_content = Some(content);
+                self.file_scroll = 0;
             }
             StateUpdate::TerminalOutput { branch, content } => {
                 tracing::debug!(branch, "Terminal output received");
-                // Only update if this output is for the currently selected clone
                 if self
                     .selected_clone_ref()
                     .is_some_and(|c| c.branch == branch)
                 {
                     self.terminal_content = content;
+                    if self.terminal_auto_scroll {
+                        self.terminal_scroll = u16::MAX;
+                    }
                 }
             }
         }

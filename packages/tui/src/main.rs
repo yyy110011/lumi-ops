@@ -65,6 +65,7 @@ async fn main() -> Result<()> {
 
     // Start metadata poller if we have a repo
     let mut metadata_poller: Option<JoinHandle<()>> = None;
+    #[allow(unused_mut)]
     let mut terminal_poller: Option<JoinHandle<()>> = None;
 
     if let Some(repo_root) = &app.current_repo_root {
@@ -79,7 +80,7 @@ async fn main() -> Result<()> {
     let result = loop {
         // Draw UI
         terminal.draw(|frame| {
-            ui::render(frame, &app);
+            ui::render(frame, &mut app);
         })?;
 
         // Poll for keyboard events (100ms timeout for responsive UI)
@@ -88,10 +89,8 @@ async fn main() -> Result<()> {
                 match app.handle_key(key) {
                     Action::Quit => break Ok(()),
                     Action::Up | Action::Down => {
-                        // Navigation already handled within handle_key.
                         // Restart pollers if repo changed while navigating Projects panel.
                         if app.focused == app::FocusedPanel::Projects {
-                            // Abort old pollers
                             if let Some(handle) = metadata_poller.take() {
                                 handle.abort();
                             }
@@ -99,9 +98,7 @@ async fn main() -> Result<()> {
                                 handle.abort();
                             }
 
-                            // Start new metadata poller for the selected repo
                             if let Some(repo_root) = app.current_repo_root.clone() {
-                                // Do an initial sync load of clones for the new repo
                                 app.load_clones();
                                 metadata_poller =
                                     Some(app::poller::spawn_metadata_poller(
@@ -113,7 +110,6 @@ async fn main() -> Result<()> {
                     }
                     Action::None | Action::CycleFocus | Action::JumpToPanel(_) => {}
                     action => {
-                        // TODO: Handle other actions (spawn, kill, attach, etc.)
                         tracing::debug!(?action, "Unhandled action");
                     }
                 }

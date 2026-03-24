@@ -35,8 +35,8 @@ chrono = { version = "0.4", features = ["serde"] }
 # Markdown rendering
 pulldown-cmark = "0.12"
 
-# Tree widget (projects panel)
-tui-tree-widget = "0.22"
+# Tree widget - removed, using manual List rendering to avoid ratatui version conflicts
+# tui-tree-widget = "0.24"
 
 # Text input (agent communication)
 tui-textarea = "0.7"
