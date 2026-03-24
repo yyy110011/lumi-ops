@@ -177,6 +177,36 @@ async fn main() -> Result<()> {
                         }
                     }
                     Action::None | Action::CycleFocus | Action::JumpToPanel(_) => {}
+                    Action::AttachAgent => {
+                        if let Some(ref session_name) = app.active_tmux_session {
+                            // 1. Suspend TUI — restore normal terminal
+                            disable_raw_mode()?;
+                            execute!(
+                                terminal.backend_mut(),
+                                LeaveAlternateScreen,
+                                DisableMouseCapture
+                            )?;
+                            terminal.show_cursor()?;
+
+                            // 2. Run tmux attach (blocking — user has full control)
+                            let attach_status = std::process::Command::new("tmux")
+                                .args(["attach-session", "-t", session_name])
+                                .status();
+
+                            tracing::info!(?attach_status, "tmux attach returned");
+
+                            // 3. Restore TUI
+                            enable_raw_mode()?;
+                            execute!(
+                                terminal.backend_mut(),
+                                EnterAlternateScreen,
+                                EnableMouseCapture
+                            )?;
+
+                            // Force full redraw
+                            terminal.clear()?;
+                        }
+                    }
                     action => {
                         tracing::debug!(?action, "Unhandled action");
                     }
