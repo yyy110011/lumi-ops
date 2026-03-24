@@ -428,4 +428,52 @@ export function registerReviewOpsTools(server: McpServer): void {
       }
     },
   );
+
+  // ---------------------------------------------------------------------------
+  // Tool 13: get_agent_status
+  // ---------------------------------------------------------------------------
+
+  server.tool(
+    'get_agent_status',
+    'Get the background agent status for a shadow clone. Returns driver, tmux session name, start time, status (running/completed/failed), and log file path. Validates tmux session liveness — if the session has ended, auto-resolves to completed or failed based on exit code.',
+    {
+      branch: z.string().describe('Clone identifier (directory name, e.g. feat/my-task)'),
+      repo: z.string().describe(
+        'Any path inside the target repository. Worktree paths are automatically resolved to the main repo root.'
+      ),
+    },
+    { readOnlyHint: true },
+    async ({ branch, repo }) => {
+      const effectiveRoot = resolveEffectiveRoot(repo);
+      const rootErr = ensureRootDir(effectiveRoot);
+      if (rootErr) return rootErr;
+      try {
+        const { resolveAgentStatus } = await import('@lumi-ops/cli');
+        const { getClonesDir } = await import('@lumi-ops/cli');
+        const worktreePath = path.join(getClonesDir(effectiveRoot), branch);
+
+        const status = await resolveAgentStatus(worktreePath);
+        if (!status) {
+          return {
+            content: [{
+              type: 'text' as const,
+              text: `No agent has been launched on clone "${branch}". Use \`lumi-ops launch ${branch} --driver <name>\` or the ▶ button in VS Code to start an agent.`,
+            }],
+          };
+        }
+
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({ branch, ...status }, null, 2),
+          }],
+        };
+      } catch (error: any) {
+        return {
+          content: [{ type: 'text' as const, text: `Error reading agent status: ${error.message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
 }

@@ -125,6 +125,16 @@
       {
         "command": "lumi-ops.abortRebase",
         "title": "⛔ Abort Rebase"
+      },
+      {
+        "command": "lumi-ops.launchAgent",
+        "title": "Launch Agent",
+        "icon": "$(play)"
+      },
+      {
+        "command": "lumi-ops.attachAgent",
+        "title": "Attach to Agent",
+        "icon": "$(terminal)"
       }
     ],
     "menus": {
@@ -152,14 +162,24 @@
       ],
       "view/item/context": [
         {
-          "command": "lumi-ops.open",
+          "command": "lumi-ops.launchAgent",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "group": "inline@0"
+        },
+        {
+          "command": "lumi-ops.attachAgent",
           "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "inline@1"
         },
         {
-          "command": "lumi-ops.kill",
+          "command": "lumi-ops.open",
           "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
           "group": "inline@2"
+        },
+        {
+          "command": "lumi-ops.kill",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "group": "inline@3"
         },
         {
           "command": "lumi-ops.copyBranchName",
@@ -182,14 +202,24 @@
           "group": "modification@3"
         },
         {
-          "command": "lumi-ops.open",
+          "command": "lumi-ops.launchAgent",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone-detached",
+          "group": "inline@0"
+        },
+        {
+          "command": "lumi-ops.attachAgent",
           "when": "view == lumi-ops.activeClones && viewItem == shadowClone-detached",
           "group": "inline@1"
         },
         {
-          "command": "lumi-ops.kill",
+          "command": "lumi-ops.open",
           "when": "view == lumi-ops.activeClones && viewItem == shadowClone-detached",
           "group": "inline@2"
+        },
+        {
+          "command": "lumi-ops.kill",
+          "when": "view == lumi-ops.activeClones && viewItem == shadowClone-detached",
+          "group": "inline@3"
         },
         {
           "command": "lumi-ops.copyBranchName",
@@ -256,6 +286,13 @@
           "default": true,
           "scope": "window",
           "markdownDescription": "When enabled, injects a rule file (`.agents/rules/lumi-ops-clone-agent.md`) into clone workspaces that instructs AI agents to manage their clone status via MCP tools after completing work."
+        },
+        "lumi-ops.driver": {
+          "type": "string",
+          "enum": ["claude", "gemini"],
+          "default": "claude",
+          "scope": "resource",
+          "markdownDescription": "AI agent CLI driver for background execution. Used by the **▶ Launch Agent** button to run agents headlessly in tmux sessions.\n\nRequirements:\n- tmux must be installed\n- The selected CLI tool must be installed and authenticated"
         }
       }
     }

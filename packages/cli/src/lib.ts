@@ -9,7 +9,14 @@ export * from './commands/migration';
 export * from './commands/metadata';
 export * from './commands/status';
 export * from './commands/revision';
+export * from './commands/launch';
+export * from './commands/attach';
+export * from './commands/logs';
+export * from './drivers/index';
 export * from './utils/git';
+export * from './utils/tmux';
+export * from './utils/agent-status';
 export * from './constants';
 export * from './registry';
 export * from './missionDefaults';
+

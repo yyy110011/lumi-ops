@@ -3,14 +3,14 @@ import { Command } from 'commander';
 import { spawn } from './commands/spawn';
 import { kill } from './commands/kill';
 import { list } from './commands/list';
+import { launch } from './commands/launch';
+import { attach } from './commands/attach';
+import { logs } from './commands/logs';
 import { migrateLegacyClones } from './commands/migration';
 import * as path from 'path';
 
 // Re-export library API (backwards compatible for existing consumers)
 export * from './lib';
-
-
-
 
 
 const program = new Command();
@@ -51,4 +51,33 @@ program
     await migrateLegacyClones(rootDir, { dryRun: options.dryRun });
   });
 
+program
+  .command('launch')
+  .description('Launch a background AI agent on an existing shadow clone')
+  .argument('<branchName>', 'Name of the clone branch')
+  .option('-r, --root <path>', 'Root directory of the project', process.cwd())
+  .option('-d, --driver <name>', 'Agent driver: claude, gemini')
+  .option('--cmd <command>', 'Raw command to run in tmux (no driver needed)')
+  .option('--no-permissions', 'Skip permission prompts (driver-specific)')
+  .option('--max-turns <n>', 'Max LLM turns (claude only)', parseInt)
+  .option('--max-budget <usd>', 'Max spend in USD (claude only)', parseFloat)
+  .option('--model <name>', 'Override model selection')
+  .option('--attach', 'Immediately attach to tmux session after launch')
+  .action(launch);
+
+program
+  .command('attach')
+  .description('Attach to a running agent\'s tmux session')
+  .argument('<branchName>', 'Name of the clone branch')
+  .option('-r, --root <path>', 'Root directory of the project', process.cwd())
+  .action(attach);
+
+program
+  .command('logs')
+  .description('Tail the agent log file for a shadow clone')
+  .argument('<branchName>', 'Name of the clone branch')
+  .option('-r, --root <path>', 'Root directory of the project', process.cwd())
+  .action(logs);
+
 program.parse();
+
