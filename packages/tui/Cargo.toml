@@ -52,3 +52,8 @@ uuid = { version = "1", features = ["v4", "serde"] }
 
 # Regex (agent status detection)
 regex = "1"
+
+# Embedded PTY terminal
+portable-pty = "0.8"
+vt100 = "0.16"
+tui-term = "0.2"
