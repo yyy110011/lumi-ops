@@ -65,7 +65,6 @@ async fn main() -> Result<()> {
 
     // Start metadata poller if we have a repo
     let mut metadata_poller: Option<JoinHandle<()>> = None;
-    #[allow(unused_mut)]
     let mut terminal_poller: Option<JoinHandle<()>> = None;
 
     if let Some(repo_root) = &app.current_repo_root {
@@ -74,6 +73,27 @@ async fn main() -> Result<()> {
             repo_root.clone(),
         ));
         tracing::info!("Started metadata poller");
+    }
+
+    // Auto-detect tmux sessions and start terminal poller
+    if let Ok(sessions) = tmux::list_lumi_sessions().await {
+        if let Some(first_session) = sessions.first() {
+            tracing::info!(session = %first_session, "Auto-detected lumi tmux session");
+            app.active_tmux_session = Some(first_session.clone());
+            let session = tmux::TmuxSession::new(first_session.clone());
+            // Do an initial capture
+            if let Ok(content) = session.capture_pane(500).await {
+                app.terminal_content = content;
+            }
+            // Start polling
+            let branch_name = first_session.strip_prefix("lumi-").unwrap_or(first_session).to_string();
+            terminal_poller = Some(app::poller::spawn_terminal_poller(
+                tx.clone(),
+                first_session.clone(),
+                branch_name,
+            ));
+            tracing::info!("Started terminal poller");
+        }
     }
 
     // Main event loop

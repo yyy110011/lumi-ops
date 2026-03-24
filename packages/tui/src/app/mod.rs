@@ -101,6 +101,8 @@ pub struct AppState {
     pub terminal_scroll: u16,
     /// Whether the terminal should auto-scroll to bottom.
     pub terminal_auto_scroll: bool,
+    /// Active tmux session name being captured (auto-detected or manually attached).
+    pub active_tmux_session: Option<String>,
 }
 
 impl AppState {
@@ -119,6 +121,7 @@ impl AppState {
             file_scroll: 0,
             terminal_scroll: 0,
             terminal_auto_scroll: true,
+            active_tmux_session: None,
         }
     }
 
@@ -276,10 +279,23 @@ impl AppState {
         }
     }
 
+    /// Total number of items in the projects tree (for bounds checking).
+    pub fn tree_item_count(&self) -> usize {
+        let mut count = self.repos.len(); // one item per repo header
+        // clones are shown under the selected repo only (current design)
+        count += self.clones.len();
+        count
+    }
+
     /// Navigate up within the focused panel.
     fn navigate_up(&mut self) {
         match self.focused {
             FocusedPanel::Projects => {
+                if self.tree_selected_idx > 0 {
+                    self.tree_selected_idx -= 1;
+                }
+                // Sync the repo selection: repos appear at their index position
+                // (simplified: navigate repos directly)
                 if self.selected_repo > 0 {
                     self.selected_repo -= 1;
                     self.update_current_repo_root();
@@ -295,7 +311,13 @@ impl AppState {
                     self.load_selected_mission();
                 }
             }
-            _ => {}
+            FocusedPanel::FileViewer => {
+                self.file_scroll = self.file_scroll.saturating_sub(1);
+            }
+            FocusedPanel::Terminal => {
+                self.terminal_auto_scroll = false;
+                self.terminal_scroll = self.terminal_scroll.saturating_sub(1);
+            }
         }
     }
 
@@ -303,6 +325,10 @@ impl AppState {
     fn navigate_down(&mut self) {
         match self.focused {
             FocusedPanel::Projects => {
+                let max = self.tree_item_count();
+                if max > 0 && self.tree_selected_idx < max - 1 {
+                    self.tree_selected_idx += 1;
+                }
                 if !self.repos.is_empty() && self.selected_repo < self.repos.len() - 1 {
                     self.selected_repo += 1;
                     self.update_current_repo_root();
@@ -318,7 +344,12 @@ impl AppState {
                     self.load_selected_mission();
                 }
             }
-            _ => {}
+            FocusedPanel::FileViewer => {
+                self.file_scroll = self.file_scroll.saturating_add(1);
+            }
+            FocusedPanel::Terminal => {
+                self.terminal_scroll = self.terminal_scroll.saturating_add(1);
+            }
         }
     }
 
@@ -352,10 +383,12 @@ impl AppState {
             }
             StateUpdate::TerminalOutput { branch, content } => {
                 tracing::debug!(branch, "Terminal output received");
-                if self
-                    .selected_clone_ref()
-                    .is_some_and(|c| c.branch == branch)
-                {
+                // Accept output from active tmux session or matching clone
+                let should_update = self.active_tmux_session.is_some()
+                    || self
+                        .selected_clone_ref()
+                        .is_some_and(|c| c.branch == branch);
+                if should_update {
                     self.terminal_content = content;
                     if self.terminal_auto_scroll {
                         self.terminal_scroll = u16::MAX;
