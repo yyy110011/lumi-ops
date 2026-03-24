@@ -381,7 +381,6 @@ impl AppState {
                     self.clones.clear();
                     self.selected_clone = 0;
                     self.mission_content = None;
-                    self.terminal_content.clear();
                 }
             }
             FocusedPanel::AgentList => {

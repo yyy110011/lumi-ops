@@ -159,12 +159,10 @@ async fn main() -> Result<()> {
                 match app.handle_key(key) {
                     Action::Quit => break Ok(()),
                     Action::Up | Action::Down => {
-                        // Restart pollers if repo changed while navigating Projects panel.
+                        // Restart metadata poller if repo changed while navigating Projects panel.
+                        // Note: terminal_poller is NOT aborted — the agent session is independent.
                         if app.focused == app::FocusedPanel::Projects {
                             if let Some(handle) = metadata_poller.take() {
-                                handle.abort();
-                            }
-                            if let Some(handle) = terminal_poller.take() {
                                 handle.abort();
                             }
 
@@ -180,40 +178,36 @@ async fn main() -> Result<()> {
                     }
                     Action::None | Action::CycleFocus | Action::JumpToPanel(_) => {}
                     Action::SendToTerminal(keys) => {
+                        // Fire-and-forget — don't block the event loop
                         if let Some(ref session_name) = app.active_tmux_session {
-                            let session = tmux::TmuxSession::new(session_name.clone());
-                            // Use send-keys: literal chars go via -l, special keys go direct
-                            let is_special = keys == "BSpace"
-                                || keys == "Up"
-                                || keys == "Down"
-                                || keys == "Left"
-                                || keys == "Right"
-                                || keys.starts_with("C-")
-                                || keys == "\n";
-                            let send_result = if keys == "\n" {
-                                // Send Enter
-                                tokio::process::Command::new("tmux")
-                                    .args(["send-keys", "-t", session_name, "Enter"])
-                                    .output()
-                                    .await
-                            } else if is_special {
-                                tokio::process::Command::new("tmux")
-                                    .args(["send-keys", "-t", session_name, &keys])
-                                    .output()
-                                    .await
-                            } else {
-                                // Literal text
-                                session.send_keys_raw(&keys).await.map(|_| {
-                                    std::process::Output {
-                                        status: std::process::ExitStatus::default(),
-                                        stdout: Vec::new(),
-                                        stderr: Vec::new(),
-                                    }
-                                }).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-                            };
-                            if let Err(e) = send_result {
-                                tracing::warn!("Failed to send keys to tmux: {}", e);
-                            }
+                            let sn = session_name.clone();
+                            tokio::spawn(async move {
+                                let is_special = keys == "BSpace"
+                                    || keys == "Up"
+                                    || keys == "Down"
+                                    || keys == "Left"
+                                    || keys == "Right"
+                                    || keys.starts_with("C-");
+                                let result = if keys == "\n" {
+                                    tokio::process::Command::new("tmux")
+                                        .args(["send-keys", "-t", &sn, "Enter"])
+                                        .output()
+                                        .await
+                                } else if is_special {
+                                    tokio::process::Command::new("tmux")
+                                        .args(["send-keys", "-t", &sn, &keys])
+                                        .output()
+                                        .await
+                                } else {
+                                    tokio::process::Command::new("tmux")
+                                        .args(["send-keys", "-t", &sn, "-l", &keys])
+                                        .output()
+                                        .await
+                                };
+                                if let Err(e) = result {
+                                    tracing::warn!("Failed to send keys to tmux: {}", e);
+                                }
+                            });
                         }
                     }
                     action => {
