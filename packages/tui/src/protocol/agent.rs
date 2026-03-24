@@ -1,23 +1,25 @@
-//! Agent status tracking for tmux-based AI agent sessions.
+//! Agent status types — shared between protocol layer, tmux detector, and session manager.
+//!
+//! These types represent the runtime status of AI agents running in tmux sessions.
 
 use chrono::{DateTime, Utc};
 use ratatui::style::Color;
 use std::fmt;
 
-/// Status of an AI agent running in a tmux session.
+/// Runtime status of an AI agent detected from tmux pane output.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AgentStatus {
-    /// Agent is actively processing (tool calls, code generation, etc.)
+    /// Agent is actively processing (spinners, tool execution, thinking)
     Running,
-    /// Agent is waiting for user input (confirmation prompt, question, etc.)
+    /// Agent is waiting for user input (permission prompt, question)
     AwaitingInput,
-    /// Agent has finished its task successfully.
+    /// Agent has finished its task successfully
     Completed,
-    /// No tmux session found — agent is not running.
+    /// Agent is at a prompt, ready for a new task / no tmux session
     Idle,
-    /// Agent encountered an error.
-    Error,
-    /// Status could not be determined.
+    /// Agent encountered an error
+    Error(String),
+    /// Status could not be determined
     Unknown,
 }
 
@@ -35,7 +37,7 @@ impl AgentStatus {
             Self::AwaitingInput => "⏳",
             Self::Completed => "✅",
             Self::Idle => "💤",
-            Self::Error => "❌",
+            Self::Error(_) => "❌",
             Self::Unknown => "❓",
         }
     }
@@ -47,7 +49,7 @@ impl AgentStatus {
             Self::AwaitingInput => Color::Yellow,
             Self::Completed => Color::Cyan,
             Self::Idle => Color::DarkGray,
-            Self::Error => Color::Red,
+            Self::Error(_) => Color::Red,
             Self::Unknown => Color::Gray,
         }
     }
@@ -60,7 +62,7 @@ impl fmt::Display for AgentStatus {
             Self::AwaitingInput => write!(f, "Awaiting Input"),
             Self::Completed => write!(f, "Completed"),
             Self::Idle => write!(f, "Idle"),
-            Self::Error => write!(f, "Error"),
+            Self::Error(msg) => write!(f, "Error: {}", msg),
             Self::Unknown => write!(f, "Unknown"),
         }
     }
@@ -91,6 +93,100 @@ impl AgentInfo {
     }
 }
 
+/// Diagnostic result from agent status detection.
+#[derive(Debug, Clone)]
+pub struct StatusDetection {
+    /// Detected status
+    pub status: AgentStatus,
+    /// Human-readable reason for the detection
+    pub reason: Option<String>,
+    /// Which regex pattern group triggered the detection
+    pub pattern: Option<String>,
+}
+
+impl StatusDetection {
+    pub fn new(status: AgentStatus) -> Self {
+        Self {
+            status,
+            reason: None,
+            pattern: None,
+        }
+    }
+
+    pub fn with_reason(mut self, reason: impl Into<String>) -> Self {
+        self.reason = Some(reason.into());
+        self
+    }
+
+    pub fn with_pattern(mut self, pattern: impl Into<String>) -> Self {
+        self.pattern = Some(pattern.into());
+        self
+    }
+}
+
+/// Classification of the foreground process in a tmux pane.
+///
+/// Used as ground truth for more accurate status detection —
+/// knowing *which* process is running lets us choose the right
+/// regex patterns and default assumptions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ForegroundProcess {
+    /// Claude Code is alive (node, claude, npx)
+    ClaudeRunning,
+    /// Gemini CLI is alive (node, gemini)
+    GeminiRunning,
+    /// Codex is alive (codex)
+    CodexRunning,
+    /// At a shell prompt (bash, zsh, sh, fish, dash)
+    Shell,
+    /// AI agent spawned a subprocess (cargo, git, python, etc.)
+    OtherProcess(String),
+    /// Could not determine (tmux error or unavailable)
+    Unknown,
+}
+
+impl ForegroundProcess {
+    /// Classify a process command name into a variant.
+    pub fn from_command(cmd: &str) -> Self {
+        let cmd_lower = cmd.to_lowercase();
+        let binary = cmd_lower.rsplit('/').next().unwrap_or(&cmd_lower);
+
+        // Claude Code process names
+        if matches!(binary, "claude" | "node" | "npx") {
+            return Self::ClaudeRunning;
+        }
+
+        // Gemini CLI
+        if binary == "gemini" {
+            return Self::GeminiRunning;
+        }
+
+        // Codex
+        if binary == "codex" {
+            return Self::CodexRunning;
+        }
+
+        // Shell
+        if matches!(binary, "bash" | "zsh" | "sh" | "fish" | "dash") {
+            return Self::Shell;
+        }
+
+        if binary.is_empty() {
+            Self::Unknown
+        } else {
+            Self::OtherProcess(binary.to_string())
+        }
+    }
+
+    /// Check if this represents any AI agent running.
+    pub fn is_agent_running(&self) -> bool {
+        matches!(
+            self,
+            Self::ClaudeRunning | Self::GeminiRunning | Self::CodexRunning
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,7 +197,7 @@ mod tests {
         assert_eq!(AgentStatus::AwaitingInput.icon(), "⏳");
         assert_eq!(AgentStatus::Completed.icon(), "✅");
         assert_eq!(AgentStatus::Idle.icon(), "💤");
-        assert_eq!(AgentStatus::Error.icon(), "❌");
+        assert_eq!(AgentStatus::Error("test".into()).icon(), "❌");
         assert_eq!(AgentStatus::Unknown.icon(), "❓");
     }
 
@@ -112,7 +208,7 @@ mod tests {
             AgentStatus::AwaitingInput.color(),
             AgentStatus::Completed.color(),
             AgentStatus::Idle.color(),
-            AgentStatus::Error.color(),
+            AgentStatus::Error("test".into()).color(),
             AgentStatus::Unknown.color(),
         ];
         for (i, c1) in colors.iter().enumerate() {
@@ -130,7 +226,7 @@ mod tests {
         assert_eq!(format!("{}", AgentStatus::AwaitingInput), "Awaiting Input");
         assert_eq!(format!("{}", AgentStatus::Completed), "Completed");
         assert_eq!(format!("{}", AgentStatus::Idle), "Idle");
-        assert_eq!(format!("{}", AgentStatus::Error), "Error");
+        assert_eq!(format!("{}", AgentStatus::Error("oops".into())), "Error: oops");
         assert_eq!(format!("{}", AgentStatus::Unknown), "Unknown");
     }
 
@@ -146,5 +242,15 @@ mod tests {
         assert_eq!(info.tmux_session, "lumi-feat-auth");
         assert_eq!(info.status, AgentStatus::Unknown);
         assert!(info.last_activity.is_none());
+    }
+
+    #[test]
+    fn foreground_process_detection() {
+        assert_eq!(ForegroundProcess::from_command("claude"), ForegroundProcess::ClaudeRunning);
+        assert_eq!(ForegroundProcess::from_command("node"), ForegroundProcess::ClaudeRunning);
+        assert_eq!(ForegroundProcess::from_command("gemini"), ForegroundProcess::GeminiRunning);
+        assert_eq!(ForegroundProcess::from_command("bash"), ForegroundProcess::Shell);
+        assert!(ForegroundProcess::ClaudeRunning.is_agent_running());
+        assert!(!ForegroundProcess::Shell.is_agent_running());
     }
 }
