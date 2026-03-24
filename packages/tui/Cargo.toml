@@ -11,9 +11,8 @@ path = "src/main.rs"
 
 [dependencies]
 # TUI
-ratatui = "0.29"
-crossterm = { version = "0.28", features = ["event-stream"] }
-ansi-to-tui = "7"
+ratatui = "0.30"
+crossterm = { version = "0.29", features = ["event-stream"] }
 
 # Async
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "fs"] }
@@ -38,9 +37,6 @@ pulldown-cmark = "0.12"
 # Tree widget - removed, using manual List rendering to avoid ratatui version conflicts
 # tui-tree-widget = "0.24"
 
-# Text input (agent communication)
-tui-textarea = "0.7"
-
 # Fuzzy search
 fuzzy-matcher = "0.3"
 
@@ -56,4 +52,4 @@ regex = "1"
 # Embedded PTY terminal
 portable-pty = "0.8"
 vt100 = "0.16"
-tui-term = "0.2"
+tui-term = "0.3"

@@ -1,15 +1,15 @@
-//! Terminal panel — ANSI output rendering from tmux capture-pane.
+//! Terminal panel — embedded PTY rendering via tui-term.
 //!
-//! Uses `ansi-to-tui` to convert raw ANSI escape sequences into
-//! ratatui `Text` with colors and styles preserved.
+//! Uses `tui-term::widget::PseudoTerminal` to render the vt100 parser's
+//! screen state directly. No ANSI parsing needed — vt100 handles everything.
 
-use ansi_to_tui::IntoText;
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph},
     Frame,
 };
+use tui_term::widget::PseudoTerminal;
 
 use crate::app::{AppState, FocusedPanel};
 
@@ -24,41 +24,33 @@ pub fn render_terminal(frame: &mut Frame, area: Rect, app: &AppState) {
         Style::default().fg(Color::DarkGray)
     };
 
+    let title = if focused {
+        " 💬 Terminal (interactive) "
+    } else {
+        " 💬 Terminal "
+    };
+
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" 💬 Terminal ")
+        .title(title)
         .border_style(border_style);
 
-    if app.terminal_content.is_empty() {
-        let placeholder = Paragraph::new("  Press 'a' to attach to agent session")
+    if let Some(ref parser) = app.pty_parser {
+        if let Ok(parser_guard) = parser.lock() {
+            let pseudo_term = PseudoTerminal::new(parser_guard.screen())
+                .block(block);
+            frame.render_widget(pseudo_term, area);
+        } else {
+            // Parser lock poisoned — show error
+            let error = Paragraph::new("  ⚠ Terminal lock error")
+                .block(block)
+                .style(Style::default().fg(Color::Red));
+            frame.render_widget(error, area);
+        }
+    } else {
+        let placeholder = Paragraph::new("  No agent running — install gemini or claude CLI")
             .block(block)
             .style(Style::default().fg(Color::DarkGray));
         frame.render_widget(placeholder, area);
-        return;
     }
-
-    // Convert ANSI bytes to ratatui Text
-    let text = match app.terminal_content.as_bytes().into_text() {
-        Ok(text) => text,
-        Err(_) => {
-            // Fallback: render as plain text if ANSI parsing fails
-            let paragraph = Paragraph::new(app.terminal_content.as_str())
-                .block(block)
-                .wrap(Wrap { trim: false });
-            frame.render_widget(paragraph, area);
-            return;
-        }
-    };
-
-    // Compute scroll offset — auto-scroll to bottom if enabled
-    let content_height = text.lines.len() as u16;
-    let visible_height = area.height.saturating_sub(2); // subtract borders
-    let scroll_offset = content_height.saturating_sub(visible_height);
-
-    let paragraph = Paragraph::new(text)
-        .block(block)
-        .wrap(Wrap { trim: false })
-        .scroll((scroll_offset, 0));
-
-    frame.render_widget(paragraph, area);
 }

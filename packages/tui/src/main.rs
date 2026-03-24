@@ -1,4 +1,5 @@
 use std::io;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -14,6 +15,7 @@ use tokio::task::JoinHandle;
 mod app;
 mod cli;
 mod protocol;
+#[allow(dead_code)]
 mod tmux;
 mod ui;
 
@@ -93,7 +95,6 @@ async fn main() -> Result<()> {
 
     // Start metadata poller if we have a repo
     let mut metadata_poller: Option<JoinHandle<()>> = None;
-    let mut terminal_poller: Option<JoinHandle<()>> = None;
 
     if let Some(repo_root) = &app.current_repo_root {
         metadata_poller = Some(app::poller::spawn_metadata_poller(
@@ -103,43 +104,33 @@ async fn main() -> Result<()> {
         tracing::info!("Started metadata poller");
     }
 
-    // Auto-spawn an agent (gemini or claude) in a tmux session
-    let session_name = "lumi-tui-agent".to_string();
+    // --- Spawn agent on embedded PTY ---
     let cwd = std::env::current_dir()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| ".".to_string());
 
     // Detect which agent CLI is available
     let agent_cmd = detect_agent_cli().await;
+    let mut _pty_reader_handle: Option<std::thread::JoinHandle<()>> = None;
 
     if let Some(cmd) = &agent_cmd {
-        tracing::info!(agent = %cmd, cwd = %cwd, "Spawning agent in tmux session");
-        let session = tmux::TmuxSession::new(&session_name);
+        tracing::info!(agent = %cmd, cwd = %cwd, "Spawning agent on embedded PTY");
 
-        // Kill any leftover session from a previous run
-        let _ = session.kill().await;
+        // Estimate terminal size for the right panel (~40% of terminal width)
+        let term_size = crossterm::terminal::size().unwrap_or((120, 40));
+        let pty_cols = (term_size.0 as f32 * 0.4) as u16;
+        let pty_rows = term_size.1.saturating_sub(4);
 
-        // Create a new tmux session and run the agent
-        match session.create(&cwd, cmd).await {
-            Ok(()) => {
-                app.active_tmux_session = Some(session_name.clone());
-
-                // Wait a moment for the agent to start, then capture initial output
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                if let Ok(content) = session.capture_pane(500).await {
-                    app.terminal_content = content;
-                }
-
-                // Start polling
-                terminal_poller = Some(app::poller::spawn_terminal_poller(
-                    tx.clone(),
-                    session_name.clone(),
-                    "tui-agent".to_string(),
-                ));
-                tracing::info!("Agent tmux session started and poller running");
+        match app::pty::PtyManager::spawn(cmd, &[], &cwd, pty_rows, pty_cols) {
+            Ok((pty_mgr, reader_handle)) => {
+                let parser = Arc::clone(pty_mgr.parser());
+                app.pty_parser = Some(parser);
+                app.pty_manager = Some(pty_mgr);
+                _pty_reader_handle = Some(reader_handle);
+                tracing::info!("Agent PTY spawned successfully");
             }
             Err(e) => {
-                tracing::error!("Failed to spawn agent: {}", e);
+                tracing::error!("Failed to spawn agent PTY: {}", e);
             }
         }
     } else {
@@ -160,7 +151,6 @@ async fn main() -> Result<()> {
                     Action::Quit => break Ok(()),
                     Action::Up | Action::Down => {
                         // Restart metadata poller if repo changed while navigating Projects panel.
-                        // Note: terminal_poller is NOT aborted — the agent session is independent.
                         if app.focused == app::FocusedPanel::Projects {
                             if let Some(handle) = metadata_poller.take() {
                                 handle.abort();
@@ -177,36 +167,6 @@ async fn main() -> Result<()> {
                         }
                     }
                     Action::None | Action::CycleFocus | Action::JumpToPanel(_) => {}
-                    Action::AttachAgent => {
-                        if let Some(ref session_name) = app.active_tmux_session {
-                            // 1. Suspend TUI — restore normal terminal
-                            disable_raw_mode()?;
-                            execute!(
-                                terminal.backend_mut(),
-                                LeaveAlternateScreen,
-                                DisableMouseCapture
-                            )?;
-                            terminal.show_cursor()?;
-
-                            // 2. Run tmux attach (blocking — user has full control)
-                            let attach_status = std::process::Command::new("tmux")
-                                .args(["attach-session", "-t", session_name])
-                                .status();
-
-                            tracing::info!(?attach_status, "tmux attach returned");
-
-                            // 3. Restore TUI
-                            enable_raw_mode()?;
-                            execute!(
-                                terminal.backend_mut(),
-                                EnterAlternateScreen,
-                                EnableMouseCapture
-                            )?;
-
-                            // Force full redraw
-                            terminal.clear()?;
-                        }
-                    }
                     action => {
                         tracing::debug!(?action, "Unhandled action");
                     }
@@ -220,20 +180,15 @@ async fn main() -> Result<()> {
         }
     };
 
-    // Abort pollers on shutdown
+    // Abort metadata poller on shutdown
     if let Some(handle) = metadata_poller.take() {
         handle.abort();
     }
-    if let Some(handle) = terminal_poller.take() {
-        handle.abort();
-    }
 
-    // Kill the agent tmux session we spawned
-    if let Some(ref session_name) = app.active_tmux_session {
-        tracing::info!(session = %session_name, "Killing agent tmux session");
-        let session = tmux::TmuxSession::new(session_name.clone());
-        let _ = session.kill().await;
-    }
+    // PTY cleanup: drop the PtyManager to close the PTY fd,
+    // which will cause the reader thread to exit on EOF.
+    drop(app.pty_manager.take());
+    drop(app.pty_parser.take());
 
     // Cleanup terminal
     disable_raw_mode()?;

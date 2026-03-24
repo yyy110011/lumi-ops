@@ -81,9 +81,9 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &AppState) {
             shortcut_span("K", "Kill"),
         ],
         FocusedPanel::Terminal => vec![
-            shortcut_span("j/k", "Scroll"),
-            shortcut_span("a", "Attach"),
-            shortcut_span("s", "Stop"),
+            shortcut_span("Type", "Send to PTY"),
+            shortcut_span("Esc", "Leave"),
+            shortcut_span("C-c", "Interrupt"),
         ],
     };
 

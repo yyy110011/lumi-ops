@@ -1,6 +1,9 @@
 //! App state, actions, and keybinding dispatch.
 
 pub mod poller;
+pub mod pty;
+
+use std::sync::{Arc, Mutex};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -14,8 +17,6 @@ pub enum StateUpdate {
     ClonesRefreshed(Vec<ShadowClone>),
     /// MISSION.md content loaded for a clone
     MissionLoaded(String),
-    /// Agent terminal output captured from tmux
-    TerminalOutput { branch: String, content: String },
 }
 
 /// A registered repository entry.
@@ -59,7 +60,6 @@ pub enum Action {
     Enter,
     // Clone operations (via CLI subprocess)
     SpawnClone,
-    AttachAgent,
     StopAgent,
     KillClone,
     MergeClone,
@@ -87,22 +87,20 @@ pub struct AppState {
     pub selected_clone: usize,
     /// MISSION.md content for the selected clone
     pub mission_content: Option<String>,
-    /// Captured tmux terminal output
-    pub terminal_content: String,
     /// Root directory of the currently selected repo
     pub current_repo_root: Option<String>,
 
-    // --- Panel-specific UI state (from impl-ui) ---
+    // --- Panel-specific UI state ---
     /// Selected index in the Projects panel list (combined repo+clone tree).
     pub tree_selected_idx: usize,
     /// Scroll offset for the file viewer panel.
     pub file_scroll: u16,
-    /// Scroll offset for the terminal panel.
-    pub terminal_scroll: u16,
-    /// Whether the terminal should auto-scroll to bottom.
-    pub terminal_auto_scroll: bool,
-    /// Active tmux session name being captured (auto-detected or manually attached).
-    pub active_tmux_session: Option<String>,
+
+    // --- Embedded PTY ---
+    /// Embedded PTY manager for the agent terminal
+    pub pty_manager: Option<pty::PtyManager>,
+    /// Shared vt100 parser for rendering (cloned from PtyManager)
+    pub pty_parser: Option<Arc<Mutex<vt100::Parser>>>,
 }
 
 impl AppState {
@@ -115,13 +113,11 @@ impl AppState {
             selected_repo: 0,
             selected_clone: 0,
             mission_content: None,
-            terminal_content: String::new(),
             current_repo_root: None,
             tree_selected_idx: 0,
             file_scroll: 0,
-            terminal_scroll: 0,
-            terminal_auto_scroll: true,
-            active_tmux_session: None,
+            pty_manager: None,
+            pty_parser: None,
         }
     }
 
@@ -224,6 +220,128 @@ impl AppState {
 
     /// Handle a keyboard event, return the resulting action.
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {
+        // --- Terminal-focused mode: forward most keys to PTY ---
+        if self.focused == FocusedPanel::Terminal {
+            if let Some(ref mut pty) = self.pty_manager {
+                match key.code {
+                    // Escape keys: Tab, Esc, and number keys switch panels (do NOT send to PTY)
+                    KeyCode::Tab => {
+                        self.focused = self.focused.next();
+                        return Action::CycleFocus;
+                    }
+                    KeyCode::Esc => {
+                        self.focused = FocusedPanel::Projects;
+                        return Action::JumpToPanel(FocusedPanel::Projects);
+                    }
+                    // Number keys 1-4: switch panels (consistent with non-Terminal mode)
+                    KeyCode::Char('1') if !key.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) => {
+                        self.focused = FocusedPanel::Projects;
+                        return Action::JumpToPanel(FocusedPanel::Projects);
+                    }
+                    KeyCode::Char('2') if !key.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) => {
+                        self.focused = FocusedPanel::FileViewer;
+                        return Action::JumpToPanel(FocusedPanel::FileViewer);
+                    }
+                    KeyCode::Char('3') if !key.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) => {
+                        self.focused = FocusedPanel::AgentList;
+                        return Action::JumpToPanel(FocusedPanel::AgentList);
+                    }
+                    KeyCode::Char('4') if !key.modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT) => {
+                        self.focused = FocusedPanel::Terminal;
+                        return Action::JumpToPanel(FocusedPanel::Terminal);
+                    }
+                    // Ctrl+Q always quits
+                    KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        return Action::Quit;
+                    }
+                    // Ctrl+C → send \x03 to PTY (do NOT quit TUI)
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        let _ = pty.write_bytes(&[0x03]);
+                        return Action::None;
+                    }
+                    // Ctrl+D → send \x04
+                    KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        let _ = pty.write_bytes(&[0x04]);
+                        return Action::None;
+                    }
+                    // Ctrl+Z → send \x1a
+                    KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        let _ = pty.write_bytes(&[0x1a]);
+                        return Action::None;
+                    }
+                    // Ctrl+L → send \x0c (clear)
+                    KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        let _ = pty.write_bytes(&[0x0c]);
+                        return Action::None;
+                    }
+                    // Other Ctrl+<char> → send as control character
+                    KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        let ctrl_byte = (c as u8).wrapping_sub(b'a').wrapping_add(1);
+                        let _ = pty.write_bytes(&[ctrl_byte]);
+                        return Action::None;
+                    }
+                    // Regular characters
+                    KeyCode::Char(c) => {
+                        let _ = pty.write_str(&c.to_string());
+                        return Action::None;
+                    }
+                    // Enter → \r
+                    KeyCode::Enter => {
+                        let _ = pty.write_bytes(b"\r");
+                        return Action::None;
+                    }
+                    // Backspace → DEL (0x7f)
+                    KeyCode::Backspace => {
+                        let _ = pty.write_bytes(&[0x7f]);
+                        return Action::None;
+                    }
+                    // Arrow keys → ANSI escape sequences
+                    KeyCode::Up => {
+                        let _ = pty.write_bytes(b"\x1b[A");
+                        return Action::None;
+                    }
+                    KeyCode::Down => {
+                        let _ = pty.write_bytes(b"\x1b[B");
+                        return Action::None;
+                    }
+                    KeyCode::Right => {
+                        let _ = pty.write_bytes(b"\x1b[C");
+                        return Action::None;
+                    }
+                    KeyCode::Left => {
+                        let _ = pty.write_bytes(b"\x1b[D");
+                        return Action::None;
+                    }
+                    // Home/End
+                    KeyCode::Home => {
+                        let _ = pty.write_bytes(b"\x1b[H");
+                        return Action::None;
+                    }
+                    KeyCode::End => {
+                        let _ = pty.write_bytes(b"\x1b[F");
+                        return Action::None;
+                    }
+                    // Delete
+                    KeyCode::Delete => {
+                        let _ = pty.write_bytes(b"\x1b[3~");
+                        return Action::None;
+                    }
+                    // Page Up/Down
+                    KeyCode::PageUp => {
+                        let _ = pty.write_bytes(b"\x1b[5~");
+                        return Action::None;
+                    }
+                    KeyCode::PageDown => {
+                        let _ = pty.write_bytes(b"\x1b[6~");
+                        return Action::None;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // --- Normal mode (non-Terminal panels) ---
+
         // Ctrl+C / Ctrl+Q always quits
         if key.modifiers.contains(KeyModifiers::CONTROL)
             && matches!(key.code, KeyCode::Char('c') | KeyCode::Char('q'))
@@ -265,7 +383,6 @@ impl AppState {
             KeyCode::Enter => Action::Enter,
             // Clone operations
             KeyCode::Char('n') => Action::SpawnClone,
-            KeyCode::Char('a') => Action::AttachAgent,
             KeyCode::Char('s') => Action::StopAgent,
             KeyCode::Char('K') => Action::KillClone,
             KeyCode::Char('m') => Action::MergeClone,
@@ -295,14 +412,12 @@ impl AppState {
                     self.tree_selected_idx -= 1;
                 }
                 // Sync the repo selection: repos appear at their index position
-                // (simplified: navigate repos directly)
                 if self.selected_repo > 0 {
                     self.selected_repo -= 1;
                     self.update_current_repo_root();
                     self.clones.clear();
                     self.selected_clone = 0;
                     self.mission_content = None;
-
                 }
             }
             FocusedPanel::AgentList => {
@@ -315,8 +430,8 @@ impl AppState {
                 self.file_scroll = self.file_scroll.saturating_sub(1);
             }
             FocusedPanel::Terminal => {
-                self.terminal_auto_scroll = false;
-                self.terminal_scroll = self.terminal_scroll.saturating_sub(1);
+                // In Terminal mode, Up/Down are forwarded to PTY (handled above).
+                // This branch is only reached if no PTY is active.
             }
         }
     }
@@ -347,7 +462,7 @@ impl AppState {
                 self.file_scroll = self.file_scroll.saturating_add(1);
             }
             FocusedPanel::Terminal => {
-                self.terminal_scroll = self.terminal_scroll.saturating_add(1);
+                // In Terminal mode, Up/Down are forwarded to PTY (handled above).
             }
         }
     }
@@ -379,20 +494,6 @@ impl AppState {
                 tracing::debug!("Mission content loaded");
                 self.mission_content = Some(content);
                 self.file_scroll = 0;
-            }
-            StateUpdate::TerminalOutput { branch, content } => {
-                tracing::debug!(branch, "Terminal output received");
-                // Accept output from active tmux session or matching clone
-                let should_update = self.active_tmux_session.is_some()
-                    || self
-                        .selected_clone_ref()
-                        .is_some_and(|c| c.branch == branch);
-                if should_update {
-                    self.terminal_content = content;
-                    if self.terminal_auto_scroll {
-                        self.terminal_scroll = u16::MAX;
-                    }
-                }
             }
         }
     }
