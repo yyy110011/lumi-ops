@@ -48,6 +48,12 @@ jobs:
           cd packages/extension
           npx --yes @vscode/vsce package --no-dependencies
 
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lumi-ops-${{ github.sha }}.vsix
+          path: packages/extension/*.vsix
+
   integration-tests:
     needs: build
     strategy:

@@ -281,4 +281,41 @@ describe('registerRebaseCommands', () => {
       expect(mockRebase).not.toHaveBeenCalled();
     });
   });
+
+  describe('multi-root: clone.repoRoot', () => {
+    it('uses clone.repoRoot for metadata path when available', async () => {
+      setup();
+      mockReadFileSync.mockReturnValue(JSON.stringify({
+        'feat/test': { baseBranch: 'main' },
+      }));
+      mockRebase.mockResolvedValue(undefined);
+      mockWithProgress.mockImplementation(async (_opts: any, cb: Function) => cb());
+
+      const handler = getHandler('lumi-ops.rebase');
+      await handler(makeShadowItem({ repoRoot: '/other-repo' }));
+
+      // Metadata path should use /other-repo, not /repo
+      expect(mockReadFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('/other-repo'),
+        'utf-8',
+      );
+    });
+
+    it('falls back to rootPath when clone.repoRoot is absent', async () => {
+      setup();
+      mockReadFileSync.mockReturnValue(JSON.stringify({
+        'feat/test': { baseBranch: 'main' },
+      }));
+      mockRebase.mockResolvedValue(undefined);
+      mockWithProgress.mockImplementation(async (_opts: any, cb: Function) => cb());
+
+      const handler = getHandler('lumi-ops.rebase');
+      await handler(makeShadowItem()); // no repoRoot
+
+      expect(mockReadFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('/repo'),
+        'utf-8',
+      );
+    });
+  });
 });

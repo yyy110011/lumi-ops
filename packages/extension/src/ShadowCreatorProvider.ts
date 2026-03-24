@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 
 export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'lumi-ops.creator';
@@ -7,6 +8,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
+    private readonly _allRoots: string[] = [],
   ) {}
 
   public resolveWebviewView(
@@ -30,11 +32,12 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
             branch: data.branch,
             description: data.description,
             baseBranch: data.baseBranch,
-            templates: data.templates
+            templates: data.templates,
+            repoRoot: data.repoRoot,
           });
           break;
         case 'getBranches':
-          vscode.commands.executeCommand('lumi-ops.getBranches');
+          vscode.commands.executeCommand('lumi-ops.getBranches', data.repoRoot);
           break;
         case 'returnToRoot':
           vscode.commands.executeCommand('lumi-ops.returnToRoot');
@@ -72,11 +75,15 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
   }
 
   private _getHtmlForWebview(webview: vscode.Webview) {
-    return this._getUnifiedHtml();
+    const repos = this._allRoots.map(r => ({
+      label: path.basename(r),
+      rootPath: r,
+    }));
+    return this._getUnifiedHtml(repos);
   }
 
 
-  private _getUnifiedHtml() {
+  private _getUnifiedHtml(repos: { label: string; rootPath: string }[] = []) {
     return `<!DOCTYPE html>
     <html lang="en">
     <head>
@@ -309,6 +316,12 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
     </head>
     <body>
 
+      <!-- Repo Selector (only shown when multiple roots) -->
+      <div class="form-group" id="repoGroup" style="display:none;">
+        <label for="repoSelect">Repository</label>
+        <select id="repoSelect"></select>
+      </div>
+
       <!-- Branch Row: [Base ▾] → [Create Branch] -->
       <div class="branch-row">
         <div class="form-group" id="baseBranchGroup">
@@ -349,12 +362,17 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
 
       <script>
         const vscode = acquireVsCodeApi();
+        const initialRepos = ${JSON.stringify(repos)};
         let branches = [];
         let currentBranch = '';
         let selectedBaseBranch = '';
         let worktreeBranches = [];
         let saveScope = 'project';
+        let repos = initialRepos;
+        let selectedRepoRoot = repos.length > 0 ? repos[0].rootPath : '';
 
+        const repoGroup = document.getElementById('repoGroup');
+        const repoSelect = document.getElementById('repoSelect');
         const branchInput = document.getElementById('branch');
         const dropdown = document.getElementById('branchDropdown');
         const branchClear = document.getElementById('branchClear');
@@ -383,8 +401,22 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           showBaseDropdown();
         });
 
+        // === Initialize repo selector ===
+        if (repos.length > 1) {
+          repoGroup.style.display = '';
+          repoSelect.innerHTML = repos.map(r =>
+            '<option value="' + r.rootPath + '">' + r.label + '</option>'
+          ).join('');
+        }
+
         // Request data on load
-        vscode.postMessage({ command: 'getBranches' });
+        vscode.postMessage({ command: 'getBranches', repoRoot: selectedRepoRoot });
+
+        // === Repo selector ===
+        repoSelect.addEventListener('change', () => {
+          selectedRepoRoot = repoSelect.value;
+          vscode.postMessage({ command: 'getBranches', repoRoot: selectedRepoRoot });
+        });
 
         // === Scope pill toggle ===
         scopePill.addEventListener('click', () => {
@@ -420,7 +452,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
               selectedBaseBranch = currentBranch;
               baseBranchInput.value = selectedBaseBranch;
               updateBaseBranchVisibility();
-              vscode.postMessage({ command: 'getBranches' });
+              vscode.postMessage({ command: 'getBranches', repoRoot: selectedRepoRoot });
               break;
 
             case 'loadPrompt':
@@ -621,7 +653,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         baseBranchInput.addEventListener('mousedown', () => {
           hideDropdown();
           if (!baseDropdown.classList.contains('show')) {
-            vscode.postMessage({ command: 'getBranches' });
+            vscode.postMessage({ command: 'getBranches', repoRoot: selectedRepoRoot });
             showBaseDropdown();
           }
         });
@@ -654,7 +686,8 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
               command: 'spawn',
               branch: branch,
               description: description,
-              baseBranch: selectedBaseBranch
+              baseBranch: selectedBaseBranch,
+              repoRoot: selectedRepoRoot
             });
           }
         });

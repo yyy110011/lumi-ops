@@ -11,16 +11,19 @@ export function registerMergeCommands(
 
   const mergeCmd = vscode.commands.registerCommand('lumi-ops.merge', async (item: any) => {
     const clone = item?.clone;
-    if (!clone || !rootPath) return;
+    if (!clone) return;
+    // Resolve root from clone metadata (multi-root support) or fallback to primary
+    const effectiveRoot = clone.repoRoot || rootPath;
+    if (!effectiveRoot) return;
     const branchName = clone.currentBranch;  // Actual branch with commits
     const cloneId = clone.dirName;           // Stable identity for metadata/kill
 
     try {
-      const git = new GitUtils(rootPath);
+      const git = new GitUtils(effectiveRoot);
       const fs = await import('fs');
 
       // 1. Read baseBranch from centralized metadata
-      const metadataPath = path.join(getRepoStorageDir(rootPath), METADATA_FILE);
+      const metadataPath = path.join(getRepoStorageDir(effectiveRoot), METADATA_FILE);
       let baseBranch: string | undefined;
       try {
         const raw = fs.readFileSync(metadataPath, 'utf-8');
@@ -120,13 +123,13 @@ export function registerMergeCommands(
 
       if (targetBranch === currentBranch) {
         // Target is root's current branch — merge directly in root
-        mergeCwd = rootPath;
+        mergeCwd = effectiveRoot;
       } else if (worktreeMap.has(targetBranch)) {
         // Target is in an existing worktree — use that path
         mergeCwd = worktreeMap.get(targetBranch)!;
       } else {
         // Target not in any worktree — create one under clones dir
-        const newWorktreePath = path.join(getClonesDir(rootPath), targetBranch);
+        const newWorktreePath = path.join(getClonesDir(effectiveRoot), targetBranch);
         try {
           await git.addWorktreeExisting(newWorktreePath, targetBranch);
         } catch (wtError: any) {
@@ -146,7 +149,7 @@ export function registerMergeCommands(
         title: `Merging ${branchName} → ${targetBranch}`,
         cancellable: false
       }, async () => {
-        await merge(branchName, { root: rootPath!, commitMessage, cwd: mergeCwd });
+        await merge(branchName, { root: effectiveRoot, commitMessage, cwd: mergeCwd });
       });
 
       // 9. Clean up temp worktree if we created one (conflict throws before reaching here)
@@ -171,7 +174,7 @@ export function registerMergeCommands(
           title: `Killing shadow clone: ${cloneId}`,
           cancellable: false
         }, async () => {
-          await kill(cloneId, { root: rootPath! });
+          await kill(cloneId, { root: effectiveRoot });
         });
         vscode.window.showInformationMessage(`Shadow clone ${cloneId} deleted.`);
         shadowTreeProvider.refresh();

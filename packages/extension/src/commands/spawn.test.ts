@@ -47,6 +47,7 @@ function setup(rootPath: string | undefined = '/repo') {
   const mockContext = { subscriptions: [] } as any;
   const mockDeps = {
     rootPath,
+    allRoots: rootPath ? [rootPath] : [],
     shadowTreeProvider: { refresh: mockRefresh },
     creatorProvider: { resetForm: mockResetForm },
     promptLibraryProvider: {},
@@ -90,6 +91,7 @@ describe('registerSpawnCommands', () => {
     const mockContext = { subscriptions: [] } as any;
     const mockDeps = {
       rootPath: undefined,
+      allRoots: [],
       shadowTreeProvider: { refresh: vi.fn() },
       creatorProvider: { resetForm: vi.fn() },
       promptLibraryProvider: {},
@@ -347,6 +349,45 @@ describe('registerSpawnCommands', () => {
 
       expect(mockShowErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('branch already exists')
+      );
+    });
+  });
+
+  describe('multi-root: repoRoot from webview', () => {
+    it('uses repoRoot from args when provided', async () => {
+      setup();
+      mockGetConfiguration.mockReturnValue({ get: vi.fn().mockReturnValue('') });
+      mockBranchExists.mockResolvedValue(true);
+      mockSpawn.mockResolvedValue(undefined);
+      mockWithProgress.mockImplementation(async (_opts: any, cb: Function) => {
+        await cb({ report: vi.fn() });
+      });
+
+      const handler = getSpawnHandler();
+      await handler({ branch: 'feat/test', description: 'test', repoRoot: '/other-repo' });
+
+      // spawn should be called with the repoRoot, not the default rootPath
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'feat/test',
+        expect.objectContaining({ root: '/other-repo' }),
+      );
+    });
+
+    it('falls back to rootPath when repoRoot is not provided', async () => {
+      setup('/my-repo');
+      mockGetConfiguration.mockReturnValue({ get: vi.fn().mockReturnValue('') });
+      mockBranchExists.mockResolvedValue(true);
+      mockSpawn.mockResolvedValue(undefined);
+      mockWithProgress.mockImplementation(async (_opts: any, cb: Function) => {
+        await cb({ report: vi.fn() });
+      });
+
+      const handler = getSpawnHandler();
+      await handler({ branch: 'feat/test', description: 'test' });
+
+      expect(mockSpawn).toHaveBeenCalledWith(
+        'feat/test',
+        expect.objectContaining({ root: '/my-repo' }),
       );
     });
   });

@@ -39,11 +39,11 @@ vi.mock('fs', () => ({
 }));
 
 import { ShadowItem } from './ShadowTreeProvider';
-import type { ShadowClone } from '@lumi-ops/cli';
+import type { EnrichedClone } from './ShadowTreeProvider';
 
 const NONE = 0; // TreeItemCollapsibleState.None
 
-function makeClone(overrides: Partial<ShadowClone> = {}): ShadowClone {
+function makeClone(overrides: Partial<EnrichedClone> = {}): EnrichedClone {
   return {
     dirName: 'feat/test',
     currentBranch: 'feat/test',
@@ -51,6 +51,7 @@ function makeClone(overrides: Partial<ShadowClone> = {}): ShadowClone {
     path: '/repo.worktrees/feat/test',
     isShadow: true,
     isMain: false,
+    repoRoot: '/repo',
     ...overrides,
   };
 }
@@ -99,10 +100,10 @@ describe('ShadowItem', () => {
       expect(item.description).not.toContain('★');
     });
 
-    it('always uses cycleReviewStatus command with dirName', () => {
+    it('always uses cycleReviewStatus command with composite key', () => {
       const item = new ShadowItem('feat/test', NONE, makeClone(), 'shadowClone', '/ext', undefined);
       expect(item.command?.command).toBe('lumi-ops.cycleReviewStatus');
-      expect(item.command?.arguments).toEqual(['feat/test']);
+      expect(item.command?.arguments).toEqual(['/repo::feat/test']);
     });
 
     it('shows baseBranch in description', () => {

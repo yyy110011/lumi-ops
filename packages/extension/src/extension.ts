@@ -13,6 +13,8 @@ import { WorktreeManagerPanel } from './WorktreeManagerPanel';
 import { StatusEventBus } from './StatusEventBus';
 import { runMigrations } from './migrations';
 import { deriveCloneId, setStatusIfApplicable } from './autoStatus';
+import { setupAutoCloseWatcher } from './autoCloseWatcher';
+import { resolveWorkspaceRoots } from './workspaceRoots';
 
 import { GitUtils, getClonesDir, getRepoStorageDir, LUMI_OPS_HOME, METADATA_FILE, registerRepo } from '@lumi-ops/cli';
 
@@ -104,34 +106,18 @@ export async function activate(context: vscode.ExtensionContext) {
 
 
 
-  let rootPath = vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
-    ? vscode.workspace.workspaceFolders[0].uri.fsPath
-    : undefined;
+  // --- Multi-root workspace resolution ---
+  // Resolve all workspace folders to deduplicated repo roots.
+  // Folders from the same git tree (e.g. repo + repo.worktrees/branch) merge into one.
+  // Single-root is a subset of multi-root — allRoots is always an array.
+  const resolvedRoots = resolveWorkspaceRoots();
+  const allRoots = resolvedRoots.map(r => r.rootPath);
+  const rootPath = allRoots[0] as string | undefined;
 
-  // Resolve symlinks so our paths match what git worktree list returns
-  if (rootPath) {
-    try { rootPath = fs.realpathSync(rootPath); } catch { /* keep original if resolve fails */ }
-  }
-
-  let shadowBranchName: string | undefined = undefined;
-  let currentWorkspacePath: string | undefined = undefined;
-
-  // Detect if we are inside a .worktrees/ directory to resolve back to the repo root
-  if (rootPath) {
-    const worktreesMatch = rootPath.match(/^(.+)\.worktrees[\\/]/);
-    
-    if (worktreesMatch && worktreesMatch[1]) {
-      currentWorkspacePath = rootPath;
-      rootPath = worktreesMatch[1]; // Resolve back to the main repository root
-      
-      try {
-        const git = new GitUtils(currentWorkspacePath);
-        shadowBranchName = await git.getCurrentBranch();
-      } catch (e) {
-        console.error("Failed to get worktree branch name via GitUtils:", e);
-      }
-    }
-  }
+  // Clone detection: find clone info from any resolved root
+  const cloneResolved = resolvedRoots.find(r => r.isClone);
+  const shadowBranchName = cloneResolved?.shadowBranchName;
+  const currentWorkspacePath = cloneResolved?.cloneWorkspacePath;
 
   // Run all one-time migrations
   await runMigrations(context, rootPath);
@@ -164,14 +150,22 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   }
 
+  // -- Auto-close window when clone worktree is removed --
+  if (isCloneWorkspace && currentWorkspacePath) {
+    const disposable = setupAutoCloseWatcher(currentWorkspacePath);
+    if (disposable) {
+      context.subscriptions.push(disposable);
+    }
+  }
+
   const statusBus = new StatusEventBus();
   context.subscriptions.push({ dispose: () => statusBus.dispose() });
 
-  const shadowTreeProvider = new ShadowTreeProvider(rootPath, context.extensionPath, statusBus, shadowBranchName, currentWorkspacePath);
+  const shadowTreeProvider = new ShadowTreeProvider(allRoots, context.extensionPath, statusBus, shadowBranchName, currentWorkspacePath);
   const activeClonesView = vscode.window.createTreeView('lumi-ops.activeClones', { treeDataProvider: shadowTreeProvider });
   context.subscriptions.push(activeClonesView);
 
-  const creatorProvider = new ShadowCreatorProvider(context.extensionUri);
+  const creatorProvider = new ShadowCreatorProvider(context.extensionUri, allRoots);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('lumi-ops.creator', creatorProvider)
   );
@@ -276,8 +270,9 @@ Add JWT-based authentication to the Express.js API.
   }
 
   // -- fs.watch for instant cross-window metadata (status) refresh --
-  if (rootPath) {
-    const metadataDir = getClonesDir(rootPath);
+  // Set up watchers for ALL resolved roots (multi-root support)
+  for (const watchRoot of allRoots) {
+    const metadataDir = getClonesDir(watchRoot);
     try {
       if (!fs.existsSync(metadataDir)) {
         fs.mkdirSync(metadataDir, { recursive: true });
@@ -290,13 +285,11 @@ Add JWT-based authentication to the Express.js API.
       });
       context.subscriptions.push({ dispose: () => metadataWatcher.close() });
     } catch (e) {
-      console.error('[lumi-ops] \u274c Failed to watch metadata:', e);
+      console.error(`[lumi-ops] \u274c Failed to watch metadata for ${watchRoot}:`, e);
     }
-  }
 
-  // -- fs.watch for ref changes (needsRebase detection) --
-  if (rootPath) {
-    const gitDir = path.join(rootPath, '.git');
+    // -- fs.watch for ref changes (needsRebase detection) --
+    const gitDir = path.join(watchRoot, '.git');
     const refsDir = path.join(gitDir, 'refs', 'heads');
     try {
       if (fs.existsSync(refsDir)) {
@@ -306,7 +299,7 @@ Add JWT-based authentication to the Express.js API.
           if (refDebounce) clearTimeout(refDebounce);
           refDebounce = setTimeout(async () => {
             try {
-              const metadataPath = path.join(getRepoStorageDir(rootPath!), METADATA_FILE);
+              const metadataPath = path.join(getRepoStorageDir(watchRoot), METADATA_FILE);
               let metadata: Record<string, any> = {};
               try {
                 const raw = fs.readFileSync(metadataPath, 'utf-8');
@@ -318,12 +311,10 @@ Add JWT-based authentication to the Express.js API.
               let changed = false;
               for (const [branch, meta] of Object.entries(metadata)) {
                 if (!meta?.baseBranch) continue;
-                // Check if the changed ref matches this clone's baseBranch
-                // filename can be "main" or "feat/xxx" (nested)
                 const changedBranch = filename!.replace(/\\/g, '/');
                 if (changedBranch !== meta.baseBranch) continue;
 
-                const git = new GitUtils(rootPath!);
+                const git = new GitUtils(watchRoot);
                 const ahead = await git.getCommitsAhead(meta.baseBranch, branch);
                 const needsRebase = ahead > 0;
                 if (meta.needsRebase !== needsRebase) {
@@ -344,7 +335,7 @@ Add JWT-based authentication to the Express.js API.
         context.subscriptions.push({ dispose: () => refWatcher.close() });
       }
     } catch (e) {
-      console.error('[lumi-ops] \u274c Failed to watch refs:', e);
+      console.error(`[lumi-ops] \u274c Failed to watch refs for ${watchRoot}:`, e);
     }
   }
 
@@ -391,16 +382,17 @@ Add JWT-based authentication to the Express.js API.
     },
   });
 
-  // Auto-register current workspace repo in the global registry
-  if (rootPath) {
+  // Auto-register all resolved workspace repos in the global registry
+  for (const regRoot of allRoots) {
     try {
-      registerRepo(path.basename(rootPath), rootPath);
+      registerRepo(path.basename(regRoot), regRoot);
     } catch { /* non-fatal */ }
   }
 
   // -- Register all commands from modules --
   const deps: CommandDeps = {
     rootPath,
+    allRoots,
     shadowTreeProvider,
     creatorProvider,
     promptLibraryProvider,

@@ -15,12 +15,10 @@ Equip your AI agent with a protocol for parallel development. Spawn isolated tas
 
 Built on Git Worktrees. Works with Antigravity, Cursor, GitHub Copilot, and any MCP-compatible AI.
 
-### 🆕 v0.4.0 — MCP Server & Review Protocol
-- **MCP Server** — New `@lumi-ops/mcp-server` package with 15 tools for the full clone lifecycle, plus 6 Resources and 4 Prompt templates for agent context and workflow guidance. Install via `npx @lumi-ops/mcp-server`. Works with Antigravity, VS Code, Cursor, Windsurf, and Claude Desktop.
-- **Agent-Driven Review Protocol** — Clone agent writes `MISSION_COMPLETE.md` → sets `needsReview` → root agent reviews via `review_clone` → approves or `request_revision` with feedback.
-- **Clone Agent Rules** — Auto-inject `.agents/rules/lumi-ops-clone-agent.md` into clones, teaching agents the review protocol.
-- **Root Agent Mode** — Inject strategist rules into the main workspace so your root agent plans and delegates instead of implementing directly.
-- **Auto-Status Transitions** — Clone status auto-transitions from `todo` → `inProgress` when the workspace opens.
+### 🆕 v0.5 — Multi-Root Workspace & Auto-Close
+- **Multi-Root Workspace Support** — Extension now detects and aggregates clones across all workspace folders, with clones grouped by repo in the sidebar.
+- **Auto-Close Clone Window** — Clone VS Code windows automatically close when the worktree is killed, keeping your workspace tidy.
+- **Beta CI Pipeline** — `develop` branch builds and uploads `.vsix` artifacts for manual testing before stable release.
 
 ## 📦 Monorepo Structure
 
@@ -58,6 +56,8 @@ Press **F5** in VS Code / Antigravity to launch the Extension Development Host.
 - **🧠 Agent Rules** — Clone Agent Rules auto-inject executor rules into clones so agents know the review protocol. Root Agent Mode injects strategist rules for the main workspace: plan, delegate, don't implement directly.
 - **📚 Prompt Library** — Save and reuse task descriptions as templates. Dual-scope storage (Global `~/.lumi-ops/.prompts/` + Project `<repoRoot>/.prompts/`). Per-item scope badges, edit, copy, and delete actions. Cross-window sync.
 - **Auto-Status Transitions** — Clone status auto-transitions from `todo` → `inProgress` when the workspace opens.
+- **🪟 Multi-Root Workspace** — Works with VS Code multi-root workspaces — clones from all workspace folders are detected and grouped by repo in the sidebar tree.
+- **🚪 Auto-Close Clone Window** — Clone windows automatically close when the worktree is killed, so you don't accumulate stale windows.
 - **👻 Git Worktree Isolation** — Physical directory separation ensures parallel agents never overwrite each other's files. Spawn a new branch + worktree instantly from the sidebar. Auto-generates `MISSION.md` with the task objective for your AI Agent.
 - **Shadow Mode UI** — When opened inside a Shadow Clone, the UI is fully unified with Root Mode. All operations (Spawn, Kill, Merge) are available. Your current clone is marked with `★`.
 - **Worktree Manager (Beta)** — Multi-repo dashboard showing all registered repos and worktrees in one panel. Review status cycling and inline notes.

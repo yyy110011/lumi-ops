@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### ✨ Features
 - **Auto-Close Clone Window** — Clone VS Code windows now automatically close when the worktree is killed via `fs.watch` on the parent directory. Extracted into testable `autoCloseWatcher.ts` module with 10 unit tests.
-- **Beta CI Pipeline** — New `publish-beta.yml` workflow auto-publishes pre-release to VS Code Marketplace on every push to `develop` branch. Open VSX is excluded (does not support pre-release channels).
+- **Beta CI Pipeline** — CI builds and uploads a `.vsix` artifact on every push to `develop` branch for manual testing (no marketplace publishing).
 - **Develop Branch** — New `develop` branch for integrating features before stable release.
 
 ### 🐛 Bug Fixes

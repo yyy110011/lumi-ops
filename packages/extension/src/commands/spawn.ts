@@ -6,14 +6,16 @@ export function registerSpawnCommands(
   context: vscode.ExtensionContext,
   deps: CommandDeps,
 ): vscode.Disposable[] {
-  const { rootPath, shadowTreeProvider, creatorProvider, missionTemplateProvider } = deps;
+  const { rootPath, allRoots, shadowTreeProvider, creatorProvider, missionTemplateProvider } = deps;
 
   const refresh = vscode.commands.registerCommand('lumi-ops.refresh', () => {
     shadowTreeProvider.refresh();
   });
 
-  const spawnCmd = vscode.commands.registerCommand('lumi-ops.spawn', async (args?: { branch: string, description: string, baseBranch?: string, templates?: { name: string; content: string }[] }) => {
-    if (!rootPath) {
+  const spawnCmd = vscode.commands.registerCommand('lumi-ops.spawn', async (args?: { branch: string, description: string, baseBranch?: string, templates?: { name: string; content: string }[], repoRoot?: string }) => {
+    // Resolve effective root: webview repoRoot > primary rootPath
+    const effectiveRoot = args?.repoRoot || rootPath;
+    if (!effectiveRoot) {
       vscode.window.showErrorMessage('No workspace folder open.');
       return;
     }
@@ -44,7 +46,7 @@ export function registerSpawnCommands(
           title: `Spawning shadow clone: ${branchName}`,
           cancellable: false
         }, async (progress: vscode.Progress<{ message?: string }>) => {
-          const git = new GitUtils(rootPath);
+          const git = new GitUtils(effectiveRoot);
 
           // If the target branch doesn't exist locally, fetch it from remote (no checkout)
           const localExists = await git.branchExists(branchName);
@@ -78,7 +80,7 @@ export function registerSpawnCommands(
             }
           }
 
-          await spawn(branchName, { root: rootPath, description, baseBranch, templates: args?.templates,
+          await spawn(branchName, { root: effectiveRoot, description, baseBranch, templates: args?.templates,
             copyFolders: (vscode.workspace.getConfiguration('lumi-ops').get<string>('copyOnSpawn') || '').split('\n').map((s: string) => s.trim()).filter(Boolean),
             onProgress: (message: string) => progress.report({ message }),
             missionTemplate: await (async () => {

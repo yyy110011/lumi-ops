@@ -8,10 +8,12 @@ export function registerBranchCommands(
 ): vscode.Disposable[] {
   const { rootPath, creatorProvider } = deps;
 
-  const getBranches = vscode.commands.registerCommand('lumi-ops.getBranches', async () => {
-    if (!rootPath) return;
+  const getBranches = vscode.commands.registerCommand('lumi-ops.getBranches', async (repoRoot?: string) => {
+    // Use provided repoRoot (from webview repo selector) or fallback to primary rootPath
+    const effectiveRoot = repoRoot || rootPath;
+    if (!effectiveRoot) return;
     try {
-      const git = new GitUtils(rootPath);
+      const git = new GitUtils(effectiveRoot);
       const currentBranch = await git.getCurrentBranch();
 
       // Collect worktree-occupied branches so UI can filter them from Branch Name dropdown

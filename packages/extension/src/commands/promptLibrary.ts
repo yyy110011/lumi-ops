@@ -7,21 +7,26 @@ export function registerPromptLibraryCommands(
   context: vscode.ExtensionContext,
   deps: CommandDeps,
 ): vscode.Disposable[] {
-  const { rootPath, promptLibraryProvider, promptLibraryViewProvider, statusBus } = deps;
+  const { rootPath, allRoots, promptLibraryProvider, promptLibraryViewProvider, statusBus } = deps;
 
   /** Send active clone branches to webview for ✦ indicators */
   async function notifyCloneBranches() {
-    if (!rootPath) return;
+    const roots = allRoots.length > 0 ? allRoots : (rootPath ? [rootPath] : []);
+    if (roots.length === 0) return;
     try {
-      const git = new GitUtils(rootPath);
-      const worktreeEntries = await git.listWorktrees();
-      const cloneBranches = worktreeEntries
-        .map((entry: string) => {
-          const match = entry.match(/branch refs\/heads\/(.+)/);
-          return match ? match[1] : null;
-        })
-        .filter(Boolean) as string[];
-      promptLibraryViewProvider.updateCloneBranches(cloneBranches);
+      const allBranches: string[] = [];
+      for (const root of roots) {
+        const git = new GitUtils(root);
+        const worktreeEntries = await git.listWorktrees();
+        const cloneBranches = worktreeEntries
+          .map((entry: string) => {
+            const match = entry.match(/branch refs\/heads\/(.+)/);
+            return match ? match[1] : null;
+          })
+          .filter(Boolean) as string[];
+        allBranches.push(...cloneBranches);
+      }
+      promptLibraryViewProvider.updateCloneBranches(allBranches);
     } catch {
       // ignore
     }

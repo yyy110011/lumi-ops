@@ -9,6 +9,8 @@ export function registerKillCommands(
   const { rootPath, shadowTreeProvider, creatorProvider } = deps;
 
   const killCmd = vscode.commands.registerCommand('lumi-ops.kill', async (item: any) => {
+    // Resolve root from clone metadata (multi-root support) or fallback to primary
+    const effectiveRoot = item?.clone?.repoRoot || rootPath;
     const cloneId = item?.clone?.dirName || await vscode.window.showInputBox({
       prompt: 'Enter the branch name to kill',
       placeHolder: 'feature/my-old-task (clone directory name)'
@@ -30,7 +32,7 @@ export function registerKillCommands(
             title: `Killing shadow clone: ${cloneId}`,
             cancellable: false
           }, async () => {
-            await kill(cloneId, { root: rootPath!, keepBranch });
+            await kill(cloneId, { root: effectiveRoot!, keepBranch });
           });
           
           const msg = keepBranch

@@ -75,6 +75,7 @@ suite('ShadowCreatorProvider — Webview Message Handlers', () => {
       description: 'Test description',
       baseBranch: 'main',
       templates: ['default'],
+      repoRoot: '/mock/repo',
     });
 
     const spawnCall = executedCommands.find(c => c.command === 'lumi-ops.spawn');
@@ -84,6 +85,7 @@ suite('ShadowCreatorProvider — Webview Message Handlers', () => {
       description: 'Test description',
       baseBranch: 'main',
       templates: ['default'],
+      repoRoot: '/mock/repo',
     });
   });
 

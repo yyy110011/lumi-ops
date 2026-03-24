@@ -9,81 +9,151 @@ description: Architecture map and patterns for the Lumi-Ops VS Code extension. R
 
 | File | Size | Responsibility |
 |------|------|----------------|
-| `extension.ts` | ~1091 lines | Activation, all command registrations, file watchers, polling |
-| `rootAgentMode.ts` | ~1KB | Root Agent Mode rule file injection/removal based on setting |
-| `ShadowTreeProvider.ts` | ~11KB | TreeDataProvider for "Active Clones" sidebar view |
-| `ShadowCreatorProvider.ts` | ~23KB | WebviewViewProvider for "Create Shadow Clone" form |
-| `PromptLibraryViewProvider.ts` | ~28KB | WebviewViewProvider for "Prompt Library" sidebar (HTML/CSS/JS inline) |
-| `PromptLibraryProvider.ts` | ~6KB | Prompt CRUD logic (list, save, delete, copy, scope resolution) |
-| `MissionTemplateProvider.ts` | ~8KB | Mission template CRUD, dual-scope, active template tracking |
-| `MissionTemplateEditorProvider.ts` | ~8KB | CustomTextEditorProvider for `.prompts/_missions/*.md` |
-| `missionTemplateUtils.ts` | ~2KB | Shared parse/serialize for mission template markdown format |
+| `extension.ts` | ~434 lines | Activation, provider instantiation, fs.watch watchers, polling, command module registration via `CommandDeps` |
+| `commands/types.ts` | ~18 lines | `CommandDeps` interface — shared dependency bag passed to all command modules |
+| `commands/spawn.ts` | ~4.6KB | `lumi-ops.spawn` + `lumi-ops.refresh` commands |
+| `commands/kill.ts` | ~1.9KB | `lumi-ops.kill` command (two-choice modal) |
+| `commands/merge.ts` | ~7.7KB | `lumi-ops.merge` command (QuickPick target, temp worktree, post-merge delete) |
+| `commands/rebase.ts` | ~2.9KB | `lumi-ops.rebase` + `lumi-ops.abortRebase` commands |
+| `commands/navigation.ts` | ~2.1KB | `lumi-ops.open`, `cycleReviewStatus`, `copyBranchName`, `returnToRoot` |
+| `commands/branches.ts` | ~2.1KB | `lumi-ops.getBranches` (local + remote, worktree filtering) |
+| `commands/settings.ts` | ~2.6KB | `lumi-ops.openSettings`, `pickCopyFolders` |
+| `commands/promptLibrary.ts` | ~10KB | All prompt library commands (CRUD, import, copy scope, inline create) |
+| `commands/missionTemplate.ts` | ~6.9KB | All mission template commands (switch, edit, fork, copy scope, delete) |
+| `rootAgentMode.ts` | ~2.5KB | Root Agent Mode rule file injection/removal based on setting |
+| `autoStatus.ts` | ~1.7KB | `deriveCloneId()` + `setStatusIfApplicable()` — auto status transitions |
+| `autoCloseWatcher.ts` | ~1.7KB | `setupAutoCloseWatcher()` — auto-close window when worktree is removed |
+| `workspaceRoots.ts` | ~3.6KB | `resolveWorkspaceRoots()` — multi-root dedup, `pickRoot()` QuickPick |
+| `ShadowTreeProvider.ts` | ~15KB | TreeDataProvider for "Active Clones" sidebar, multi-root grouping, `EnrichedClone` type, composite cache keys |
+| `ShadowCreatorProvider.ts` | ~24KB | WebviewViewProvider for "Create Shadow Clone" form |
+| `PromptLibraryViewProvider.ts` | ~29KB | WebviewViewProvider for "Prompt Library" sidebar (HTML/CSS/JS inline) |
+| `PromptLibraryProvider.ts` | ~6.6KB | Prompt CRUD logic (list, save, delete, copy, scope resolution) |
+| `MissionTemplateProvider.ts` | ~8.9KB | Mission template CRUD, dual-scope, active template tracking |
+| `MissionTemplateEditorProvider.ts` | ~8.5KB | CustomTextEditorProvider for `.prompts/_missions/*.md` |
+| `missionTemplateUtils.ts` | ~2.3KB | Shared parse/serialize for mission template markdown format |
 | `WorktreeManagerPanel.ts` | ~35KB | Full WebviewPanel for multi-repo worktree dashboard |
-| `StatusEventBus.ts` | ~700B | EventEmitter wrapper; fire('*') for broad refresh, fire(branch) for targeted |
+| `StatusEventBus.ts` | ~735B | EventEmitter wrapper; fire('*') for broad refresh, fire(branch) for targeted |
 | `migrations.ts` | ~3KB | One-time settings migrations across version upgrades |
 
 ## extension.ts Structure (Line Map)
 
-Use this to jump directly to the relevant section instead of reading the whole file.
+After the command extraction refactor, `extension.ts` is now a clean orchestrator:
 
 | Lines | Section |
 |-------|---------|
-| 1-15 | Imports |
-| 16-61 | Dev mode hack + Shadow clone MISSION.md auto-open |
-| 62-97 | Root path detection, worktree-to-root resolution, migrations |
-| 98-134 | Provider instantiation (ShadowTree, Creator, PromptLibrary, MissionTemplate, CustomEditor) |
-| 136-186 | fs.watch watchers (prompts, metadata) for cross-window sync |
-| 188-211 | Polling interval (5s) for live refresh + branch change detection |
-| 213-236 | WorktreeManagerPanel registration + repo auto-register |
-| 238-299 | Commands: `openSettings`, `pickCopyFolders` |
-| 301-399 | Command: `spawn` (branch fetch, base branch handling, progress) |
-| 401-438 | Command: `kill` (two-choice modal: Remove Clone Only / Kill Clone + Branch) |
-| 441-619 | Command: `merge` (QuickPick target, worktree detection, temp worktree, post-merge delete) |
-| 621-654 | Commands: `open`, `cycleReviewStatus`, `copyBranchName`, `returnToRoot` |
-| 658-700 | Command: `getBranches` (local + remote, worktree filtering) |
-| 702-939 | Prompt Library commands: `_getPrompts`, `_selectPrompt`, `_createPromptInline`, `openPromptFile`, `_importFolder`, `_addPrompt`, `_deletePrompt`, `saveAsPrompt`, `_copyPromptScope`, `_editPrompt`, `_getCloneBranches` |
-| 941-1087 | Mission Template commands: `_getMissionTemplates`, `_switchMission`, `_editMission`, `_forkMission`, `_copyMissionScope`, `_editMissionByName`, `_deleteMission` |
-| 1090-1091 | `deactivate()` |
+| 1-33 | Imports (providers, commands, utilities) |
+| 34-48 | Dev mode hack: auto-open monorepo root |
+| 50-104 | Shadow clone MISSION.md auto-open + status-aware prompt (revision detection) |
+| 109-121 | Multi-root workspace resolution via `resolveWorkspaceRoots()` |
+| 122-128 | Migrations + Root Agent Mode registration |
+| 130-159 | Auto-status transitions (todo→inProgress) + auto-close watcher for clone workspaces |
+| 161-197 | Provider instantiation (StatusEventBus, ShadowTree, Creator, PromptLibrary, MissionTemplate, CustomEditor) |
+| 199-340 | fs.watch watchers: prompts (global + project), metadata, git refs (needsRebase detection) |
+| 342-365 | Polling interval (5s) for live refresh + branch change detection |
+| 367-390 | WorktreeManagerPanel registration + repo auto-register |
+| 392-414 | `CommandDeps` construction + all command module registration |
+| 416-433 | Test API return + `deactivate()` |
 
 ## Command Registry (All Registered Commands)
 
 ### Public (user-facing, in package.json)
-| Command ID | Line | Description |
-|------------|------|-------------|
-| `lumi-ops.spawn` | 308 | Spawn shadow clone |
-| `lumi-ops.kill` | 402 | Kill shadow clone (two-choice) |
-| `lumi-ops.merge` | 442 | Squash merge with target picker |
-| `lumi-ops.refresh` | 302 | Refresh Active Clones view |
-| `lumi-ops.open` | 622 | Open clone in new window |
-| `lumi-ops.cycleReviewStatus` | 632 | Cycle review status badge |
-| `lumi-ops.copyBranchName` | 639 | Copy branch name to clipboard |
-| `lumi-ops.returnToRoot` | 648 | Navigate back to root workspace |
-| `lumi-ops.openWorktreeManager` | 215 | Open multi-repo dashboard panel |
-| `lumi-ops.openSettings` | 242 | Open workspace settings |
-| `lumi-ops.pickCopyFolders` | 249 | Browse untracked items for copyOnSpawn |
-| `lumi-ops.openPromptFile` | 780 | Open prompt file in editor |
-| `lumi-ops.saveAsPrompt` | 873 | Save content as prompt template |
+| Command ID | Module | Description |
+|------------|--------|-------------|
+| `lumi-ops.spawn` | `commands/spawn.ts` | Spawn shadow clone |
+| `lumi-ops.kill` | `commands/kill.ts` | Kill shadow clone (two-choice: Clone Only / Clone + Branch) |
+| `lumi-ops.merge` | `commands/merge.ts` | Squash merge with target picker |
+| `lumi-ops.rebase` | `commands/rebase.ts` | Rebase clone onto its base branch |
+| `lumi-ops.abortRebase` | `commands/rebase.ts` | Abort an in-progress rebase |
+| `lumi-ops.refresh` | `commands/spawn.ts` | Refresh Active Clones view |
+| `lumi-ops.open` | `commands/navigation.ts` | Open clone in new window |
+| `lumi-ops.cycleReviewStatus` | `commands/navigation.ts` | Cycle review status badge |
+| `lumi-ops.copyBranchName` | `commands/navigation.ts` | Copy branch name to clipboard |
+| `lumi-ops.returnToRoot` | `commands/navigation.ts` | Navigate back to root workspace |
+| `lumi-ops.openWorktreeManager` | `extension.ts` | Open multi-repo dashboard panel |
+| `lumi-ops.openSettings` | `commands/settings.ts` | Open workspace settings |
+| `lumi-ops.pickCopyFolders` | `commands/settings.ts` | Browse untracked items for copyOnSpawn |
+| `lumi-ops.openPromptFile` | `commands/promptLibrary.ts` | Open prompt file in editor |
+| `lumi-ops.saveAsPrompt` | `commands/promptLibrary.ts` | Save content as prompt template |
+| `lumi-ops.getBranches` | `commands/branches.ts` | Fetch branch list for spawn form |
 
 ### Internal (webview ↔ extension, prefixed with `_`)
-| Command ID | Line | Description |
-|------------|------|-------------|
-| `lumi-ops._getPrompts` | 726 | Fetch prompt list → webview |
-| `lumi-ops._selectPrompt` | 738 | Load prompt into spawn form |
-| `lumi-ops._createPromptInline` | 752 | Create empty prompt file |
-| `lumi-ops._importFolder` | 793 | Import .md files from folder |
-| `lumi-ops._addPrompt` | 820 | Add prompt via InputBox |
-| `lumi-ops._deletePrompt` | 848 | Delete prompt with confirmation |
-| `lumi-ops._copyPromptScope` | 890 | Copy prompt between scopes |
-| `lumi-ops._editPrompt` | 922 | Open prompt in text editor |
-| `lumi-ops._getCloneBranches` | 936 | Fetch clone branches for ✦ indicators |
-| `lumi-ops._getMissionTemplates` | 963 | Fetch mission template list |
-| `lumi-ops._switchMission` | 969 | Switch active mission template |
-| `lumi-ops._editMission` | 977 | Edit active mission in custom editor |
-| `lumi-ops._forkMission` | 996 | Fork default template to new name |
-| `lumi-ops._copyMissionScope` | 1024 | Copy mission between scopes |
-| `lumi-ops._editMissionByName` | 1056 | Edit specific mission by name+scope |
-| `lumi-ops._deleteMission` | 1069 | Delete mission template |
-| `lumi-ops.getBranches` | 659 | Fetch branch list for spawn form |
+| Command ID | Module | Description |
+|------------|--------|-------------|
+| `lumi-ops._getPrompts` | `commands/promptLibrary.ts` | Fetch prompt list → webview |
+| `lumi-ops._selectPrompt` | `commands/promptLibrary.ts` | Load prompt into spawn form |
+| `lumi-ops._createPromptInline` | `commands/promptLibrary.ts` | Create empty prompt file |
+| `lumi-ops._importFolder` | `commands/promptLibrary.ts` | Import .md files from folder |
+| `lumi-ops._addPrompt` | `commands/promptLibrary.ts` | Add prompt via InputBox |
+| `lumi-ops._deletePrompt` | `commands/promptLibrary.ts` | Delete prompt with confirmation |
+| `lumi-ops._copyPromptScope` | `commands/promptLibrary.ts` | Copy prompt between scopes |
+| `lumi-ops._editPrompt` | `commands/promptLibrary.ts` | Open prompt in text editor |
+| `lumi-ops._getCloneBranches` | `commands/promptLibrary.ts` | Fetch clone branches for ✦ indicators |
+| `lumi-ops._getMissionTemplates` | `commands/missionTemplate.ts` | Fetch mission template list |
+| `lumi-ops._switchMission` | `commands/missionTemplate.ts` | Switch active mission template |
+| `lumi-ops._editMission` | `commands/missionTemplate.ts` | Edit active mission in custom editor |
+| `lumi-ops._forkMission` | `commands/missionTemplate.ts` | Fork default template to new name |
+| `lumi-ops._copyMissionScope` | `commands/missionTemplate.ts` | Copy mission between scopes |
+| `lumi-ops._editMissionByName` | `commands/missionTemplate.ts` | Edit specific mission by name+scope |
+| `lumi-ops._deleteMission` | `commands/missionTemplate.ts` | Delete mission template |
+
+## Command Module Pattern
+
+All commands are organized into `commands/*.ts` modules. Each module exports a `register*Commands()` function:
+
+```typescript
+// commands/types.ts — shared dependency bag
+interface CommandDeps {
+  rootPath: string | undefined;
+  allRoots: string[];
+  shadowTreeProvider: ShadowTreeProvider;
+  creatorProvider: ShadowCreatorProvider;
+  promptLibraryProvider: PromptLibraryProvider;
+  promptLibraryViewProvider: PromptLibraryViewProvider;
+  missionTemplateProvider: MissionTemplateProvider;
+  statusBus: StatusEventBus;
+}
+
+// Each module follows this pattern:
+export function registerXxxCommands(
+  context: vscode.ExtensionContext,
+  deps: CommandDeps
+): vscode.Disposable[] {
+  return [
+    vscode.commands.registerCommand('lumi-ops.xxx', async () => { ... }),
+  ];
+}
+```
+
+## Utility Modules
+
+### autoStatus.ts
+- `deriveCloneId(wtPath)` — extracts clone ID from worktree path (e.g., `/repo.worktrees/feat/task` → `feat/task`)
+- `setStatusIfApplicable(mainRepoRoot, cloneId, newStatus, eligibleFrom)` — guarded status transition
+
+### autoCloseWatcher.ts
+- `setupAutoCloseWatcher(worktreePath, deps?)` — watches parent dir; auto-closes VS Code window when worktree is removed
+- Injectable `AutoCloseWatcherDeps` for testing
+
+### workspaceRoots.ts
+- `resolveWorkspaceRoots()` → `ResolvedRoot[]` — deduplicates multi-root workspace folders to repo roots
+- `pickRoot(roots)` — QuickPick for multi-root selection
+- `ResolvedRoot` interface: `{ rootPath, cloneWorkspacePath?, shadowBranchName?, isClone }`
+
+## ShadowTreeProvider Key Types
+
+```typescript
+// EnrichedClone extends CLI's ShadowClone with extension-specific fields
+interface EnrichedClone extends ShadowClone {
+  repoRoot: string;    // multi-root: which repo this clone belongs to
+  hasConflict?: boolean; // detected via GitUtils.hasConflicts()
+}
+
+// Composite cache key for multi-root isolation: "repoRoot::dirName"
+function cacheKey(repoRoot: string, dirName: string): string;
+
+// ShadowItem roles determine tree behavior
+type Role = 'currentBranch' | 'shadowClone' | 'repoHeader';
+```
 
 ## Webview Communication Pattern
 
@@ -111,6 +181,8 @@ Used in `package.json` `menus.view/item/context` for conditional menu items:
 | contextValue | Meaning |
 |-------------|---------|
 | `shadowClone` | A worktree clone item in Active Clones view |
+| `shadowClone-detached` | A clone in detached HEAD state (rebasing) |
+| `repoHeader` | Multi-root repo grouping header |
 
 ## Configuration Keys
 
@@ -127,10 +199,11 @@ Always follow the `/build-and-verify` workflow for verification.
 Do NOT improvise build commands from package.json — the monorepo has specific build order requirements.
 
 ### Adding a New Command
-1. Add to `contributes.commands` in `packages/extension/package.json`
-2. Add menu binding in `contributes.menus` if needed
-3. Register handler inside `activate()` in `extension.ts`
-4. For internal webview commands, prefix with `_` (e.g., `lumi-ops._doThing`)
+1. Create `commands/<name>.ts` with `registerXxxCommands(context, deps)` returning `Disposable[]`
+2. Import and spread into the registration block in `extension.ts` (line ~404-414)
+3. Add to `contributes.commands` in `packages/extension/package.json`
+4. Add menu binding in `contributes.menus` if needed
+5. For internal webview commands, prefix with `_` (e.g., `lumi-ops._doThing`)
 
 ### Provider ↔ CLI Boundary
 Extension Providers call CLI functions (`spawn`, `kill`, `merge`) from `@lumi-ops/cli`.
@@ -140,3 +213,9 @@ Git operations go through `GitUtils` (also from CLI). Never call git directly.
 - `statusBus.fire('*')` → all views refresh
 - `statusBus.fire(branchName)` → targeted refresh
 - Subscribe: `statusBus.onDidChange(handler)`
+
+### Multi-Root Support
+- `resolveWorkspaceRoots()` deduplicates workspace folders to repo roots
+- `ShadowTreeProvider` uses composite cache keys (`repoRoot::dirName`) for isolation
+- `EnrichedClone.repoRoot` tracks which repo each clone belongs to
+- Multi-root tree shows repo headers as expandable parents
