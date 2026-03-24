@@ -177,39 +177,6 @@ async fn main() -> Result<()> {
                         }
                     }
                     Action::None | Action::CycleFocus | Action::JumpToPanel(_) => {}
-                    Action::SendToTerminal(keys) => {
-                        // Fire-and-forget — don't block the event loop
-                        if let Some(ref session_name) = app.active_tmux_session {
-                            let sn = session_name.clone();
-                            tokio::spawn(async move {
-                                let is_special = keys == "BSpace"
-                                    || keys == "Up"
-                                    || keys == "Down"
-                                    || keys == "Left"
-                                    || keys == "Right"
-                                    || keys.starts_with("C-");
-                                let result = if keys == "\n" {
-                                    tokio::process::Command::new("tmux")
-                                        .args(["send-keys", "-t", &sn, "Enter"])
-                                        .output()
-                                        .await
-                                } else if is_special {
-                                    tokio::process::Command::new("tmux")
-                                        .args(["send-keys", "-t", &sn, &keys])
-                                        .output()
-                                        .await
-                                } else {
-                                    tokio::process::Command::new("tmux")
-                                        .args(["send-keys", "-t", &sn, "-l", &keys])
-                                        .output()
-                                        .await
-                                };
-                                if let Err(e) = result {
-                                    tracing::warn!("Failed to send keys to tmux: {}", e);
-                                }
-                            });
-                        }
-                    }
                     action => {
                         tracing::debug!(?action, "Unhandled action");
                     }

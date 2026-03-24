@@ -69,8 +69,6 @@ pub enum Action {
     StartSearch,
     // Help
     ShowHelp,
-    // Terminal passthrough — forward key to tmux session
-    SendToTerminal(String),
 }
 
 /// Central application state.
@@ -231,50 +229,6 @@ impl AppState {
             && matches!(key.code, KeyCode::Char('c') | KeyCode::Char('q'))
         {
             return Action::Quit;
-        }
-
-        // Terminal passthrough mode — when Terminal is focused,
-        // forward all keys to the tmux session except Tab/Esc/number keys
-        if self.focused == FocusedPanel::Terminal {
-            match key.code {
-                // Escape keys to exit terminal focus
-                KeyCode::Tab => {
-                    self.focused = self.focused.next();
-                    return Action::CycleFocus;
-                }
-                KeyCode::Esc => {
-                    self.focused = FocusedPanel::Projects;
-                    return Action::JumpToPanel(FocusedPanel::Projects);
-                }
-                // Number keys to jump panels
-                KeyCode::Char('1') => {
-                    self.focused = FocusedPanel::Projects;
-                    return Action::JumpToPanel(FocusedPanel::Projects);
-                }
-                KeyCode::Char('2') => {
-                    self.focused = FocusedPanel::FileViewer;
-                    return Action::JumpToPanel(FocusedPanel::FileViewer);
-                }
-                KeyCode::Char('3') => {
-                    self.focused = FocusedPanel::AgentList;
-                    return Action::JumpToPanel(FocusedPanel::AgentList);
-                }
-                // Everything else → forward to tmux
-                KeyCode::Enter => return Action::SendToTerminal("\n".to_string()),
-                KeyCode::Char(c) => {
-                    if key.modifiers.contains(KeyModifiers::CONTROL) {
-                        // Forward Ctrl+key as tmux C-key
-                        return Action::SendToTerminal(format!("C-{}", c));
-                    }
-                    return Action::SendToTerminal(c.to_string());
-                }
-                KeyCode::Backspace => return Action::SendToTerminal("BSpace".to_string()),
-                KeyCode::Up => return Action::SendToTerminal("Up".to_string()),
-                KeyCode::Down => return Action::SendToTerminal("Down".to_string()),
-                KeyCode::Left => return Action::SendToTerminal("Left".to_string()),
-                KeyCode::Right => return Action::SendToTerminal("Right".to_string()),
-                _ => return Action::None,
-            }
         }
 
         match key.code {

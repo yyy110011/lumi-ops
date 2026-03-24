@@ -62,7 +62,7 @@ pub fn spawn_terminal_poller(
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let session = TmuxSession::new(&session_name);
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
+        let mut interval = tokio::time::interval(std::time::Duration::from_millis(200));
 
         loop {
             interval.tick().await;

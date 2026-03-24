@@ -30,7 +30,7 @@ pub fn render_terminal(frame: &mut Frame, area: Rect, app: &AppState) {
         .border_style(border_style);
 
     if app.terminal_content.is_empty() {
-        let placeholder = Paragraph::new("  Attach to an agent with 'a'")
+        let placeholder = Paragraph::new("  Press 'a' to attach to agent session")
             .block(block)
             .style(Style::default().fg(Color::DarkGray));
         frame.render_widget(placeholder, area);
@@ -53,11 +53,7 @@ pub fn render_terminal(frame: &mut Frame, area: Rect, app: &AppState) {
     // Compute scroll offset — auto-scroll to bottom if enabled
     let content_height = text.lines.len() as u16;
     let visible_height = area.height.saturating_sub(2); // subtract borders
-    let scroll_offset = if app.terminal_auto_scroll {
-        content_height.saturating_sub(visible_height)
-    } else {
-        app.terminal_scroll.min(content_height.saturating_sub(visible_height))
-    };
+    let scroll_offset = content_height.saturating_sub(visible_height);
 
     let paragraph = Paragraph::new(text)
         .block(block)
