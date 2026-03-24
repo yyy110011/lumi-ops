@@ -1,0 +1,54 @@
+[package]
+name = "lumi-tui"
+version = "0.1.0"
+edition = "2021"
+description = "AI Agent command center — Lumi-Ops TUI dashboard"
+license = "GPL-3.0-or-later"
+
+[[bin]]
+name = "lumi-tui"
+path = "src/main.rs"
+
+[dependencies]
+# TUI
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+ansi-to-tui = "7"
+
+# Async
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Markdown rendering
+pulldown-cmark = "0.12"
+
+# Tree widget (projects panel)
+tui-tree-widget = "0.22"
+
+# Text input (agent communication)
+tui-textarea = "0.7"
+
+# Fuzzy search
+fuzzy-matcher = "0.3"
+
+# Dirs
+dirs = "5"
+
+# UUID (agent tracking)
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Regex (agent status detection)
+regex = "1"
