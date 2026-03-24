@@ -32,9 +32,9 @@ pub fn render(frame: &mut Frame, app: &mut AppState) {
     let columns = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(25),
-            Constraint::Percentage(50),
-            Constraint::Percentage(25),
+            Constraint::Percentage(20),
+            Constraint::Percentage(40),
+            Constraint::Percentage(40),
         ])
         .split(outer[0]);
 
