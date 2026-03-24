@@ -3,12 +3,13 @@ use std::time::Duration;
 
 use anyhow::Result;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
+    event::{self, DisableMouseCapture, EnableMouseCapture, Event},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 
 mod app;
 mod cli;
@@ -16,16 +17,7 @@ mod protocol;
 mod tmux;
 mod ui;
 
-use app::{Action, AppState, FocusedPanel};
-
-/// Background state update messages sent to the main loop.
-#[derive(Debug)]
-pub enum StateUpdate {
-    /// Fresh clone/metadata data from polling
-    MetadataRefreshed,
-    /// Agent terminal output captured
-    TerminalOutput { branch: String, content: String },
-}
+use app::{Action, AppState, StateUpdate};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -58,12 +50,30 @@ async fn main() -> Result<()> {
     // Create app state
     let mut app = AppState::new();
 
-    // Channel for background updates
-    let (_tx, mut rx) = mpsc::channel::<StateUpdate>(32);
+    // Load repos from global registry on startup
+    app.load_repos();
+    tracing::info!(count = app.repos.len(), "Loaded repos from registry");
 
-    // TODO: Spawn background pollers (Step 2 clones will implement these)
-    // tokio::spawn(poll_metadata(tx.clone()));
-    // tokio::spawn(poll_agent_status(tx.clone()));
+    // Load initial clones if we have a repo selected
+    if app.current_repo_root.is_some() {
+        app.load_clones();
+        tracing::info!(count = app.clones.len(), "Loaded initial clones");
+    }
+
+    // Channel for background updates
+    let (tx, mut rx) = mpsc::channel::<StateUpdate>(32);
+
+    // Start metadata poller if we have a repo
+    let mut metadata_poller: Option<JoinHandle<()>> = None;
+    let mut terminal_poller: Option<JoinHandle<()>> = None;
+
+    if let Some(repo_root) = &app.current_repo_root {
+        metadata_poller = Some(app::poller::spawn_metadata_poller(
+            tx.clone(),
+            repo_root.clone(),
+        ));
+        tracing::info!("Started metadata poller");
+    }
 
     // Main event loop
     let result = loop {
@@ -77,7 +87,31 @@ async fn main() -> Result<()> {
             if let Event::Key(key) = event::read()? {
                 match app.handle_key(key) {
                     Action::Quit => break Ok(()),
-                    Action::None => {}
+                    Action::Up | Action::Down => {
+                        // Navigation already handled within handle_key.
+                        // Restart pollers if repo changed while navigating Projects panel.
+                        if app.focused == app::FocusedPanel::Projects {
+                            // Abort old pollers
+                            if let Some(handle) = metadata_poller.take() {
+                                handle.abort();
+                            }
+                            if let Some(handle) = terminal_poller.take() {
+                                handle.abort();
+                            }
+
+                            // Start new metadata poller for the selected repo
+                            if let Some(repo_root) = app.current_repo_root.clone() {
+                                // Do an initial sync load of clones for the new repo
+                                app.load_clones();
+                                metadata_poller =
+                                    Some(app::poller::spawn_metadata_poller(
+                                        tx.clone(),
+                                        repo_root,
+                                    ));
+                            }
+                        }
+                    }
+                    Action::None | Action::CycleFocus | Action::JumpToPanel(_) => {}
                     action => {
                         // TODO: Handle other actions (spawn, kill, attach, etc.)
                         tracing::debug!(?action, "Unhandled action");
@@ -91,6 +125,14 @@ async fn main() -> Result<()> {
             app.apply_update(update);
         }
     };
+
+    // Abort pollers on shutdown
+    if let Some(handle) = metadata_poller.take() {
+        handle.abort();
+    }
+    if let Some(handle) = terminal_poller.take() {
+        handle.abort();
+    }
 
     // Cleanup terminal
     disable_raw_mode()?;
