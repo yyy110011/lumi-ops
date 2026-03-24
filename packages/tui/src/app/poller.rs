@@ -72,7 +72,7 @@ pub fn spawn_terminal_poller(
                 continue;
             }
 
-            match session.capture_pane().await {
+            match session.capture_pane(500).await {
                 Ok(content) => {
                     if tx
                         .send(StateUpdate::TerminalOutput {

@@ -57,7 +57,7 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &AppState) {
     let repo_name = app
         .repos
         .first()
-        .map(|r| r.name.as_str())
+        .map(|r| r.0.as_str())
         .unwrap_or("No repo");
 
     // Right: clone count

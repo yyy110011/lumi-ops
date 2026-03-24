@@ -109,7 +109,7 @@ pub fn render_agent_list(frame: &mut Frame, area: Rect, app: &AppState) {
         .with_selected(if app.clones.is_empty() {
             None
         } else {
-            Some(app.selected_clone_idx.min(app.clones.len() - 1))
+            Some(app.selected_clone.min(app.clones.len() - 1))
         });
 
     frame.render_stateful_widget(table, area, &mut table_state);

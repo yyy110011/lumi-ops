@@ -169,7 +169,7 @@ pub fn detect_status(output: &str) -> StatusDetection {
     let lines: Vec<&str> = clean.lines().collect();
 
     if lines.is_empty() {
-        return StatusDetection::new(AgentStatus::Stopped).with_reason("No output captured");
+        return StatusDetection::new(AgentStatus::Idle).with_reason("No output captured");
     }
 
     // Recent context for analysis
@@ -233,7 +233,7 @@ pub fn detect_status(output: &str) -> StatusDetection {
 
     // 6. Default
     if clean.trim().is_empty() {
-        StatusDetection::new(AgentStatus::Stopped).with_reason("Empty output")
+        StatusDetection::new(AgentStatus::Idle).with_reason("Empty output")
     } else {
         StatusDetection::new(AgentStatus::Idle).with_reason("No clear indicators")
     }
@@ -580,7 +580,7 @@ mod tests {
     fn test_detect_empty_stopped() {
         let output = "";
         let result = detect_status(output);
-        assert_eq!(result.status, AgentStatus::Stopped);
+        assert_eq!(result.status, AgentStatus::Idle);
     }
 
     #[test]

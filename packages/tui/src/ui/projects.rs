@@ -38,7 +38,7 @@ fn build_tree_items(app: &AppState) -> Vec<ListItem<'static>> {
         items.push(ListItem::new(Line::from(vec![
             Span::styled("📂 ", Style::default().fg(Color::Yellow)),
             Span::styled(
-                repo.name.clone(),
+                repo.0.clone(),
                 Style::default()
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),
@@ -49,7 +49,7 @@ fn build_tree_items(app: &AppState) -> Vec<ListItem<'static>> {
         let repo_clones: Vec<_> = app
             .clones
             .iter()
-            .filter(|c| c.path.contains(&repo.name))
+            .filter(|c| c.path.contains(&repo.0))
             .collect();
 
         for (i, clone) in repo_clones.iter().enumerate() {
