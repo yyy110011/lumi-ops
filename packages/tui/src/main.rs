@@ -19,6 +19,34 @@ mod ui;
 
 use app::{Action, AppState, StateUpdate};
 
+/// Detect which AI agent CLI is available on the system.
+/// Tries `gemini` first, then `claude`.
+async fn detect_agent_cli() -> Option<String> {
+    // Try gemini first
+    if tokio::process::Command::new("gemini")
+        .arg("--version")
+        .output()
+        .await
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
+        return Some("gemini".to_string());
+    }
+
+    // Try claude
+    if tokio::process::Command::new("claude")
+        .arg("--version")
+        .output()
+        .await
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
+        return Some("claude".to_string());
+    }
+
+    None
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Setup logging to file (avoid polluting TUI)
@@ -75,25 +103,47 @@ async fn main() -> Result<()> {
         tracing::info!("Started metadata poller");
     }
 
-    // Auto-detect tmux sessions and start terminal poller
-    if let Ok(sessions) = tmux::list_lumi_sessions().await {
-        if let Some(first_session) = sessions.first() {
-            tracing::info!(session = %first_session, "Auto-detected lumi tmux session");
-            app.active_tmux_session = Some(first_session.clone());
-            let session = tmux::TmuxSession::new(first_session.clone());
-            // Do an initial capture
-            if let Ok(content) = session.capture_pane(500).await {
-                app.terminal_content = content;
+    // Auto-spawn an agent (gemini or claude) in a tmux session
+    let session_name = "lumi-tui-agent".to_string();
+    let cwd = std::env::current_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| ".".to_string());
+
+    // Detect which agent CLI is available
+    let agent_cmd = detect_agent_cli().await;
+
+    if let Some(cmd) = &agent_cmd {
+        tracing::info!(agent = %cmd, cwd = %cwd, "Spawning agent in tmux session");
+        let session = tmux::TmuxSession::new(&session_name);
+
+        // Kill any leftover session from a previous run
+        let _ = session.kill().await;
+
+        // Create a new tmux session and run the agent
+        match session.create(&cwd, cmd).await {
+            Ok(()) => {
+                app.active_tmux_session = Some(session_name.clone());
+
+                // Wait a moment for the agent to start, then capture initial output
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                if let Ok(content) = session.capture_pane(500).await {
+                    app.terminal_content = content;
+                }
+
+                // Start polling
+                terminal_poller = Some(app::poller::spawn_terminal_poller(
+                    tx.clone(),
+                    session_name.clone(),
+                    "tui-agent".to_string(),
+                ));
+                tracing::info!("Agent tmux session started and poller running");
             }
-            // Start polling
-            let branch_name = first_session.strip_prefix("lumi-").unwrap_or(first_session).to_string();
-            terminal_poller = Some(app::poller::spawn_terminal_poller(
-                tx.clone(),
-                first_session.clone(),
-                branch_name,
-            ));
-            tracing::info!("Started terminal poller");
+            Err(e) => {
+                tracing::error!("Failed to spawn agent: {}", e);
+            }
         }
+    } else {
+        tracing::warn!("No agent CLI found (tried: gemini, claude). Terminal panel will be empty.");
     }
 
     // Main event loop
@@ -148,6 +198,13 @@ async fn main() -> Result<()> {
     }
     if let Some(handle) = terminal_poller.take() {
         handle.abort();
+    }
+
+    // Kill the agent tmux session we spawned
+    if let Some(ref session_name) = app.active_tmux_session {
+        tracing::info!(session = %session_name, "Killing agent tmux session");
+        let session = tmux::TmuxSession::new(session_name.clone());
+        let _ = session.kill().await;
     }
 
     // Cleanup terminal

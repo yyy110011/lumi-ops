@@ -34,49 +34,49 @@ fn build_tree_items(app: &AppState) -> Vec<ListItem<'static>> {
     let mut items = Vec::new();
 
     for (repo_idx, repo) in app.repos.iter().enumerate() {
-        // Repo header
+        let is_selected = repo_idx == app.selected_repo;
+
+        // Repo header — show ▶/▼ fold indicator
+        let fold_icon = if is_selected && !app.clones.is_empty() {
+            "▼ "
+        } else {
+            "▶ "
+        };
+
         items.push(ListItem::new(Line::from(vec![
+            Span::styled(fold_icon, Style::default().fg(Color::DarkGray)),
             Span::styled("📂 ", Style::default().fg(Color::Yellow)),
             Span::styled(
                 repo.0.clone(),
                 Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
+                    .fg(if is_selected { Color::Cyan } else { Color::White })
+                    .add_modifier(if is_selected { Modifier::BOLD } else { Modifier::empty() }),
             ),
         ])));
 
-        // Clones for this repo
-        let repo_clones: Vec<_> = app
-            .clones
-            .iter()
-            .filter(|c| c.path.contains(&repo.0))
-            .collect();
+        // Only show clones under the currently selected repo
+        if is_selected {
+            for (i, clone) in app.clones.iter().enumerate() {
+                let icon = status_icon(&clone.review_status);
+                let is_last = i == app.clones.len() - 1;
+                let connector = if is_last { "  └── " } else { "  ├── " };
 
-        for (i, clone) in repo_clones.iter().enumerate() {
-            let icon = status_icon(&clone.review_status);
-            let is_last = i == repo_clones.len() - 1;
-            let connector = if is_last { "└── " } else { "├── " };
+                let status_text = clone
+                    .review_status
+                    .as_ref()
+                    .map(|s| format!("{:?}", s))
+                    .unwrap_or_else(|| "unknown".to_string());
 
-            let status_text = clone
-                .review_status
-                .as_ref()
-                .map(|s| format!("{:?}", s))
-                .unwrap_or_else(|| "unknown".to_string());
-
-            items.push(ListItem::new(Line::from(vec![
-                Span::styled(connector, Style::default().fg(Color::DarkGray)),
-                Span::raw(format!("{} ", icon)),
-                Span::styled(clone.branch.clone(), Style::default().fg(Color::White)),
-                Span::styled(
-                    format!(" ({})", status_text),
-                    Style::default().fg(Color::DarkGray),
-                ),
-            ])));
-        }
-
-        // Blank line between repos (except last)
-        if repo_idx < app.repos.len() - 1 {
-            items.push(ListItem::new(Line::raw("")));
+                items.push(ListItem::new(Line::from(vec![
+                    Span::styled(connector, Style::default().fg(Color::DarkGray)),
+                    Span::raw(format!("{} ", icon)),
+                    Span::styled(clone.branch.clone(), Style::default().fg(Color::White)),
+                    Span::styled(
+                        format!(" ({})", status_text),
+                        Style::default().fg(Color::DarkGray),
+                    ),
+                ])));
+            }
         }
     }
 
