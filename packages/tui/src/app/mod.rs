@@ -3,6 +3,7 @@
 pub mod poller;
 pub mod pty;
 pub mod pty_pool;
+pub mod status_detector;
 
 use std::sync::{Arc, Mutex};
 
