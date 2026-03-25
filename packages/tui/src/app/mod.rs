@@ -2,6 +2,7 @@
 
 pub mod poller;
 pub mod pty;
+pub mod pty_pool;
 
 use std::sync::{Arc, Mutex};
 
