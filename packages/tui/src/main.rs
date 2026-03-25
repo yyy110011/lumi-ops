@@ -76,6 +76,8 @@ async fn main() -> Result<()> {
     }
 
 
+    // Track repo root for change detection
+    let mut prev_repo_root = app.current_repo_root.clone();
 
     // Main event loop
     let result = loop {
@@ -90,19 +92,22 @@ async fn main() -> Result<()> {
                 match app.handle_key(key) {
                     Action::Quit => break Ok(()),
                     Action::Up | Action::Down => {
-                        // Restart metadata poller if repo changed while navigating Projects panel.
+                        // Only reload clones + restart poller if the repo actually changed
                         if app.focused == FocusedPanel::Projects {
-                            if let Some(handle) = metadata_poller.take() {
-                                handle.abort();
-                            }
-
-                            if let Some(repo_root) = app.current_repo_root.clone() {
-                                app.load_clones();
-                                metadata_poller =
-                                    Some(app::poller::spawn_metadata_poller(
-                                        tx.clone(),
-                                        repo_root,
-                                    ));
+                            let new_root = app.current_repo_root.clone();
+                            if new_root != prev_repo_root {
+                                prev_repo_root = new_root;
+                                if let Some(handle) = metadata_poller.take() {
+                                    handle.abort();
+                                }
+                                if let Some(repo_root) = app.current_repo_root.clone() {
+                                    app.load_clones();
+                                    metadata_poller =
+                                        Some(app::poller::spawn_metadata_poller(
+                                            tx.clone(),
+                                            repo_root,
+                                        ));
+                                }
                             }
                         }
                     }
