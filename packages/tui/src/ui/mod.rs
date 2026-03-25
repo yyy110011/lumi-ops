@@ -3,6 +3,7 @@
 //! Each panel is a separate module with its own render function.
 
 pub mod agent_list;
+pub mod file_tabs;
 pub mod file_viewer;
 pub mod projects;
 pub mod terminal;
