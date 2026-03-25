@@ -1,5 +1,6 @@
 //! App state, actions, and keybinding dispatch.
 
+pub mod agent_status_file;
 pub mod config;
 pub mod poller;
 pub mod pty;

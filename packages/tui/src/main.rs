@@ -133,8 +133,15 @@ async fn main() -> Result<()> {
                     Action::KillAgent => {
                         let idx = app.pty_pool.selected_index();
                         if !app.pty_pool.is_empty() {
+                            // Capture worktree path before killing (agent is removed from pool)
+                            let worktree = app.pty_pool.agents().get(idx)
+                                .map(|a| a.worktree_path.clone());
                             if let Err(e) = app.pty_pool.kill(idx) {
                                 tracing::error!("Failed to kill agent: {}", e);
+                            }
+                            // Remove status file after successful kill
+                            if let Some(wt) = worktree {
+                                app::agent_status_file::remove_status(&wt);
                             }
                         }
                     }
@@ -176,6 +183,15 @@ async fn main() -> Result<()> {
             if let Some(agent_mut) = app.pty_pool.selected_agent_mut() {
                 agent_mut.status = new_status;
             }
+        }
+
+        // --- Write status files for all agents ---
+        for agent in app.pty_pool.agents() {
+            app::agent_status_file::write_status(
+                &agent.worktree_path,
+                agent.status,
+                agent.driver,
+            );
         }
     };
 
