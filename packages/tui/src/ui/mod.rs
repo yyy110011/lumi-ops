@@ -48,7 +48,7 @@ pub fn render(frame: &mut Frame, app: &mut AppState) {
     // Render each panel
     projects::render_projects(frame, columns[0], app);
     file_viewer::render_file_viewer(frame, center[0], app);
-    agent_list::render_agent_list(frame, center[1], app);
+    agent_list::render_clone_list(frame, center[1], app);
     terminal::render_terminal(frame, columns[2], app);
     render_status_bar(frame, outer[1], app);
 }
