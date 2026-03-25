@@ -19,6 +19,7 @@ pub struct PtyManager {
     writer: Box<dyn Write + Send>,
     parser: Arc<Mutex<vt100::Parser>>,
     /// Keep the master alive so the PTY doesn't close.
+    #[allow(unused)]
     master: Box<dyn MasterPty + Send>,
     /// Keep the child alive for proper lifecycle management.
     _child: Box<dyn Child + Send + Sync>,
@@ -146,6 +147,7 @@ impl PtyManager {
     }
 
     /// Send a string to the PTY.
+    #[allow(unused)]
     pub fn write_str(&mut self, s: &str) -> anyhow::Result<()> {
         self.write_bytes(s.as_bytes())
     }
@@ -159,6 +161,7 @@ impl PtyManager {
     ///
     /// Uses `portable-pty`'s `MasterPty::resize()` to update the kernel PTY
     /// size, then recreates the vt100 parser with the new dimensions.
+    #[allow(unused)]
     pub fn resize(&self, rows: u16, cols: u16) -> anyhow::Result<()> {
         // Resize the kernel PTY
         self.master.resize(PtySize {

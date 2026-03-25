@@ -31,6 +31,7 @@ impl Default for AgentStatus {
 
 impl AgentStatus {
     /// Emoji/symbol icon for display in the TUI.
+    #[allow(unused)]
     pub fn icon(&self) -> &'static str {
         match self {
             Self::Running => "🤖",
@@ -43,6 +44,7 @@ impl AgentStatus {
     }
 
     /// Ratatui color for the status.
+    #[allow(unused)]
     pub fn color(&self) -> Color {
         match self {
             Self::Running => Color::Green,
@@ -69,6 +71,7 @@ impl fmt::Display for AgentStatus {
 }
 
 /// Information about an AI agent associated with a shadow clone.
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct AgentInfo {
     /// Branch name this agent is working on (e.g., "feat/auth").
@@ -83,6 +86,7 @@ pub struct AgentInfo {
 
 impl AgentInfo {
     /// Create a new `AgentInfo` with `Unknown` status and no last activity.
+    #[allow(unused)]
     pub fn new(branch: String, tmux_session: String) -> Self {
         Self {
             branch,
@@ -179,6 +183,7 @@ impl ForegroundProcess {
     }
 
     /// Check if this represents any AI agent running.
+    #[allow(unused)]
     pub fn is_agent_running(&self) -> bool {
         matches!(
             self,

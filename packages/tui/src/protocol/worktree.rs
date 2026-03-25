@@ -40,6 +40,7 @@ impl ShadowClone {
     ///
     /// Extracts the parent directory above the clone dir (e.g., from
     /// `/repo.worktrees/feat/my-task` → `/repo.worktrees`).
+    #[allow(unused)]
     pub fn storage_dir(&self) -> PathBuf {
         let path = PathBuf::from(&self.path);
         // Walk up to find the `.worktrees` ancestor
@@ -61,6 +62,7 @@ impl ShadowClone {
     }
 
     /// Emoji icon for this clone's review status, or "⬜" if none set.
+    #[allow(unused)]
     pub fn status_icon(&self) -> &'static str {
         self.review_status
             .as_ref()
@@ -69,6 +71,7 @@ impl ShadowClone {
     }
 
     /// Ratatui color for this clone's review status, or `Gray` if none set.
+    #[allow(unused)]
     pub fn status_color(&self) -> Color {
         self.review_status
             .as_ref()

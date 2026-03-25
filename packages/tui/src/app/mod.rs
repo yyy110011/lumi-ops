@@ -18,10 +18,12 @@ pub enum StateUpdate {
     /// Fresh clone list from polling (via `lumi-ops list --json`)
     ClonesRefreshed(Vec<ShadowClone>),
     /// MISSION.md content loaded for a clone
+    #[allow(unused)]
     MissionLoaded(String),
 }
 
 /// A registered repository entry.
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct RepoEntry {
     pub name: String,
@@ -55,7 +57,7 @@ pub enum Action {
     None,
     Quit,
     CycleFocus,
-    JumpToPanel(FocusedPanel),
+    JumpToPanel(#[allow(unused)] FocusedPanel),
     // Navigation
     Up,
     Down,
@@ -89,6 +91,7 @@ pub enum Action {
 /// Central application state.
 pub struct AppState {
     pub focused: FocusedPanel,
+    #[allow(unused)]
     pub should_quit: bool,
 
     // --- Data fields (from registry + metadata) ---
@@ -205,6 +208,7 @@ impl AppState {
     }
 
     /// Get a reference to the currently selected repo as (name, root).
+    #[allow(unused)]
     pub fn selected_repo_ref(&self) -> Option<&(String, String)> {
         self.repos.get(self.selected_repo)
     }

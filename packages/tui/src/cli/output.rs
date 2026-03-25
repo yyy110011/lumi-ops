@@ -5,6 +5,7 @@
 use anyhow::{Context, Result};
 
 /// Result of a `lumi-ops spawn` command.
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct SpawnResult {
     /// The branch name that was created.
@@ -14,6 +15,7 @@ pub struct SpawnResult {
 }
 
 /// Result of a `lumi-ops merge` command.
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct MergeResult {
     /// Whether the merge completed successfully.
@@ -31,6 +33,7 @@ pub struct MergeResult {
 /// - The worktree path is typically the last meaningful line
 ///
 /// Falls back to returning the raw stdout if structured parsing fails.
+#[allow(unused)]
 pub fn parse_spawn_output(stdout: &str, branch: &str) -> Result<SpawnResult> {
     let clean = strip_ansi(stdout);
     let lines: Vec<&str> = clean.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
@@ -73,6 +76,7 @@ pub fn parse_spawn_output(stdout: &str, branch: &str) -> Result<SpawnResult> {
 /// Parse the output of `lumi-ops merge <source> <target>`.
 ///
 /// Detects conflicts by looking for conflict-related keywords.
+#[allow(unused)]
 pub fn parse_merge_output(stdout: &str) -> MergeResult {
     let clean = strip_ansi(stdout);
     let lines: Vec<&str> = clean.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();

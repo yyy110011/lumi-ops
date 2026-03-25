@@ -4,6 +4,7 @@
 //! The only exception is `set_status` which writes `.lumi-metadata.json` directly
 //! because the CLI doesn't yet expose a `status set` command.
 
+
 pub mod detect;
 pub mod output;
 
@@ -30,6 +31,7 @@ pub struct CliError {
     /// Process exit code, if available.
     pub exit_code: Option<i32>,
     /// Captured stdout (may contain partial output).
+    #[allow(unused)]
     pub stdout: String,
     /// Captured stderr (usually contains the error message).
     pub stderr: String,
@@ -192,6 +194,7 @@ async fn list_clones_text(repo_root: &str) -> Result<Vec<ShadowClone>> {
 /// Spawn a new clone via `lumi-ops spawn <branch>`.
 ///
 /// Returns the raw stdout on success.
+#[allow(unused)]
 pub async fn spawn_clone(repo_root: &str, branch: &str) -> Result<String> {
     debug!(repo_root, branch, "spawning clone");
 
@@ -216,6 +219,7 @@ pub async fn spawn_clone(repo_root: &str, branch: &str) -> Result<String> {
 // ---------------------------------------------------------------------------
 
 /// Kill a clone via `lumi-ops kill <branch>`.
+#[allow(unused)]
 pub async fn kill_clone(repo_root: &str, branch: &str) -> Result<()> {
     debug!(repo_root, branch, "killing clone");
 
@@ -241,6 +245,7 @@ pub async fn kill_clone(repo_root: &str, branch: &str) -> Result<()> {
 /// Merge a clone via `lumi-ops merge <source> <target>`.
 ///
 /// Returns the raw stdout on success.
+#[allow(unused)]
 pub async fn merge_clone(repo_root: &str, source: &str, target: &str) -> Result<String> {
     debug!(repo_root, source, target, "merging clone");
 
@@ -273,6 +278,7 @@ pub async fn merge_clone(repo_root: &str, source: &str, target: &str) -> Result<
 /// TypeScript library's `setCloneStatus()` behavior.
 ///
 /// TODO: Switch to CLI subprocess once `lumi-ops status set` is implemented.
+#[allow(unused)]
 pub async fn set_status(repo_root: &str, branch: &str, status: ReviewStatus) -> Result<()> {
     debug!(repo_root, branch, ?status, "setting clone status");
 

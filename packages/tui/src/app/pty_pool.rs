@@ -39,16 +39,20 @@ pub enum AgentStatus {
 
 /// A single agent running in an embedded PTY.
 pub struct AgentInstance {
+    #[allow(unused)]
     pub id: Uuid,
     pub clone_branch: String,
+    #[allow(unused)]
     pub worktree_path: String,
     pub driver: DriverName,
     pub pty_manager: PtyManager,
     pub parser: Arc<Mutex<vt100::Parser>>,
     pub status: AgentStatus,
+    #[allow(unused)]
     pub created_at: DateTime<Utc>,
     pub last_activity: DateTime<Utc>,
     /// Handle for the background reader thread that feeds PTY output into the parser.
+    #[allow(unused)]
     pub reader_handle: Option<JoinHandle<()>>,
 }
 
@@ -163,6 +167,7 @@ impl PtyPool {
     }
 
     /// Get a mutable slice of all agents.
+    #[allow(unused)]
     pub fn agents_mut(&mut self) -> &mut [AgentInstance] {
         &mut self.agents
     }
@@ -183,6 +188,7 @@ impl PtyPool {
     }
 
     /// Find an agent's index by its clone branch name.
+    #[allow(unused)]
     pub fn find_by_branch(&self, branch: &str) -> Option<usize> {
         self.agents.iter().position(|a| a.clone_branch == branch)
     }

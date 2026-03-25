@@ -52,7 +52,17 @@ pub fn render(frame: &mut Frame, app: &mut AppState) {
     let file_viewer_focused = app.focused == FocusedPanel::FileViewer;
     file_tabs::render_file_tabs(frame, center[0], &app.file_tabs, file_viewer_focused);
 
-    agent_list::render_clone_list(frame, center[1], app);
+    if !app.pty_pool.is_empty() {
+        agent_list::render_agent_list(
+            frame,
+            center[1],
+            app.pty_pool.agents(),
+            app.pty_pool.selected_index(),
+            app.focused == FocusedPanel::AgentList,
+        );
+    } else {
+        agent_list::render_clone_list(frame, center[1], app);
+    }
 
     terminal::render_terminal(frame, columns[2], app);
     render_status_bar(frame, outer[1], app);

@@ -2,10 +2,12 @@
 //!
 //! Called once on startup to verify that required external tools are installed.
 
+
 use tokio::process::Command;
 use tracing::{info, warn};
 
 /// Summary of available external tools.
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct ToolAvailability {
     /// Version string if `lumi-ops` is available (e.g. "0.5.4").
@@ -16,16 +18,19 @@ pub struct ToolAvailability {
 
 impl ToolAvailability {
     /// Returns `true` if the `lumi-ops` CLI is available.
+    #[allow(unused)]
     pub fn has_lumi_ops(&self) -> bool {
         self.lumi_ops_version.is_some()
     }
 
     /// Returns `true` if `tmux` is available.
+    #[allow(unused)]
     pub fn has_tmux(&self) -> bool {
         self.tmux_version.is_some()
     }
 
     /// Log warnings for any missing tools.
+    #[allow(unused)]
     pub fn log_warnings(&self) {
         if let Some(ref v) = self.lumi_ops_version {
             info!(version = %v, "lumi-ops CLI detected");
@@ -44,6 +49,7 @@ impl ToolAvailability {
 /// Detect `lumi-ops` binary and return its version string.
 ///
 /// Runs `lumi-ops --version` and parses the first line of stdout.
+#[allow(unused)]
 pub async fn detect_lumi_ops() -> Option<String> {
     let output = Command::new("lumi-ops")
         .arg("--version")
@@ -67,6 +73,7 @@ pub async fn detect_lumi_ops() -> Option<String> {
 /// Detect `tmux` binary and return its version string.
 ///
 /// Runs `tmux -V` and parses the first line of stdout (e.g. "tmux 3.4").
+#[allow(unused)]
 pub async fn detect_tmux() -> Option<String> {
     let output = Command::new("tmux")
         .arg("-V")
@@ -90,6 +97,7 @@ pub async fn detect_tmux() -> Option<String> {
 /// Detect all external tools in parallel.
 ///
 /// Call once during startup and store the result in `AppState`.
+#[allow(unused)]
 pub async fn detect_all() -> ToolAvailability {
     let (lumi_ops, tmux) = tokio::join!(detect_lumi_ops(), detect_tmux());
     ToolAvailability {

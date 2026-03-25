@@ -25,6 +25,7 @@ impl Default for ReviewStatus {
 
 impl ReviewStatus {
     /// Emoji icon for display in the TUI.
+    #[allow(unused)]
     pub fn icon(&self) -> &'static str {
         match self {
             Self::Todo => "📋",
@@ -37,6 +38,7 @@ impl ReviewStatus {
     }
 
     /// Ratatui color for the status.
+    #[allow(unused)]
     pub fn color(&self) -> Color {
         match self {
             Self::Todo => Color::Yellow,

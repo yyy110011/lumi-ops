@@ -5,14 +5,9 @@
 
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use ratatui::{
-    layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Paragraph, Wrap},
-    Frame,
 };
-
-use crate::app::{AppState, FocusedPanel};
 
 /// Convert a markdown string to styled ratatui `Text`.
 pub fn markdown_to_text(markdown: &str) -> Text<'static> {
@@ -181,36 +176,4 @@ fn heading_style(level: HeadingLevel) -> Style {
     }
 }
 
-/// Render the file viewer panel (center-top).
-pub fn render_file_viewer(frame: &mut Frame, area: Rect, app: &AppState) {
-    let focused = app.focused == FocusedPanel::FileViewer;
-    let border_style = if focused {
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(" 📄 MISSION.md ")
-        .border_style(border_style);
-
-    match &app.mission_content {
-        Some(content) => {
-            let text = markdown_to_text(content);
-            let paragraph = Paragraph::new(text)
-                .block(block)
-                .wrap(Wrap { trim: false })
-                .scroll((app.file_scroll, 0));
-            frame.render_widget(paragraph, area);
-        }
-        None => {
-            let placeholder = Paragraph::new("  Select a clone to view its mission")
-                .block(block)
-                .style(Style::default().fg(Color::DarkGray));
-            frame.render_widget(placeholder, area);
-        }
-    }
-}

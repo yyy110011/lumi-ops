@@ -7,6 +7,7 @@ use std::path::PathBuf;
 pub type RepoRegistry = HashMap<String, String>;
 
 /// A registered repository with its computed storage directory.
+#[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct RegisteredRepo {
     /// Display name from the registry (e.g., "lumi-ops").
@@ -19,6 +20,7 @@ impl RegisteredRepo {
     /// Compute the worktrees storage directory: `<repo_root>.worktrees/`
     ///
     /// This mirrors the CLI's `getClonesDir()` function in `constants.ts`.
+    #[allow(unused)]
     pub fn storage_dir(&self) -> PathBuf {
         let root_str = self.root_dir.to_string_lossy();
         PathBuf::from(format!("{}.worktrees", root_str))
@@ -28,6 +30,7 @@ impl RegisteredRepo {
 /// Read the global registry and return repos sorted by name.
 ///
 /// Returns an empty vec if the registry doesn't exist.
+#[allow(unused)]
 pub fn list_repos() -> Vec<RegisteredRepo> {
     let registry = read_registry();
     let mut repos: Vec<RegisteredRepo> = registry

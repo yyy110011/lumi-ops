@@ -22,6 +22,7 @@ pub fn read_mission_complete(worktree_path: &std::path::Path) -> Option<String> 
 }
 
 /// Read REVIEW_FEEDBACK.md for a clone.
+#[allow(unused)]
 pub fn read_review_feedback(worktree_path: &std::path::Path) -> Option<String> {
     read_mission_file(worktree_path, "REVIEW_FEEDBACK.md")
 }
@@ -30,6 +31,7 @@ pub fn read_review_feedback(worktree_path: &std::path::Path) -> Option<String> {
 ///
 /// Strips heading markers (`#`), collects the first `max_lines` non-empty lines,
 /// and returns them joined by newlines. Suitable for compact display in the TUI.
+#[allow(unused)]
 pub fn extract_preview(content: &str, max_lines: usize) -> String {
     content
         .lines()
