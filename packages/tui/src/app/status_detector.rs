@@ -7,24 +7,8 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-// TODO: Replace with re-exports from pty_pool once merged
-/// AI agent driver type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DriverName {
-    Gemini,
-    Claude,
-}
-
-// TODO: Replace with re-exports from pty_pool once merged
-/// Detected agent status based on terminal screen analysis.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AgentStatus {
-    Running,
-    AwaitingInput,
-    Completed,
-    Error,
-    Idle,
-}
+// Re-export from pty_pool — single source of truth for these types.
+pub use super::pty_pool::{AgentStatus, DriverName};
 
 // ---------------------------------------------------------------------------
 // Compile-once regex patterns (LazyLock)

@@ -24,10 +24,17 @@ pub fn render_terminal(frame: &mut Frame, area: Rect, app: &AppState) {
         Style::default().fg(Color::DarkGray)
     };
 
-    let title = if focused {
-        " 💬 Terminal (interactive) "
+    // Show the selected agent's branch name in the title if available
+    let title = if let Some(agent) = app.pty_pool.selected_agent() {
+        if focused {
+            format!(" 💬 Terminal [{}] (interactive) ", agent.clone_branch)
+        } else {
+            format!(" 💬 Terminal [{}] ", agent.clone_branch)
+        }
+    } else if focused {
+        " 💬 Terminal (interactive) ".to_string()
     } else {
-        " 💬 Terminal "
+        " 💬 Terminal ".to_string()
     };
 
     let block = Block::default()
@@ -35,7 +42,7 @@ pub fn render_terminal(frame: &mut Frame, area: Rect, app: &AppState) {
         .title(title)
         .border_style(border_style);
 
-    if let Some(ref parser) = app.pty_parser {
+    if let Some(parser) = app.pty_pool.selected_parser() {
         if let Ok(parser_guard) = parser.lock() {
             let pseudo_term = PseudoTerminal::new(parser_guard.screen())
                 .block(block);
@@ -48,7 +55,7 @@ pub fn render_terminal(frame: &mut Frame, area: Rect, app: &AppState) {
             frame.render_widget(error, area);
         }
     } else {
-        let placeholder = Paragraph::new("  No agent running — install gemini or claude CLI")
+        let placeholder = Paragraph::new("  No agent running — press 'a' to launch")
             .block(block)
             .style(Style::default().fg(Color::DarkGray));
         frame.render_widget(placeholder, area);

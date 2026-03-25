@@ -47,8 +47,13 @@ pub fn render(frame: &mut Frame, app: &mut AppState) {
 
     // Render each panel
     projects::render_projects(frame, columns[0], app);
-    file_viewer::render_file_viewer(frame, center[0], app);
+
+    // Use tabbed file viewer instead of the legacy single-file viewer
+    let file_viewer_focused = app.focused == FocusedPanel::FileViewer;
+    file_tabs::render_file_tabs(frame, center[0], &app.file_tabs, file_viewer_focused);
+
     agent_list::render_clone_list(frame, center[1], app);
+
     terminal::render_terminal(frame, columns[2], app);
     render_status_bar(frame, outer[1], app);
 }
@@ -61,8 +66,14 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &AppState) {
         .map(|r| r.0.as_str())
         .unwrap_or("No repo");
 
-    // Right: clone count
-    let clone_count = format!(" {} clones ", app.clones.len());
+    // Right: clone count + agent count
+    let agent_count = app.pty_pool.len();
+    let clone_count = app.clones.len();
+    let counts = if agent_count > 0 {
+        format!(" {} clones │ {} agents ", clone_count, agent_count)
+    } else {
+        format!(" {} clones ", clone_count)
+    };
 
     // Center: context-aware shortcuts based on focused panel
     let shortcuts = match app.focused {
@@ -73,13 +84,15 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &AppState) {
         ],
         FocusedPanel::FileViewer => vec![
             shortcut_span("j/k", "Scroll"),
+            shortcut_span("[/]", "Tab"),
         ],
         FocusedPanel::AgentList => vec![
             shortcut_span("j/k", "Navigate"),
+            shortcut_span("a", "Launch"),
+            shortcut_span("x", "Kill"),
             shortcut_span("r", "Review"),
             shortcut_span("d", "Diff"),
             shortcut_span("m", "Merge"),
-            shortcut_span("K", "Kill"),
         ],
         FocusedPanel::Terminal => vec![
             shortcut_span("Type", "Send to PTY"),
@@ -119,10 +132,9 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &AppState) {
         spans.extend(shortcut);
     }
 
-    // Fill remaining space, then clone count on the right
-    // We approximate by just appending the clone count
+    // Fill remaining space, then counts on the right
     spans.push(Span::styled(
-        format!("  {}", clone_count),
+        format!("  {}", counts),
         Style::default().fg(Color::DarkGray),
     ));
 

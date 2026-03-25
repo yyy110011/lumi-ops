@@ -1,5 +1,4 @@
 use std::io;
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -19,35 +18,7 @@ mod protocol;
 mod tmux;
 mod ui;
 
-use app::{Action, AppState, StateUpdate};
-
-/// Detect which AI agent CLI is available on the system.
-/// Tries `gemini` first, then `claude`.
-async fn detect_agent_cli() -> Option<String> {
-    // Try gemini first
-    if tokio::process::Command::new("gemini")
-        .arg("--version")
-        .output()
-        .await
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-    {
-        return Some("gemini".to_string());
-    }
-
-    // Try claude
-    if tokio::process::Command::new("claude")
-        .arg("--version")
-        .output()
-        .await
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-    {
-        return Some("claude".to_string());
-    }
-
-    None
-}
+use app::{Action, AppState, FocusedPanel, StateUpdate};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -77,7 +48,7 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Create app state
+    // Create app state (loads config via TuiConfig::load() in AppState::new())
     let mut app = AppState::new();
 
     // Load repos from global registry on startup
@@ -104,38 +75,7 @@ async fn main() -> Result<()> {
         tracing::info!("Started metadata poller");
     }
 
-    // --- Spawn agent on embedded PTY ---
-    let cwd = std::env::current_dir()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|_| ".".to_string());
 
-    // Detect which agent CLI is available
-    let agent_cmd = detect_agent_cli().await;
-    let mut _pty_reader_handle: Option<std::thread::JoinHandle<()>> = None;
-
-    if let Some(cmd) = &agent_cmd {
-        tracing::info!(agent = %cmd, cwd = %cwd, "Spawning agent on embedded PTY");
-
-        // Estimate terminal size for the right panel (~40% of terminal width)
-        let term_size = crossterm::terminal::size().unwrap_or((120, 40));
-        let pty_cols = (term_size.0 as f32 * 0.4) as u16;
-        let pty_rows = term_size.1.saturating_sub(4);
-
-        match app::pty::PtyManager::spawn(cmd, &[], &cwd, pty_rows, pty_cols, None) {
-            Ok((pty_mgr, reader_handle)) => {
-                let parser = Arc::clone(pty_mgr.parser());
-                app.pty_parser = Some(parser);
-                app.pty_manager = Some(pty_mgr);
-                _pty_reader_handle = Some(reader_handle);
-                tracing::info!("Agent PTY spawned successfully");
-            }
-            Err(e) => {
-                tracing::error!("Failed to spawn agent PTY: {}", e);
-            }
-        }
-    } else {
-        tracing::warn!("No agent CLI found (tried: gemini, claude). Terminal panel will be empty.");
-    }
 
     // Main event loop
     let result = loop {
@@ -151,7 +91,7 @@ async fn main() -> Result<()> {
                     Action::Quit => break Ok(()),
                     Action::Up | Action::Down => {
                         // Restart metadata poller if repo changed while navigating Projects panel.
-                        if app.focused == app::FocusedPanel::Projects {
+                        if app.focused == FocusedPanel::Projects {
                             if let Some(handle) = metadata_poller.take() {
                                 handle.abort();
                             }
@@ -166,6 +106,51 @@ async fn main() -> Result<()> {
                             }
                         }
                     }
+                    Action::LaunchAgent => {
+                        if let Some(clone) = app.selected_clone_ref() {
+                            let worktree = clone.path.clone();
+                            let branch = clone.branch.clone();
+                            let (cmd, args) = app.config.build_agent_command(&worktree);
+                            let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+                            let term_size = crossterm::terminal::size().unwrap_or((120, 40));
+                            let pty_cols = (term_size.0 as f32 * 0.4) as u16;
+                            let pty_rows = term_size.1.saturating_sub(4);
+                            let driver = if app.config.agent.default_driver == "claude" {
+                                app::pty_pool::DriverName::Claude
+                            } else {
+                                app::pty_pool::DriverName::Gemini
+                            };
+                            match app.pty_pool.spawn(&branch, &worktree, driver, &cmd, &args_refs, pty_rows, pty_cols) {
+                                Ok(_) => {
+                                    app.focused = FocusedPanel::Terminal;
+                                    app.file_tabs.refresh(&worktree);
+                                    tracing::info!(branch = %branch, "Agent launched");
+                                }
+                                Err(e) => tracing::error!("Failed to launch agent: {}", e),
+                            }
+                        }
+                    }
+                    Action::KillAgent => {
+                        let idx = app.pty_pool.selected_index();
+                        if !app.pty_pool.is_empty() {
+                            if let Err(e) = app.pty_pool.kill(idx) {
+                                tracing::error!("Failed to kill agent: {}", e);
+                            }
+                        }
+                    }
+                    Action::AttachAgent => {
+                        // Selection already handled by navigate_down/up in AgentList
+                        app.focused = FocusedPanel::Terminal;
+                    }
+                    Action::NextFileTab => {
+                        app.file_tabs.next_tab();
+                    }
+                    Action::PrevFileTab => {
+                        app.file_tabs.prev_tab();
+                    }
+                    Action::ToggleSettings => {
+                        tracing::debug!("Settings toggle requested (not yet implemented)");
+                    }
                     Action::None | Action::CycleFocus | Action::JumpToPanel(_) => {}
                     action => {
                         tracing::debug!(?action, "Unhandled action");
@@ -178,6 +163,20 @@ async fn main() -> Result<()> {
         while let Ok(update) = rx.try_recv() {
             app.apply_update(update);
         }
+
+        // --- Status detection tick ---
+        // Run on every tick for the selected agent.
+        if let Some(agent) = app.pty_pool.selected_agent() {
+            let text = agent.parser.lock()
+                .map(|p| p.screen().contents())
+                .unwrap_or_default();
+            let driver = agent.driver;
+            let new_status = app::status_detector::detect_status(&text, driver);
+            // Update status (need mutable access)
+            if let Some(agent_mut) = app.pty_pool.selected_agent_mut() {
+                agent_mut.status = new_status;
+            }
+        }
     };
 
     // Abort metadata poller on shutdown
@@ -185,10 +184,8 @@ async fn main() -> Result<()> {
         handle.abort();
     }
 
-    // PTY cleanup: drop the PtyManager to close the PTY fd,
-    // which will cause the reader thread to exit on EOF.
-    drop(app.pty_manager.take());
-    drop(app.pty_parser.take());
+    // PtyPool is dropped when `app` goes out of scope — handles cleanup automatically.
+    // No need for explicit PTY cleanup.
 
     // Cleanup terminal
     disable_raw_mode()?;
