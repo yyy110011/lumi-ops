@@ -121,7 +121,7 @@ async fn main() -> Result<()> {
         let pty_cols = (term_size.0 as f32 * 0.4) as u16;
         let pty_rows = term_size.1.saturating_sub(4);
 
-        match app::pty::PtyManager::spawn(cmd, &[], &cwd, pty_rows, pty_cols) {
+        match app::pty::PtyManager::spawn(cmd, &[], &cwd, pty_rows, pty_cols, None) {
             Ok((pty_mgr, reader_handle)) => {
                 let parser = Arc::clone(pty_mgr.parser());
                 app.pty_parser = Some(parser);

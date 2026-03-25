@@ -84,7 +84,9 @@ impl PtyPool {
         rows: u16,
         cols: u16,
     ) -> anyhow::Result<usize> {
-        let (pty_manager, reader_handle) = PtyManager::spawn(cmd, args, worktree, rows, cols)?;
+        let log_path = std::path::Path::new(worktree).join(".lumi").join("agent.log");
+        let (pty_manager, reader_handle) =
+            PtyManager::spawn(cmd, args, worktree, rows, cols, Some(&log_path))?;
         let parser = Arc::clone(pty_manager.parser());
         let now = Utc::now();
 
