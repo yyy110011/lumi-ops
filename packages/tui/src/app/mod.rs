@@ -428,8 +428,8 @@ impl AppState {
             KeyCode::Char('m') => Action::MergeClone,
             KeyCode::Char('r') => Action::SetReview,
             KeyCode::Char('d') => Action::ShowDiff,
-            // Multi-agent operations
-            KeyCode::Char('a') => Action::LaunchAgent,
+            // Launch agent — ONLY from Projects panel when a clone is selected
+            KeyCode::Char('a') if self.focused == FocusedPanel::Projects && !self.clones.is_empty() => Action::LaunchAgent,
             KeyCode::Char('x') => Action::KillAgent,
             KeyCode::Char('S') => Action::ToggleSettings,
             // File tab navigation (only when FileViewer is focused)
@@ -468,15 +468,12 @@ impl AppState {
                 }
             }
             FocusedPanel::AgentList => {
-                // Navigate agents in pty_pool if agents exist, else navigate clones
+                // Navigate running agents only
                 if !self.pty_pool.is_empty() {
                     let current = self.pty_pool.selected_index();
                     if current > 0 {
                         self.pty_pool.select(current - 1);
                     }
-                } else if self.selected_clone > 0 {
-                    self.selected_clone -= 1;
-                    self.load_selected_mission();
                 }
             }
             FocusedPanel::FileViewer => {
@@ -506,15 +503,12 @@ impl AppState {
                 }
             }
             FocusedPanel::AgentList => {
-                // Navigate agents in pty_pool if agents exist, else navigate clones
+                // Navigate running agents only
                 if !self.pty_pool.is_empty() {
                     let current = self.pty_pool.selected_index();
                     if current < self.pty_pool.len() - 1 {
                         self.pty_pool.select(current + 1);
                     }
-                } else if !self.clones.is_empty() && self.selected_clone < self.clones.len() - 1 {
-                    self.selected_clone += 1;
-                    self.load_selected_mission();
                 }
             }
             FocusedPanel::FileViewer => {
