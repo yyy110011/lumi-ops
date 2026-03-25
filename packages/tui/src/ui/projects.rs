@@ -16,16 +16,16 @@ use ratatui::{
 use crate::app::{AppState, FocusedPanel};
 use crate::protocol::metadata::ReviewStatus;
 
-/// Map `ReviewStatus` to a status icon.
-fn status_icon(status: &Option<ReviewStatus>) -> &'static str {
+/// Map `ReviewStatus` to a status icon and color.
+fn status_style(status: &Option<ReviewStatus>) -> (&'static str, Color) {
     match status {
-        Some(ReviewStatus::Todo) => "🟡",
-        Some(ReviewStatus::InProgress) => "🔵",
-        Some(ReviewStatus::NeedsReview) => "🟣",
-        Some(ReviewStatus::NeedsRevision) => "🟠",
-        Some(ReviewStatus::Done) => "✅",
-        Some(ReviewStatus::WontDo) => "⬛",
-        None => "❓",
+        Some(ReviewStatus::Todo) => ("📋", Color::Yellow),
+        Some(ReviewStatus::InProgress) => ("🔨", Color::Blue),
+        Some(ReviewStatus::NeedsReview) => ("👀", Color::Magenta),
+        Some(ReviewStatus::NeedsRevision) => ("🔄", Color::LightRed),
+        Some(ReviewStatus::Done) => ("✅", Color::Green),
+        Some(ReviewStatus::WontDo) => ("❌", Color::DarkGray),
+        None => ("❓", Color::DarkGray),
     }
 }
 
@@ -34,10 +34,10 @@ fn build_tree_items(app: &AppState) -> Vec<ListItem<'static>> {
     let mut items = Vec::new();
 
     for (repo_idx, repo) in app.repos.iter().enumerate() {
-        let is_selected = repo_idx == app.selected_repo;
+        let is_selected_repo = repo_idx == app.selected_repo;
 
         // Repo header — show ▶/▼ fold indicator
-        let fold_icon = if is_selected && !app.clones.is_empty() {
+        let fold_icon = if is_selected_repo && !app.clones.is_empty() {
             "▼ "
         } else {
             "▶ "
@@ -49,31 +49,39 @@ fn build_tree_items(app: &AppState) -> Vec<ListItem<'static>> {
             Span::styled(
                 repo.0.clone(),
                 Style::default()
-                    .fg(if is_selected { Color::Cyan } else { Color::White })
-                    .add_modifier(if is_selected { Modifier::BOLD } else { Modifier::empty() }),
+                    .fg(if is_selected_repo { Color::Cyan } else { Color::White })
+                    .add_modifier(if is_selected_repo { Modifier::BOLD } else { Modifier::empty() }),
             ),
         ])));
 
         // Only show clones under the currently selected repo
-        if is_selected {
+        if is_selected_repo {
             for (i, clone) in app.clones.iter().enumerate() {
-                let icon = status_icon(&clone.review_status);
+                let (icon, color) = status_style(&clone.review_status);
                 let is_last = i == app.clones.len() - 1;
                 let connector = if is_last { "  └── " } else { "  ├── " };
+                let is_selected_clone = i == app.selected_clone && app.tree_selected_idx > repo_idx;
 
                 let status_text = clone
                     .review_status
                     .as_ref()
-                    .map(|s| format!("{:?}", s))
+                    .map(|s| s.to_string())
                     .unwrap_or_else(|| "unknown".to_string());
+
+                let mut branch_style = Style::default();
+                if is_selected_clone {
+                    branch_style = branch_style.fg(Color::White).add_modifier(Modifier::BOLD);
+                } else {
+                    branch_style = branch_style.fg(Color::Gray);
+                }
 
                 items.push(ListItem::new(Line::from(vec![
                     Span::styled(connector, Style::default().fg(Color::DarkGray)),
-                    Span::raw(format!("{} ", icon)),
-                    Span::styled(clone.branch.clone(), Style::default().fg(Color::White)),
+                    Span::styled(format!("{} ", icon), Style::default().fg(color)),
+                    Span::styled(clone.branch.clone(), branch_style),
                     Span::styled(
                         format!(" ({})", status_text),
-                        Style::default().fg(Color::DarkGray),
+                        Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC),
                     ),
                 ])));
             }

@@ -7,14 +7,12 @@
 use ratatui::{
     layout::{Constraint, Rect},
     style::{Color, Modifier, Style},
-    text::Span,
+    text::{Line, Span},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState},
     Frame,
 };
 
 use crate::app::pty_pool::{AgentInstance, AgentStatus, DriverName};
-use crate::app::{AppState, FocusedPanel};
-use crate::protocol::metadata::ReviewStatus;
 
 // ---------------------------------------------------------------------------
 // Helper functions (public for testing)
@@ -23,11 +21,11 @@ use crate::protocol::metadata::ReviewStatus;
 /// Map `AgentStatus` to a display icon.
 pub fn status_icon(status: AgentStatus) -> &'static str {
     match status {
-        AgentStatus::Running => "●",
-        AgentStatus::AwaitingInput => "⚠",
-        AgentStatus::Completed => "✓",
-        AgentStatus::Error => "✗",
-        AgentStatus::Idle => "○",
+        AgentStatus::Running => "🚀",
+        AgentStatus::AwaitingInput => "💬",
+        AgentStatus::Completed => "✅",
+        AgentStatus::Error => "❌",
+        AgentStatus::Idle => "💤",
     }
 }
 
@@ -38,7 +36,7 @@ pub fn status_color(status: AgentStatus) -> Color {
         AgentStatus::AwaitingInput => Color::Yellow,
         AgentStatus::Completed => Color::Cyan,
         AgentStatus::Error => Color::Red,
-        AgentStatus::Idle => Color::Gray,
+        AgentStatus::Idle => Color::DarkGray,
     }
 }
 
@@ -59,7 +57,7 @@ pub fn running_count(agents: &[AgentInstance]) -> usize {
 fn status_label(status: AgentStatus) -> &'static str {
     match status {
         AgentStatus::Running => "Running",
-        AgentStatus::AwaitingInput => "Waiting",
+        AgentStatus::AwaitingInput => "Action Req",
         AgentStatus::Completed => "Done",
         AgentStatus::Error => "Error",
         AgentStatus::Idle => "Idle",
@@ -96,10 +94,20 @@ pub fn render_agent_list(
 
     // Empty state
     if agents.is_empty() {
-        let placeholder = Paragraph::new("  No agents running. Select a clone and press 'a' to launch.")
-            .block(block)
-            .style(Style::default().fg(Color::DarkGray));
-        frame.render_widget(placeholder, area);
+        let text = vec![
+            Line::default(),
+            Line::from(vec![
+                Span::styled("  No agents running. ", Style::default().fg(Color::DarkGray)),
+            ]),
+            Line::from(vec![
+                Span::styled("  Select a clone and press '", Style::default().fg(Color::DarkGray)),
+                Span::styled("a", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled("' to launch.", Style::default().fg(Color::DarkGray)),
+            ]),
+        ];
+        let paragraph = Paragraph::new(text)
+            .block(block);
+        frame.render_widget(paragraph, area);
         return;
     }
 
@@ -112,7 +120,7 @@ pub fn render_agent_list(
             let color = status_color(agent.status);
             let label = status_label(agent.status);
             let driver = driver_label(agent.driver);
-            let marker = if i == selected { "▶ " } else { "  " };
+            let marker = if i == selected { "▶" } else { " " };
 
             let mut icon_style = Style::default().fg(color);
             if agent.status == AgentStatus::AwaitingInput {
@@ -120,20 +128,19 @@ pub fn render_agent_list(
             }
 
             Row::new(vec![
-                Cell::from(Span::styled(
-                    format!("{marker}{icon}"),
-                    icon_style,
-                )),
+                Cell::from(Span::styled(marker, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+                Cell::from(Span::styled(icon, icon_style)),
                 Cell::from(agent.clone_branch.clone()),
-                Cell::from(driver.to_string()),
-                Cell::from(Span::styled(label, Style::default().fg(color))),
+                Cell::from(Span::styled(driver, Style::default().fg(Color::Gray))),
+                Cell::from(Span::styled(label, Style::default().fg(color).add_modifier(Modifier::BOLD))),
             ])
         })
         .collect();
 
     let widths = [
-        Constraint::Length(5),      // marker + icon
-        Constraint::Percentage(40), // Branch
+        Constraint::Length(1),      // marker
+        Constraint::Length(3),      // icon
+        Constraint::Percentage(45), // Branch
         Constraint::Percentage(20), // Driver
         Constraint::Percentage(25), // Status label
     ];
@@ -142,7 +149,7 @@ pub fn render_agent_list(
         .block(block)
         .row_highlight_style(
             Style::default()
-                .bg(Color::DarkGray)
+                .bg(Color::Rgb(40, 44, 52)) // Dark grey background for selection
                 .add_modifier(Modifier::BOLD),
         );
 
@@ -151,114 +158,6 @@ pub fn render_agent_list(
     } else {
         Some(selected.min(agents.len() - 1))
     });
-
-    frame.render_stateful_widget(table, area, &mut table_state);
-}
-
-// ---------------------------------------------------------------------------
-// Legacy clone-based rendering (kept for backwards compatibility)
-// ---------------------------------------------------------------------------
-
-/// Map `ReviewStatus` to a display string with icon.
-fn review_display(status: &Option<ReviewStatus>) -> (&'static str, Color) {
-    match status {
-        Some(ReviewStatus::Todo) => ("🟡 Todo", Color::Yellow),
-        Some(ReviewStatus::InProgress) => ("🔵 Working", Color::Blue),
-        Some(ReviewStatus::NeedsReview) => ("🟣 Review", Color::Magenta),
-        Some(ReviewStatus::NeedsRevision) => ("🟠 Revise", Color::LightYellow),
-        Some(ReviewStatus::Done) => ("✅ Done", Color::Green),
-        Some(ReviewStatus::WontDo) => ("⬛ Won't Do", Color::DarkGray),
-        None => ("❓ Unknown", Color::DarkGray),
-    }
-}
-
-/// Render the agent list panel using clone metadata (legacy).
-///
-/// Renamed from the original `render_agent_list` to coexist with the
-/// new agent-based rendering function.
-pub fn render_clone_list(frame: &mut Frame, area: Rect, app: &AppState) {
-    let focused = app.focused == FocusedPanel::AgentList;
-    let border_style = if focused {
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" 🤖 Agents ({}) ", app.clones.len()))
-        .border_style(border_style);
-
-    if app.clones.is_empty() {
-        let placeholder = Paragraph::new("  No active agents")
-            .block(block)
-            .style(Style::default().fg(Color::DarkGray));
-        frame.render_widget(placeholder, area);
-        return;
-    }
-
-    // Build table header
-    let header = Row::new(vec![
-        Cell::from("Status").style(Style::default().add_modifier(Modifier::BOLD)),
-        Cell::from("Branch").style(Style::default().add_modifier(Modifier::BOLD)),
-        Cell::from("Review").style(Style::default().add_modifier(Modifier::BOLD)),
-        Cell::from("Base").style(Style::default().add_modifier(Modifier::BOLD)),
-    ])
-    .style(
-        Style::default()
-            .fg(Color::White)
-            .bg(Color::DarkGray),
-    )
-    .height(1);
-
-    // Build table rows from clones
-    let rows: Vec<Row> = app
-        .clones
-        .iter()
-        .map(|clone| {
-            let (review_text, review_color) = review_display(&clone.review_status);
-            let base = clone
-                .base_branch
-                .as_deref()
-                .unwrap_or("—");
-
-            Row::new(vec![
-                Cell::from(if clone.is_shadow { "🤖" } else { "📁" }),
-                Cell::from(clone.branch.clone()),
-                Cell::from(Span::styled(
-                    review_text,
-                    Style::default().fg(review_color),
-                )),
-                Cell::from(base.to_string()),
-            ])
-        })
-        .collect();
-
-    let widths = [
-        Constraint::Length(4),      // Status icon
-        Constraint::Percentage(35), // Branch
-        Constraint::Percentage(30), // Review
-        Constraint::Percentage(25), // Base
-    ];
-
-    let table = Table::new(rows, widths)
-        .header(header)
-        .block(block)
-        .row_highlight_style(
-            Style::default()
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        )
-        .highlight_symbol("▶ ");
-
-    let mut table_state = TableState::default()
-        .with_selected(if app.clones.is_empty() {
-            None
-        } else {
-            Some(app.selected_clone.min(app.clones.len() - 1))
-        });
 
     frame.render_stateful_widget(table, area, &mut table_state);
 }
@@ -273,27 +172,27 @@ mod tests {
 
     #[test]
     fn test_status_icon_running() {
-        assert_eq!(status_icon(AgentStatus::Running), "●");
+        assert_eq!(status_icon(AgentStatus::Running), "🚀");
     }
 
     #[test]
     fn test_status_icon_awaiting_input() {
-        assert_eq!(status_icon(AgentStatus::AwaitingInput), "⚠");
+        assert_eq!(status_icon(AgentStatus::AwaitingInput), "💬");
     }
 
     #[test]
     fn test_status_icon_completed() {
-        assert_eq!(status_icon(AgentStatus::Completed), "✓");
+        assert_eq!(status_icon(AgentStatus::Completed), "✅");
     }
 
     #[test]
     fn test_status_icon_error() {
-        assert_eq!(status_icon(AgentStatus::Error), "✗");
+        assert_eq!(status_icon(AgentStatus::Error), "❌");
     }
 
     #[test]
     fn test_status_icon_idle() {
-        assert_eq!(status_icon(AgentStatus::Idle), "○");
+        assert_eq!(status_icon(AgentStatus::Idle), "💤");
     }
 
     #[test]
@@ -318,7 +217,7 @@ mod tests {
 
     #[test]
     fn test_status_color_idle() {
-        assert_eq!(status_color(AgentStatus::Idle), Color::Gray);
+        assert_eq!(status_color(AgentStatus::Idle), Color::DarkGray);
     }
 
     #[test]
@@ -340,7 +239,7 @@ mod tests {
     #[test]
     fn test_status_label_values() {
         assert_eq!(status_label(AgentStatus::Running), "Running");
-        assert_eq!(status_label(AgentStatus::AwaitingInput), "Waiting");
+        assert_eq!(status_label(AgentStatus::AwaitingInput), "Action Req");
         assert_eq!(status_label(AgentStatus::Completed), "Done");
         assert_eq!(status_label(AgentStatus::Error), "Error");
         assert_eq!(status_label(AgentStatus::Idle), "Idle");

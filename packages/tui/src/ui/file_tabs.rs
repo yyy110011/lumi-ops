@@ -180,13 +180,13 @@ pub fn render_file_tabs(frame: &mut Frame, area: Rect, state: &FileTabsState, fo
     let has_complete = state.content_cache[FileTab::Complete.index()].is_some();
 
     let tab_titles: Vec<Line<'_>> = vec![
-        Line::from(" MISSION "),
+        Line::from(" 📝 MISSION "),
         Line::from(if has_complete {
-            " 🟣 COMPLETE "
+            " ✅ COMPLETE "
         } else {
-            " COMPLETE "
+            " 🗒️  COMPLETE "
         }),
-        Line::from(" LOG "),
+        Line::from(" 📜 LOG "),
     ];
 
     let tabs = Tabs::new(tab_titles)
@@ -204,7 +204,7 @@ pub fn render_file_tabs(frame: &mut Frame, area: Rect, state: &FileTabsState, fo
                 .bg(Color::Cyan)
                 .add_modifier(Modifier::BOLD),
         )
-        .divider(Span::styled("│", Style::default().fg(Color::DarkGray)));
+        .divider(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
 
     frame.render_widget(tabs, chunks[0]);
 
@@ -219,8 +219,23 @@ pub fn render_file_tabs(frame: &mut Frame, area: Rect, state: &FileTabsState, fo
                 FileTab::Mission | FileTab::Complete => {
                     // Markdown rendering
                     let text = markdown_to_text(content);
+                    let line_count = text.lines.len();
+                    
+                    // Render scroll indicator in title if focused
+                    let scroll_pct = if line_count > 0 {
+                        (state.active_scroll() as f32 / line_count as f32 * 100.0) as u16
+                    } else {
+                        0
+                    };
+                    
+                    let title = if focused {
+                        format!(" Scroll: {}% ", scroll_pct.min(100))
+                    } else {
+                        String::new()
+                    };
+
                     let paragraph = Paragraph::new(text)
-                        .block(content_block)
+                        .block(content_block.title_bottom(Line::from(title).alignment(ratatui::layout::Alignment::Right)))
                         .wrap(Wrap { trim: false })
                         .scroll((state.active_scroll(), 0));
                     frame.render_widget(paragraph, chunks[1]);
@@ -254,14 +269,22 @@ pub fn render_file_tabs(frame: &mut Frame, area: Rect, state: &FileTabsState, fo
         }
         _ => {
             // No content — show placeholder
-            let placeholder = match state.active_tab {
-                FileTab::Mission => "  Select a clone to view its mission",
-                FileTab::Complete => "  No report yet",
-                FileTab::Log => "  No log file",
+            let (icon, placeholder) = match state.active_tab {
+                FileTab::Mission => ("📝", "Select a clone to view its mission"),
+                FileTab::Complete => ("✅", "No report yet"),
+                FileTab::Log => ("📜", "No log file found"),
             };
-            let paragraph = Paragraph::new(placeholder)
-                .block(content_block)
-                .style(Style::default().fg(Color::DarkGray));
+            
+            let text = vec![
+                Line::default(),
+                Line::from(vec![
+                    Span::styled(format!("  {} ", icon), Style::default().fg(Color::DarkGray)),
+                    Span::styled(placeholder, Style::default().fg(Color::DarkGray).add_modifier(Modifier::ITALIC)),
+                ]),
+            ];
+            
+            let paragraph = Paragraph::new(text)
+                .block(content_block);
             frame.render_widget(paragraph, chunks[1]);
         }
     }

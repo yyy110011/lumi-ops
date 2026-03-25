@@ -67,88 +67,97 @@ pub fn render(frame: &mut Frame, app: &mut AppState) {
 }
 
 fn render_status_bar(frame: &mut Frame, area: Rect, app: &AppState) {
-    // Left: current repo name
+    // Split status bar into 3 sections: Left (Info), Center (Shortcuts), Right (Stats)
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(25), // Info
+            Constraint::Percentage(50), // Shortcuts
+            Constraint::Percentage(25), // Stats
+        ])
+        .split(area);
+
+    // 1. Left Section: Repo & Panel
     let repo_name = app
         .repos
-        .first()
+        .get(app.selected_repo)
         .map(|r| r.0.as_str())
         .unwrap_or("No repo");
 
-    // Right: clone count + agent count
-    let agent_count = app.pty_pool.len();
-    let clone_count = app.clones.len();
-    let counts = if agent_count > 0 {
-        format!(" {} clones │ {} agents ", clone_count, agent_count)
-    } else {
-        format!(" {} clones ", clone_count)
+    let (panel_label, panel_color) = match app.focused {
+        FocusedPanel::Projects => (" PROJECTS ", Color::Yellow),
+        FocusedPanel::FileViewer => (" FILE VIEWER ", Color::Magenta),
+        FocusedPanel::AgentList => (" AGENTS ", Color::Cyan),
+        FocusedPanel::Terminal => (" TERMINAL ", Color::Green),
     };
 
-    // Center: context-aware shortcuts based on focused panel
-    let shortcuts = match app.focused {
+    let left_spans = vec![
+        Span::styled(
+            format!(" 📂 {} ", repo_name),
+            Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            panel_label,
+            Style::default().bg(panel_color).fg(Color::Black).add_modifier(Modifier::BOLD),
+        ),
+    ];
+    frame.render_widget(Paragraph::new(Line::from(left_spans)).style(Style::default().bg(Color::DarkGray)), chunks[0]);
+
+    // 2. Center Section: Context-aware shortcuts
+    let mut shortcuts = vec![
+        shortcut_key(" q"), Span::raw(" Quit "),
+        shortcut_key("Tab"), Span::raw(" Next "),
+    ];
+
+    let panel_shortcuts = match app.focused {
         FocusedPanel::Projects => vec![
-            shortcut_span("j/k", "Navigate"),
-            shortcut_span("Enter", "Select"),
-            shortcut_span("h/l", "Fold"),
+            shortcut_span("j/k", "Nav"),
+            shortcut_span("Enter", "MISSION"),
+            shortcut_span("a", "Launch"),
         ],
         FocusedPanel::FileViewer => vec![
             shortcut_span("j/k", "Scroll"),
             shortcut_span("←/→", "Tab"),
         ],
         FocusedPanel::AgentList => vec![
-            shortcut_span("j/k", "Navigate"),
-            shortcut_span("a", "Launch"),
+            shortcut_span("j/k", "Nav"),
+            shortcut_span("Enter", "Attach"),
             shortcut_span("x", "Kill"),
             shortcut_span("r", "Review"),
-            shortcut_span("d", "Diff"),
-            shortcut_span("m", "Merge"),
         ],
         FocusedPanel::Terminal => vec![
-            shortcut_span("Type", "Send to PTY"),
-            shortcut_span("Esc", "Leave"),
-            shortcut_span("C-c", "Interrupt"),
+            shortcut_span("Type", "Input"),
+            shortcut_span("Esc", "Back"),
+            shortcut_span("C-c", "Int"),
         ],
     };
 
-    let mut spans: Vec<Span<'_>> = Vec::new();
-
-    // Left section: repo name
-    spans.push(Span::styled(
-        format!(" {} ", repo_name),
-        Style::default()
-            .fg(Color::Cyan)
-            .add_modifier(Modifier::BOLD),
-    ));
-    spans.push(Span::styled("│", Style::default().fg(Color::DarkGray)));
-
-    // Global shortcuts
-    spans.extend(vec![
-        shortcut_key(" q"),
-        Span::raw(" Quit "),
-        shortcut_key("Tab"),
-        Span::raw(" Focus "),
-        shortcut_key("n"),
-        Span::raw(" Spawn "),
-        shortcut_key("?"),
-        Span::raw(" Help"),
-    ]);
-
-    // Separator
-    spans.push(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
-
-    // Panel-specific shortcuts
-    for shortcut in shortcuts {
-        spans.extend(shortcut);
+    for shortcut in panel_shortcuts {
+        shortcuts.push(Span::styled(" │ ", Style::default().fg(Color::Black)));
+        shortcuts.extend(shortcut);
     }
 
-    // Fill remaining space, then counts on the right
-    spans.push(Span::styled(
-        format!("  {}", counts),
-        Style::default().fg(Color::DarkGray),
-    ));
+    frame.render_widget(
+        Paragraph::new(Line::from(shortcuts))
+            .alignment(ratatui::layout::Alignment::Center)
+            .style(Style::default().bg(Color::DarkGray)),
+        chunks[1]
+    );
 
-    let status = Paragraph::new(Line::from(spans))
-        .style(Style::default().bg(Color::DarkGray).fg(Color::White));
-    frame.render_widget(status, area);
+    // 3. Right Section: Stats
+    let agent_count = app.pty_pool.len();
+    let clone_count = app.clones.len();
+    let right_spans = vec![
+        Span::styled(format!(" 🌳 {} Clones ", clone_count), Style::default().fg(Color::Gray)),
+        Span::styled(format!(" 🤖 {} Agents ", agent_count), Style::default().fg(Color::Green)),
+        Span::raw(" "),
+    ];
+    frame.render_widget(
+        Paragraph::new(Line::from(right_spans))
+            .alignment(ratatui::layout::Alignment::Right)
+            .style(Style::default().bg(Color::DarkGray)),
+        chunks[2]
+    );
 }
 
 /// Build a shortcut key span (highlighted).

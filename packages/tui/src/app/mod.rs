@@ -385,6 +385,10 @@ impl AppState {
 
         match key.code {
             KeyCode::Char('q') => Action::Quit,
+            KeyCode::Esc => {
+                self.focused = FocusedPanel::Projects;
+                Action::JumpToPanel(FocusedPanel::Projects)
+            }
             KeyCode::Tab => {
                 self.focused = self.focused.next();
                 Action::CycleFocus
@@ -418,11 +422,16 @@ impl AppState {
             KeyCode::Left if self.focused == FocusedPanel::FileViewer => Action::PrevFileTab,
             KeyCode::Right if self.focused == FocusedPanel::FileViewer => Action::NextFileTab,
             KeyCode::Enter => {
-                // In AgentList, Enter attaches to the selected agent
-                if self.focused == FocusedPanel::AgentList && !self.pty_pool.is_empty() {
-                    return Action::AttachAgent;
+                match self.focused {
+                    FocusedPanel::Projects => {
+                        self.focused = FocusedPanel::FileViewer;
+                        Action::JumpToPanel(FocusedPanel::FileViewer)
+                    }
+                    FocusedPanel::AgentList if !self.pty_pool.is_empty() => {
+                        Action::AttachAgent
+                    }
+                    _ => Action::Enter,
                 }
-                Action::Enter
             }
             // Clone operations
             KeyCode::Char('n') => Action::SpawnClone,
@@ -442,14 +451,6 @@ impl AppState {
             KeyCode::Char('?') => Action::ShowHelp,
             _ => Action::None,
         }
-    }
-
-    /// Total number of items in the projects tree (for bounds checking).
-    pub fn tree_item_count(&self) -> usize {
-        let mut count = self.repos.len(); // one item per repo header
-        // clones are shown under the selected repo only (current design)
-        count += self.clones.len();
-        count
     }
 
     /// Navigate up within the focused panel.

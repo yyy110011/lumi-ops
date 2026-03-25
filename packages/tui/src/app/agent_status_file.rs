@@ -87,6 +87,7 @@ pub fn write_status(worktree_path: &str, status: AgentStatus, driver: DriverName
 /// Read agent status from `{worktree}/.lumi/agent-status.json`.
 ///
 /// Returns `None` if the file doesn't exist or contains invalid JSON.
+#[cfg(test)]
 pub fn read_status(worktree_path: &str) -> Option<AgentStatusFile> {
     let file_path = Path::new(worktree_path)
         .join(".lumi")
