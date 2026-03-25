@@ -455,16 +455,41 @@ impl AppState {
     fn navigate_up(&mut self) {
         match self.focused {
             FocusedPanel::Projects => {
-                if self.tree_selected_idx > 0 {
-                    self.tree_selected_idx -= 1;
+                if self.repos.is_empty() || self.tree_selected_idx == 0 {
+                    return;
                 }
-                // Sync the repo selection: repos appear at their index position
-                if self.selected_repo > 0 {
-                    self.selected_repo -= 1;
-                    self.update_current_repo_root();
-                    self.clones.clear();
-                    self.selected_clone = 0;
-                    self.mission_content = None;
+
+                let s = self.selected_repo;
+                let c = self.clones.len();
+                let clone_start = s + 1;
+
+                if self.tree_selected_idx > clone_start && self.tree_selected_idx <= clone_start + c.saturating_sub(1) {
+                    // On a clone (not the first) → previous clone
+                    self.tree_selected_idx -= 1;
+                    self.selected_clone = self.tree_selected_idx - clone_start;
+                    self.load_selected_mission();
+                } else if self.tree_selected_idx == clone_start && c > 0 {
+                    // On the first clone → go back to repo header
+                    self.tree_selected_idx = s;
+                    // selected_clone stays at 0, file viewer keeps showing clone[0]
+                } else {
+                    // On a repo header → go to previous repo
+                    let current_repo_idx = if self.tree_selected_idx <= s {
+                        self.tree_selected_idx
+                    } else {
+                        self.tree_selected_idx - c
+                    };
+
+                    if current_repo_idx > 0 {
+                        let new_repo = current_repo_idx - 1;
+                        self.selected_repo = new_repo;
+                        self.update_current_repo_root();
+                        self.load_clones();
+                        // Land on repo header
+                        self.tree_selected_idx = self.selected_repo;
+                        self.selected_clone = 0;
+                        self.load_selected_mission();
+                    }
                 }
             }
             FocusedPanel::AgentList => {
@@ -490,16 +515,44 @@ impl AppState {
     fn navigate_down(&mut self) {
         match self.focused {
             FocusedPanel::Projects => {
-                let max = self.tree_item_count();
-                if max > 0 && self.tree_selected_idx < max - 1 {
-                    self.tree_selected_idx += 1;
+                if self.repos.is_empty() {
+                    return;
                 }
-                if !self.repos.is_empty() && self.selected_repo < self.repos.len() - 1 {
-                    self.selected_repo += 1;
-                    self.update_current_repo_root();
-                    self.clones.clear();
+
+                let s = self.selected_repo;
+                let c = self.clones.len();
+                let clone_start = s + 1;
+
+                if self.tree_selected_idx == s && c > 0 {
+                    // On selected repo header with clones → enter first clone
+                    self.tree_selected_idx = clone_start;
                     self.selected_clone = 0;
-                    self.mission_content = None;
+                    self.load_selected_mission();
+                } else if self.tree_selected_idx >= clone_start
+                    && self.tree_selected_idx < clone_start + c.saturating_sub(1)
+                {
+                    // On a clone, not the last → next clone
+                    self.tree_selected_idx += 1;
+                    self.selected_clone = self.tree_selected_idx - clone_start;
+                    self.load_selected_mission();
+                } else {
+                    // On a collapsed repo header, on the last clone, or on a repo with no clones
+                    // → move to next repo
+                    let current_repo_idx = if self.tree_selected_idx <= s {
+                        self.tree_selected_idx
+                    } else {
+                        self.tree_selected_idx - c
+                    };
+
+                    if current_repo_idx + 1 < self.repos.len() {
+                        let new_repo = current_repo_idx + 1;
+                        self.selected_repo = new_repo;
+                        self.tree_selected_idx = self.selected_repo;
+                        self.update_current_repo_root();
+                        self.load_clones();
+                        self.selected_clone = 0;
+                        self.load_selected_mission();
+                    }
                 }
             }
             FocusedPanel::AgentList => {
@@ -519,6 +572,7 @@ impl AppState {
             }
         }
     }
+
 
     /// Apply a background state update.
     pub fn apply_update(&mut self, update: StateUpdate) {
