@@ -156,9 +156,20 @@ impl TuiConfig {
 
     /// Build the shell command + args for launching an agent in a worktree.
     ///
+    /// Reads `.lumi/MISSION.md` from the worktree and embeds its content
+    /// directly in the prompt (bypasses gitignore restrictions).
+    ///
     /// Returns `(command, args_vec)` ready for `PtyManager::spawn()`.
-    pub fn build_agent_command(&self, _worktree_path: &str) -> (String, Vec<String>) {
-        let prompt = "Read .lumi/MISSION.md and execute the mission".to_string();
+    pub fn build_agent_command(&self, worktree_path: &str) -> (String, Vec<String>) {
+        let mission_path = std::path::Path::new(worktree_path)
+            .join(".lumi")
+            .join("MISSION.md");
+        let prompt = match std::fs::read_to_string(&mission_path) {
+            Ok(content) => format!(
+                "Execute the following mission. The mission file is at .lumi/MISSION.md in your working directory.\n\n{content}"
+            ),
+            Err(_) => "Read .lumi/MISSION.md and execute the mission".to_string(),
+        };
 
         match self.agent.default_driver.as_str() {
             "claude" => {
