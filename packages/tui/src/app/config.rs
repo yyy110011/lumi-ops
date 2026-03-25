@@ -158,7 +158,7 @@ impl TuiConfig {
     ///
     /// Returns `(command, args_vec)` ready for `PtyManager::spawn()`.
     pub fn build_agent_command(&self, _worktree_path: &str) -> (String, Vec<String>) {
-        let prompt = "Read MISSION.md and execute the mission".to_string();
+        let prompt = "Read .lumi/MISSION.md and execute the mission".to_string();
 
         match self.agent.default_driver.as_str() {
             "claude" => {
@@ -178,13 +178,15 @@ impl TuiConfig {
             }
             // Default to gemini for any unrecognised driver name.
             _ => {
-                let mut args = vec!["-p".to_string(), prompt];
+                let mut args = vec![];
+                // --yolo enables headless autonomous mode (no permission prompts)
+                if self.agent.no_permissions {
+                    args.push("--yolo".to_string());
+                }
                 let sandbox_flag = format!("--sandbox={}", self.agent.gemini.sandbox);
                 args.push(sandbox_flag);
-                if !self.agent.no_permissions {
-                    // Gemini doesn't have a skip-permissions flag;
-                    // no_permissions=true (default) means we don't add anything extra.
-                }
+                args.push("-p".to_string());
+                args.push(prompt);
                 ("gemini".to_string(), args)
             }
         }
@@ -272,6 +274,7 @@ default_driver = "claude"
         let cfg = TuiConfig::default();
         let (cmd, args) = cfg.build_agent_command("/tmp/worktree");
         assert_eq!(cmd, "gemini");
+        assert!(args.contains(&"--yolo".to_string()));
         assert!(args.contains(&"-p".to_string()));
         assert!(args.contains(&"--sandbox=none".to_string()));
     }
