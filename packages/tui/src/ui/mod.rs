@@ -92,7 +92,7 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &AppState) {
         ],
         FocusedPanel::FileViewer => vec![
             shortcut_span("j/k", "Scroll"),
-            shortcut_span("[/]", "Tab"),
+            shortcut_span("←/→", "Tab"),
         ],
         FocusedPanel::AgentList => vec![
             shortcut_span("j/k", "Navigate"),

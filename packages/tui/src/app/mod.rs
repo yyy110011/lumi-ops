@@ -414,6 +414,9 @@ impl AppState {
                 self.navigate_down();
                 Action::Down
             }
+            // File tab switching: Left/Right when FileViewer is focused
+            KeyCode::Left if self.focused == FocusedPanel::FileViewer => Action::PrevFileTab,
+            KeyCode::Right if self.focused == FocusedPanel::FileViewer => Action::NextFileTab,
             KeyCode::Enter => {
                 // In AgentList, Enter attaches to the selected agent
                 if self.focused == FocusedPanel::AgentList && !self.pty_pool.is_empty() {
@@ -432,9 +435,7 @@ impl AppState {
             KeyCode::Char('a') if self.focused == FocusedPanel::Projects && !self.clones.is_empty() => Action::LaunchAgent,
             KeyCode::Char('x') => Action::KillAgent,
             KeyCode::Char('S') => Action::ToggleSettings,
-            // File tab navigation (only when FileViewer is focused)
-            KeyCode::Char(']') if self.focused == FocusedPanel::FileViewer => Action::NextFileTab,
-            KeyCode::Char('[') if self.focused == FocusedPanel::FileViewer => Action::PrevFileTab,
+
             // Search
             KeyCode::Char('/') => Action::StartSearch,
             // Help
