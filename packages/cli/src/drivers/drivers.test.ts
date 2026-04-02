@@ -10,14 +10,14 @@ describe('claudeDriver', () => {
       mission: '.lumi/MISSION.md',
       noPermissions: false,
     });
-    expect(cmd).toBe('claude -p "Read .lumi/MISSION.md and execute the mission described in it."');
+    expect(cmd).toBe('claude -p "Read .lumi/MISSION.md and execute the mission described in it." --dangerously-skip-permissions');
   });
 
-  it('includes --dangerously-skip-permissions when noPermissions is true', () => {
+  it('always includes --dangerously-skip-permissions for headless execution', () => {
     const cmd = claudeDriver.buildCommand({
       worktreePath: '/tmp/wt',
       mission: '.lumi/MISSION.md',
-      noPermissions: true,
+      noPermissions: false,
     });
     expect(cmd).toContain('--dangerously-skip-permissions');
   });
@@ -61,16 +61,16 @@ describe('geminiDriver', () => {
       mission: '.lumi/MISSION.md',
       noPermissions: false,
     });
-    expect(cmd).toBe('gemini -p "Read .lumi/MISSION.md and execute the mission described in it."');
+    expect(cmd).toBe('gemini -p "Read .lumi/MISSION.md and execute the mission described in it." --yolo');
   });
 
-  it('includes --sandbox=none when noPermissions is true', () => {
+  it('always includes --yolo for headless execution', () => {
     const cmd = geminiDriver.buildCommand({
       worktreePath: '/tmp/wt',
       mission: '.lumi/MISSION.md',
-      noPermissions: true,
+      noPermissions: false,
     });
-    expect(cmd).toContain('--sandbox=none');
+    expect(cmd).toContain('--yolo');
   });
 
   it('includes --model override', () => {

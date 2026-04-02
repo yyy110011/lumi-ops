@@ -13,9 +13,9 @@ export const geminiDriver: DriverSpec = {
     const parts: string[] = ['gemini', '-p'];
     parts.push(`"Read ${opts.mission} and execute the mission described in it."`);
 
-    if (opts.noPermissions) {
-      parts.push('--sandbox=none');
-    }
+    // --yolo is required for headless mode — without it, write tools are silently denied
+    parts.push('--yolo');
+
     if (opts.model) {
       parts.push(`--model ${opts.model}`);
     }

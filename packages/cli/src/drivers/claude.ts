@@ -13,9 +13,9 @@ export const claudeDriver: DriverSpec = {
     const parts: string[] = ['claude', '-p'];
     parts.push(`"Read ${opts.mission} and execute the mission described in it."`);
 
-    if (opts.noPermissions) {
-      parts.push('--dangerously-skip-permissions');
-    }
+    // --dangerously-skip-permissions is required for headless mode — without it, permission prompts block execution
+    parts.push('--dangerously-skip-permissions');
+
     if (opts.maxTurns !== undefined) {
       parts.push(`--max-turns ${opts.maxTurns}`);
     }
