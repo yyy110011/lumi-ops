@@ -28,8 +28,10 @@ Call \`review_clone\` with branch "${branch}" to get:
 ## Step 2: Inspect Changes
 Use \`get_clone_file_diff\` for any files that need closer inspection.
 Focus on: correctness, code quality, test coverage, and adherence to the original mission.
+Verification means **proving the code works**, not confirming it exists — check that tests were actually run and passed.
 
 ## Step 3: Make a Decision
+
 **If approved:**
 1. \`set_clone_status\` → "done"
 2. \`merge_clone\` with source="${branch}" into target branch
@@ -37,8 +39,14 @@ Focus on: correctness, code quality, test coverage, and adherence to the origina
 4. If merge conflicts: follow the resolve-conflict workflow
 
 **If changes needed:**
-1. \`request_revision\` with specific, actionable feedback
-2. The clone agent will address the feedback on its next run`,
+1. \`request_revision\` with **specific, synthesized feedback**
+2. Reference what the clone actually did (file paths, line numbers), not your conversation with the user
+3. The clone agent will address the feedback on its next run
+
+## Writing Good Revision Feedback
+The clone cannot see your conversation. Write feedback that proves you understood the code:
+- ❌ "Fix the issues found in the review"
+- ✅ "The null check you added at src/auth/validate.ts:42 should return 401, not 403. Also update the test assertion at tests/auth.test.ts:58."`,
             },
           },
         ],
@@ -121,13 +129,29 @@ If new conflicts arise, repeat this process.`,
                 `- Fixes: fix/short-description`,
                 `- Refactors: refactor/short-description`,
                 ``,
-                `## Step 3: Spawn the Clone`,
+                `## Step 3: Write the Description`,
+                `The clone agent starts with ZERO context — it cannot see your conversation.`,
+                `Brief it like a smart colleague who just walked into the room:`,
+                ``,
+                `**Include:**`,
+                `- **Goal:** what to accomplish and why`,
+                `- **Context:** what you already know or have ruled out`,
+                `- **Location:** file paths, line numbers, function names (if known)`,
+                `- **Scope:** what's in and what's out`,
+                `- **Done condition:** what "finished" looks like`,
+                `- Whether you expect code changes or research only`,
+                ``,
+                `**Avoid:**`,
+                `- "Fix the bug we discussed" — the clone hasn't seen your discussion`,
+                `- "Based on the analysis, implement it" — synthesize the analysis into specifics`,
+                ``,
+                `## Step 4: Spawn the Clone`,
                 `Call \`spawn_clone\` with:`,
                 `- branch: your chosen branch name`,
-                `- description: a clear, actionable task description for the agent`,
+                `- description: the self-contained task description from Step 3`,
                 `- Optionally: prompt + promptScope if reusing an existing prompt`,
                 ``,
-                `## Step 4: Save as Reusable Prompt (Optional)`,
+                `## Step 5: Save as Reusable Prompt (Optional)`,
                 `If this task pattern is likely to recur, use \`save_prompt\` to save it for future use.`,
                 `Set \`generated: true\` if it's auto-generated and should be cleaned up with the clone.`,
               ].join('\n'),

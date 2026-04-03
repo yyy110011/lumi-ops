@@ -109,8 +109,20 @@ You are working inside a **Shadow Clone** worktree managed by the Lumi-Ops exten
 
 ## After Completing Work
 
-1. Create \`.lumi/MISSION_COMPLETE.md\` summarising what you did.
-2. Call the MCP tool **set_clone_status** with status \`needsReview\`.
+1. **Verify your changes work:**
+   - Run the project's test suite (check package.json scripts, Makefile, or common commands)
+   - If tests fail, investigate and fix — don't dismiss as "unrelated"
+   - Don't just confirm code exists — prove it produces correct output
+
+2. **Self-review your changes** — check your diff for:
+   - Duplicated logic that could use existing project utilities
+   - Unnecessary comments that explain *what* instead of *why*
+   - Operations that could run in parallel but are serialized
+   - Existence checks before operations (check-then-act) that should be try-catch instead
+
+3. Create \`.lumi/MISSION_COMPLETE.md\` summarising what you did (see MISSION.md for format).
+
+4. Call the MCP tool **set_clone_status** with status \`needsReview\`.
 
 ## Revision Cycle
 
@@ -118,8 +130,9 @@ If a file called \`.lumi/REVIEW_FEEDBACK.md\` exists, you are in a **revision cy
 
 1. Read \`.lumi/MISSION.md\` → \`.lumi/MISSION_COMPLETE.md\` → \`.lumi/REVIEW_FEEDBACK.md\` (in that order).
 2. Address every item listed in the feedback.
-3. Update \`.lumi/MISSION_COMPLETE.md\` with what you changed.
-4. Call **set_clone_status** with status \`needsReview\` again.
+3. Verify your fixes work (run tests again).
+4. Update \`.lumi/MISSION_COMPLETE.md\` with what you changed.
+5. Call **set_clone_status** with status \`needsReview\` again.
 `;
       await fs.writeFile(path.join(rulesDir, 'lumi-ops-clone-agent.md'), ruleContent);
       console.log(chalk.gray('✓ Wrote clone agent rules.'));
