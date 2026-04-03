@@ -383,7 +383,7 @@ describe('spawn', () => {
     );
     expect(ruleWriteCall).toBeDefined();
     expect(ruleWriteCall![1]).toContain('Clone Agent Rules');
-    expect(ruleWriteCall![1]).toContain('set_clone_status');
+    expect(ruleWriteCall![1]).toContain('Status transitions are handled automatically');
     expect(ruleWriteCall![1]).toContain('MISSION_COMPLETE.md');
   });
 

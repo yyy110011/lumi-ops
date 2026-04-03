@@ -14,6 +14,7 @@ import { StatusEventBus } from './StatusEventBus';
 import { runMigrations } from './migrations';
 import { deriveCloneId, setStatusIfApplicable } from './autoStatus';
 import { setupAutoCloseWatcher } from './autoCloseWatcher';
+import { setupMissionCompleteWatchers } from './missionCompleteWatcher';
 import { resolveWorkspaceRoots } from './workspaceRoots';
 
 import { GitUtils, getClonesDir, getRepoStorageDir, LUMI_OPS_HOME, METADATA_FILE, registerRepo } from '@lumi-ops/cli';
@@ -339,6 +340,10 @@ Add JWT-based authentication to the Express.js API.
       console.error(`[lumi-ops] \u274c Failed to watch refs for ${watchRoot}:`, e);
     }
   }
+
+  // -- Fallback: watch for MISSION_COMPLETE.md to auto-transition status --
+  const missionCompleteDisposables = setupMissionCompleteWatchers(allRoots, statusBus);
+  context.subscriptions.push(...missionCompleteDisposables);
 
   // -- Polling for live updates + branch change detection (fallback) --
   let lastKnownBranch: string | undefined;

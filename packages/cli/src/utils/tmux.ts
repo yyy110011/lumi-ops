@@ -6,6 +6,18 @@
 import { execSync, execFileSync } from 'child_process';
 
 /**
+ * Use tmux pipe-pane to tee session output to a log file.
+ * This captures all terminal output WITHOUT hiding it from the terminal.
+ * Must be called after createSession().
+ */
+export function pipePaneToLog(sessionName: string, logFile: string): void {
+  execSync(
+    `tmux pipe-pane -t ${escapeArg(sessionName)} ${escapeArg(`cat >> ${logFile}`)}`,
+    { stdio: 'ignore' }
+  );
+}
+
+/**
  * Convert a branch name to a tmux-safe session name.
  * tmux session names cannot contain dots or colons.
  * Format: `lumi-{sanitized}`
@@ -82,6 +94,6 @@ export function killSession(sessionName: string): void {
 }
 
 /** Shell-escape an argument for use in execSync. */
-function escapeArg(arg: string): string {
+export function escapeArg(arg: string): string {
   return `'${arg.replace(/'/g, "'\\''")}'`;
 }

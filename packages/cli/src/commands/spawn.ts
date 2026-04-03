@@ -110,7 +110,8 @@ You are working inside a **Shadow Clone** worktree managed by the Lumi-Ops exten
 ## After Completing Work
 
 1. Create \`.lumi/MISSION_COMPLETE.md\` summarising what you did.
-2. Call the MCP tool **set_clone_status** with status \`needsReview\`.
+2. Commit your code changes.
+3. Status transitions are handled automatically.
 
 ## Revision Cycle
 
@@ -119,7 +120,6 @@ If a file called \`.lumi/REVIEW_FEEDBACK.md\` exists, you are in a **revision cy
 1. Read \`.lumi/MISSION.md\` → \`.lumi/MISSION_COMPLETE.md\` → \`.lumi/REVIEW_FEEDBACK.md\` (in that order).
 2. Address every item listed in the feedback.
 3. Update \`.lumi/MISSION_COMPLETE.md\` with what you changed.
-4. Call **set_clone_status** with status \`needsReview\` again.
 `;
       await fs.writeFile(path.join(rulesDir, 'lumi-ops-clone-agent.md'), ruleContent);
       console.log(chalk.gray('✓ Wrote clone agent rules.'));
@@ -166,7 +166,7 @@ ${objectiveSection}
 - When finished:
   1. Write \`.lumi/MISSION_COMPLETE.md\` summarizing your changes.
   2. Commit only your code changes.
-  3. If MCP is available, call \`set_clone_status\` with status \`needsReview\`.
+  3. Status transitions are handled automatically.
 
 ## Rules
 ${rules}
