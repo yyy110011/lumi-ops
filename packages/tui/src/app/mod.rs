@@ -86,6 +86,8 @@ pub enum Action {
     PrevFileTab,
     /// 'S' — toggle settings popup
     ToggleSettings,
+    /// Esc while viewing clone in Terminal → detach back to home
+    DetachToHome,
 }
 
 /// Central application state.
@@ -125,6 +127,10 @@ pub struct AppState {
     // --- Tabbed file viewer ---
     /// State for the tabbed file viewer (Mission / Complete / Log).
     pub file_tabs: crate::ui::file_tabs::FileTabsState,
+
+    // --- Home agent selection ---
+    /// Whether the user needs to choose between gemini and claude for the home agent.
+    pub needs_agent_selection: bool,
 }
 
 impl AppState {
@@ -143,6 +149,7 @@ impl AppState {
             pty_pool: pty_pool::PtyPool::new(),
             config: config::TuiConfig::load(),
             file_tabs: crate::ui::file_tabs::FileTabsState::new(),
+            needs_agent_selection: false,
         }
     }
 
@@ -256,7 +263,7 @@ impl AppState {
     pub fn handle_key(&mut self, key: KeyEvent) -> Action {
         // --- Terminal-focused mode: forward most keys to PTY pool ---
         if self.focused == FocusedPanel::Terminal {
-            if !self.pty_pool.is_empty() {
+            if self.pty_pool.has_any_active() {
                 match key.code {
                     // Escape keys: Tab, Esc, and number keys switch panels (do NOT send to PTY)
                     KeyCode::Tab => {
@@ -264,6 +271,12 @@ impl AppState {
                         return Action::CycleFocus;
                     }
                     KeyCode::Esc => {
+                        // If viewing a clone agent, detach back to home first
+                        if self.pty_pool.is_viewing_clone() {
+                            self.pty_pool.detach_to_home();
+                            return Action::DetachToHome;
+                        }
+                        // Already on home — jump to Projects
                         self.focused = FocusedPanel::Projects;
                         return Action::JumpToPanel(FocusedPanel::Projects);
                     }
@@ -288,85 +301,85 @@ impl AppState {
                     KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                         return Action::Quit;
                     }
-                    // Ctrl+C → send \x03 to PTY (do NOT quit TUI)
+                    // Ctrl+C → send \x03 to active PTY (do NOT quit TUI)
                     KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        let _ = self.pty_pool.write_to_selected(&[0x03]);
+                        let _ = self.pty_pool.write_to_active(&[0x03]);
                         return Action::None;
                     }
                     // Ctrl+D → send \x04
                     KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        let _ = self.pty_pool.write_to_selected(&[0x04]);
+                        let _ = self.pty_pool.write_to_active(&[0x04]);
                         return Action::None;
                     }
                     // Ctrl+Z → send \x1a
                     KeyCode::Char('z') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        let _ = self.pty_pool.write_to_selected(&[0x1a]);
+                        let _ = self.pty_pool.write_to_active(&[0x1a]);
                         return Action::None;
                     }
                     // Ctrl+L → send \x0c (clear)
                     KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        let _ = self.pty_pool.write_to_selected(&[0x0c]);
+                        let _ = self.pty_pool.write_to_active(&[0x0c]);
                         return Action::None;
                     }
                     // Other Ctrl+<char> → send as control character
                     KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::CONTROL) => {
                         let ctrl_byte = (c as u8).wrapping_sub(b'a').wrapping_add(1);
-                        let _ = self.pty_pool.write_to_selected(&[ctrl_byte]);
+                        let _ = self.pty_pool.write_to_active(&[ctrl_byte]);
                         return Action::None;
                     }
                     // Regular characters
                     KeyCode::Char(c) => {
-                        let _ = self.pty_pool.write_to_selected(c.to_string().as_bytes());
+                        let _ = self.pty_pool.write_to_active(c.to_string().as_bytes());
                         return Action::None;
                     }
                     // Enter → \r
                     KeyCode::Enter => {
-                        let _ = self.pty_pool.write_to_selected(b"\r");
+                        let _ = self.pty_pool.write_to_active(b"\r");
                         return Action::None;
                     }
                     // Backspace → DEL (0x7f)
                     KeyCode::Backspace => {
-                        let _ = self.pty_pool.write_to_selected(&[0x7f]);
+                        let _ = self.pty_pool.write_to_active(&[0x7f]);
                         return Action::None;
                     }
                     // Arrow keys → ANSI escape sequences
                     KeyCode::Up => {
-                        let _ = self.pty_pool.write_to_selected(b"\x1b[A");
+                        let _ = self.pty_pool.write_to_active(b"\x1b[A");
                         return Action::None;
                     }
                     KeyCode::Down => {
-                        let _ = self.pty_pool.write_to_selected(b"\x1b[B");
+                        let _ = self.pty_pool.write_to_active(b"\x1b[B");
                         return Action::None;
                     }
                     KeyCode::Right => {
-                        let _ = self.pty_pool.write_to_selected(b"\x1b[C");
+                        let _ = self.pty_pool.write_to_active(b"\x1b[C");
                         return Action::None;
                     }
                     KeyCode::Left => {
-                        let _ = self.pty_pool.write_to_selected(b"\x1b[D");
+                        let _ = self.pty_pool.write_to_active(b"\x1b[D");
                         return Action::None;
                     }
                     // Home/End
                     KeyCode::Home => {
-                        let _ = self.pty_pool.write_to_selected(b"\x1b[H");
+                        let _ = self.pty_pool.write_to_active(b"\x1b[H");
                         return Action::None;
                     }
                     KeyCode::End => {
-                        let _ = self.pty_pool.write_to_selected(b"\x1b[F");
+                        let _ = self.pty_pool.write_to_active(b"\x1b[F");
                         return Action::None;
                     }
                     // Delete
                     KeyCode::Delete => {
-                        let _ = self.pty_pool.write_to_selected(b"\x1b[3~");
+                        let _ = self.pty_pool.write_to_active(b"\x1b[3~");
                         return Action::None;
                     }
                     // Page Up/Down
                     KeyCode::PageUp => {
-                        let _ = self.pty_pool.write_to_selected(b"\x1b[5~");
+                        let _ = self.pty_pool.write_to_active(b"\x1b[5~");
                         return Action::None;
                     }
                     KeyCode::PageDown => {
-                        let _ = self.pty_pool.write_to_selected(b"\x1b[6~");
+                        let _ = self.pty_pool.write_to_active(b"\x1b[6~");
                         return Action::None;
                     }
                     _ => {}
@@ -428,6 +441,8 @@ impl AppState {
                         Action::JumpToPanel(FocusedPanel::FileViewer)
                     }
                     FocusedPanel::AgentList if !self.pty_pool.is_empty() => {
+                        // Attach to the selected clone agent and switch Terminal view
+                        self.pty_pool.attach_clone(self.pty_pool.selected_index());
                         Action::AttachAgent
                     }
                     _ => Action::Enter,

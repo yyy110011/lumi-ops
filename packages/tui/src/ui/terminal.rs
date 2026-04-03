@@ -2,6 +2,8 @@
 //!
 //! Uses `tui-term::widget::PseudoTerminal` to render the vt100 parser's
 //! screen state directly. No ANSI parsing needed — vt100 handles everything.
+//!
+//! Renders the *active* PTY: home session by default, clone agent when attached.
 
 use ratatui::{
     layout::Rect,
@@ -24,12 +26,26 @@ pub fn render_terminal(frame: &mut Frame, area: Rect, app: &AppState) {
         Style::default().fg(Color::DarkGray)
     };
 
-    // Show the selected agent's branch name in the title if available
-    let title = if let Some(agent) = app.pty_pool.selected_agent() {
-        if focused {
-            format!(" 💬 Terminal [{}] (interactive) ", agent.clone_branch)
+    // Build title based on what's displayed
+    let title = if app.pty_pool.is_viewing_clone() {
+        // Viewing a clone agent
+        if let Some(agent) = app.pty_pool.selected_agent() {
+            if focused {
+                format!(" 💬 Terminal [{}] (interactive) ", agent.clone_branch)
+            } else {
+                format!(" 💬 Terminal [{}] ", agent.clone_branch)
+            }
+        } else if focused {
+            " 💬 Terminal (interactive) ".to_string()
         } else {
-            format!(" 💬 Terminal [{}] ", agent.clone_branch)
+            " 💬 Terminal ".to_string()
+        }
+    } else if app.pty_pool.has_home() {
+        // Viewing home session
+        if focused {
+            " 🏠 Terminal (home) (interactive) ".to_string()
+        } else {
+            " 🏠 Terminal (home) ".to_string()
         }
     } else if focused {
         " 💬 Terminal (interactive) ".to_string()
@@ -42,7 +58,8 @@ pub fn render_terminal(frame: &mut Frame, area: Rect, app: &AppState) {
         .title(title)
         .border_style(border_style);
 
-    if let Some(parser) = app.pty_pool.selected_parser() {
+    // Use active_parser() — returns home or clone parser depending on viewing state
+    if let Some(parser) = app.pty_pool.active_parser() {
         if let Ok(parser_guard) = parser.lock() {
             let pseudo_term = PseudoTerminal::new(parser_guard.screen())
                 .block(block);
@@ -54,8 +71,32 @@ pub fn render_terminal(frame: &mut Frame, area: Rect, app: &AppState) {
                 .style(Style::default().fg(Color::Red));
             frame.render_widget(error, area);
         }
+    } else if app.needs_agent_selection {
+        // Both agents available — show selection prompt
+        use ratatui::text::{Line, Span};
+        let text = vec![
+            Line::default(),
+            Line::from(Span::styled(
+                "  Select your home CLI agent:",
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            )),
+            Line::default(),
+            Line::from(vec![
+                Span::styled("    1 ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled("→ gemini", Style::default().fg(Color::Cyan)),
+            ]),
+            Line::from(vec![
+                Span::styled("    2 ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::styled("→ claude", Style::default().fg(Color::Magenta)),
+            ]),
+        ];
+        let selection = Paragraph::new(text)
+            .block(block)
+            .style(Style::default());
+        frame.render_widget(selection, area);
     } else {
-        let placeholder = Paragraph::new("  No agent running — press 'a' to launch")
+        // No home agent and no clone agents — show placeholder
+        let placeholder = Paragraph::new("  No CLI agent found — install 'gemini' or 'claude'")
             .block(block)
             .style(Style::default().fg(Color::DarkGray));
         frame.render_widget(placeholder, area);

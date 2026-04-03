@@ -19,6 +19,74 @@ mod tmux;
 mod ui;
 
 use app::{Action, AppState, FocusedPanel, StateUpdate};
+use app::pty_pool::DriverName;
+
+// ---------------------------------------------------------------------------
+// CLI agent detection
+// ---------------------------------------------------------------------------
+
+/// Result of detecting available CLI agents on the system.
+#[derive(Debug)]
+enum AvailableAgent {
+    /// Only one agent found — auto-spawn it.
+    Single(DriverName),
+    /// Both gemini and claude are available — need user selection.
+    Both,
+    /// Neither is available.
+    Neither,
+}
+
+/// Check which CLI agents are available using `which`.
+fn detect_agents() -> AvailableAgent {
+    let has_gemini = std::process::Command::new("which")
+        .arg("gemini")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    let has_claude = std::process::Command::new("which")
+        .arg("claude")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    match (has_gemini, has_claude) {
+        (true, true) => AvailableAgent::Both,
+        (true, false) => AvailableAgent::Single(DriverName::Gemini),
+        (false, true) => AvailableAgent::Single(DriverName::Claude),
+        (false, false) => AvailableAgent::Neither,
+    }
+}
+
+/// Spawn the home PTY with the given driver.
+fn spawn_home_agent(app: &mut AppState, driver: DriverName) {
+    let cwd = std::env::current_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .to_string_lossy()
+        .to_string();
+
+    let cmd = match driver {
+        DriverName::Gemini => "gemini",
+        DriverName::Claude => "claude",
+    };
+
+    let term_size = crossterm::terminal::size().unwrap_or((120, 40));
+    let pty_cols = (term_size.0 as f32 * 0.4) as u16;
+    let pty_rows = term_size.1.saturating_sub(4);
+
+    match app.pty_pool.spawn_home(driver, cmd, &[], &cwd, pty_rows, pty_cols) {
+        Ok(()) => {
+            tracing::info!(driver = ?driver, cwd = %cwd, "Home agent spawned");
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to spawn home agent");
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -61,6 +129,25 @@ async fn main() -> Result<()> {
         tracing::info!(count = app.clones.len(), "Loaded initial clones");
     }
 
+    // --- Detect & spawn home CLI agent ---
+    let available = detect_agents();
+    tracing::info!(detected = ?available, "CLI agent detection");
+
+    // Track whether we need deferred selection (both agents available)
+    match available {
+        AvailableAgent::Single(driver) => {
+            // Only one agent available — spawn immediately
+            spawn_home_agent(&mut app, driver);
+        }
+        AvailableAgent::Both => {
+            // Both available — defer selection until user focuses Terminal
+            app.needs_agent_selection = true;
+        }
+        AvailableAgent::Neither => {
+            tracing::warn!("No CLI agent (gemini/claude) found on system");
+        }
+    }
+
     // Channel for background updates
     let (tx, mut rx) = mpsc::channel::<StateUpdate>(32);
 
@@ -89,6 +176,33 @@ async fn main() -> Result<()> {
         // Poll for keyboard events (100ms timeout for responsive UI)
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
+                // --- Deferred agent selection (both agents available) ---
+                // When the user first focuses the Terminal panel and we need selection,
+                // show a simple inline prompt. We handle '1' for gemini and '2' for claude.
+                if app.needs_agent_selection && app.focused == FocusedPanel::Terminal {
+                    match key.code {
+                        crossterm::event::KeyCode::Char('1') => {
+                            spawn_home_agent(&mut app, DriverName::Gemini);
+                            app.needs_agent_selection = false;
+                            continue;
+                        }
+                        crossterm::event::KeyCode::Char('2') => {
+                            spawn_home_agent(&mut app, DriverName::Claude);
+                            app.needs_agent_selection = false;
+                            continue;
+                        }
+                        // Tab/Esc/number keys still navigate away from Terminal
+                        crossterm::event::KeyCode::Tab
+                        | crossterm::event::KeyCode::Esc => {
+                            // Let normal key handling process these
+                        }
+                        _ => {
+                            // Ignore other keys while selection is pending
+                            continue;
+                        }
+                    }
+                }
+
                 match app.handle_key(key) {
                     Action::Quit => break Ok(()),
                     Action::Up | Action::Down => {
@@ -121,9 +235,9 @@ async fn main() -> Result<()> {
                             let pty_cols = (term_size.0 as f32 * 0.4) as u16;
                             let pty_rows = term_size.1.saturating_sub(4);
                             let driver = if app.config.agent.default_driver == "claude" {
-                                app::pty_pool::DriverName::Claude
+                                DriverName::Claude
                             } else {
-                                app::pty_pool::DriverName::Gemini
+                                DriverName::Gemini
                             };
                             match app.pty_pool.spawn(&branch, &worktree, driver, &cmd, &args_refs, pty_rows, pty_cols) {
                                 Ok(_) => {
@@ -151,8 +265,12 @@ async fn main() -> Result<()> {
                         }
                     }
                     Action::AttachAgent => {
-                        // Selection already handled by navigate_down/up in AgentList
+                        // Selection + attach_clone already handled in handle_key
                         app.focused = FocusedPanel::Terminal;
+                    }
+                    Action::DetachToHome => {
+                        // detach_to_home already called in handle_key
+                        // Terminal stays focused, just showing home now
                     }
                     Action::NextFileTab => {
                         app.file_tabs.next_tab();
@@ -177,7 +295,7 @@ async fn main() -> Result<()> {
         }
 
         // --- Status detection tick ---
-        // Run on every tick for the selected agent.
+        // Run on every tick for the selected clone agent (skip home — it's interactive).
         if let Some(agent) = app.pty_pool.selected_agent() {
             let text = agent.parser.lock()
                 .map(|p| p.screen().contents())
@@ -190,7 +308,7 @@ async fn main() -> Result<()> {
             }
         }
 
-        // --- Write status files for all agents ---
+        // --- Write status files for all clone agents ---
         for agent in app.pty_pool.agents() {
             app::agent_status_file::write_status(
                 &agent.worktree_path,

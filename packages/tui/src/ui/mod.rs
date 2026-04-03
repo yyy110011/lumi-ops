@@ -125,11 +125,18 @@ fn render_status_bar(frame: &mut Frame, area: Rect, app: &AppState) {
             shortcut_span("x", "Kill"),
             shortcut_span("r", "Review"),
         ],
-        FocusedPanel::Terminal => vec![
-            shortcut_span("Type", "Input"),
-            shortcut_span("Esc", "Back"),
-            shortcut_span("C-c", "Int"),
-        ],
+        FocusedPanel::Terminal => {
+            let mut terminal_shortcuts = vec![
+                shortcut_span("Type", "Input"),
+            ];
+            if app.pty_pool.is_viewing_clone() {
+                terminal_shortcuts.push(shortcut_span("Esc", "Home"));
+            } else {
+                terminal_shortcuts.push(shortcut_span("Esc", "Back"));
+            }
+            terminal_shortcuts.push(shortcut_span("C-c", "Int"));
+            terminal_shortcuts
+        },
     };
 
     for shortcut in panel_shortcuts {
