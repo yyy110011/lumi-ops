@@ -121,10 +121,10 @@ describe('registerRebaseCommands', () => {
       expect(mockRebase).not.toHaveBeenCalled();
     });
 
-    it('shows warning when no baseBranch in metadata', async () => {
+    it('shows warning when no parentBranch in metadata', async () => {
       setup();
       mockReadFileSync.mockReturnValue(JSON.stringify({
-        'feat/test': { /* no baseBranch */ },
+        'feat/test': { /* no parentBranch */ },
       }));
       const handler = getHandler('lumi-ops.rebase');
 
@@ -136,10 +136,10 @@ describe('registerRebaseCommands', () => {
       expect(mockRebase).not.toHaveBeenCalled();
     });
 
-    it('calls git.rebase with baseBranch on success', async () => {
+    it('calls git.rebase with parentBranch on success', async () => {
       const { mockStatusBusFire } = setup();
       mockReadFileSync.mockReturnValue(JSON.stringify({
-        'feat/test': { baseBranch: 'main', needsRebase: true },
+        'feat/test': { parentBranch: 'main', needsRebase: true },
       }));
       mockRebase.mockResolvedValue(undefined);
       mockWithProgress.mockImplementation(async (_opts: any, cb: Function) => cb());
@@ -152,7 +152,7 @@ describe('registerRebaseCommands', () => {
 
     it('updates metadata to needsRebase=false on success', async () => {
       const { mockStatusBusFire } = setup();
-      const metadata = { 'feat/test': { baseBranch: 'main', needsRebase: true } };
+      const metadata = { 'feat/test': { parentBranch: 'main', needsRebase: true } };
       mockReadFileSync.mockReturnValue(JSON.stringify(metadata));
       mockRebase.mockResolvedValue(undefined);
       mockWithProgress.mockImplementation(async (_opts: any, cb: Function) => cb());
@@ -169,7 +169,7 @@ describe('registerRebaseCommands', () => {
     it('fires statusBus with * on success', async () => {
       const { mockStatusBusFire } = setup();
       mockReadFileSync.mockReturnValue(JSON.stringify({
-        'feat/test': { baseBranch: 'main', needsRebase: true },
+        'feat/test': { parentBranch: 'main', needsRebase: true },
       }));
       mockRebase.mockResolvedValue(undefined);
       mockWithProgress.mockImplementation(async (_opts: any, cb: Function) => cb());
@@ -183,7 +183,7 @@ describe('registerRebaseCommands', () => {
     it('shows success message on successful rebase', async () => {
       setup();
       mockReadFileSync.mockReturnValue(JSON.stringify({
-        'feat/test': { baseBranch: 'main', needsRebase: true },
+        'feat/test': { parentBranch: 'main', needsRebase: true },
       }));
       mockRebase.mockResolvedValue(undefined);
       mockWithProgress.mockImplementation(async (_opts: any, cb: Function) => cb());
@@ -199,7 +199,7 @@ describe('registerRebaseCommands', () => {
     it('shows warning with conflict instructions on rebase failure', async () => {
       const { mockStatusBusFire } = setup();
       mockReadFileSync.mockReturnValue(JSON.stringify({
-        'feat/test': { baseBranch: 'main', needsRebase: true },
+        'feat/test': { parentBranch: 'main', needsRebase: true },
       }));
       mockRebase.mockRejectedValue(new Error('rebase conflict'));
       mockWithProgress.mockImplementation(async (_opts: any, cb: Function) => cb());
@@ -217,7 +217,7 @@ describe('registerRebaseCommands', () => {
     it('uses clone path (not root path) for GitUtils', async () => {
       setup();
       mockReadFileSync.mockReturnValue(JSON.stringify({
-        'feat/test': { baseBranch: 'main' },
+        'feat/test': { parentBranch: 'main' },
       }));
       mockRebase.mockResolvedValue(undefined);
       mockWithProgress.mockImplementation(async (_opts: any, cb: Function) => cb());
@@ -286,7 +286,7 @@ describe('registerRebaseCommands', () => {
     it('uses clone.repoRoot for metadata path when available', async () => {
       setup();
       mockReadFileSync.mockReturnValue(JSON.stringify({
-        'feat/test': { baseBranch: 'main' },
+        'feat/test': { parentBranch: 'main' },
       }));
       mockRebase.mockResolvedValue(undefined);
       mockWithProgress.mockImplementation(async (_opts: any, cb: Function) => cb());
@@ -304,7 +304,7 @@ describe('registerRebaseCommands', () => {
     it('falls back to rootPath when clone.repoRoot is absent', async () => {
       setup();
       mockReadFileSync.mockReturnValue(JSON.stringify({
-        'feat/test': { baseBranch: 'main' },
+        'feat/test': { parentBranch: 'main' },
       }));
       mockRebase.mockResolvedValue(undefined);
       mockWithProgress.mockImplementation(async (_opts: any, cb: Function) => cb());

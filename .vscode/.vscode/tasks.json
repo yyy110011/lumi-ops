@@ -1,0 +1,27 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build:cli",
+      "type": "shell",
+      "command": "pnpm --filter @lumi-ops/cli build",
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "build:extension",
+      "type": "shell",
+      "command": "pnpm --filter lumi-ops build",
+      "problemMatcher": []
+    },
+    {
+      "label": "build:all",
+      "dependsOn": ["build:cli", "build:extension"],
+      "dependsOrder": "sequence",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}

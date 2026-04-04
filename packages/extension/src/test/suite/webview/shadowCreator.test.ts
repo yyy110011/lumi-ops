@@ -73,7 +73,7 @@ suite('ShadowCreatorProvider — Webview Message Handlers', () => {
       command: 'spawn',
       branch: 'feat/test',
       description: 'Test description',
-      baseBranch: 'main',
+      parentBranch: 'main',
       templates: ['default'],
       repoRoot: '/mock/repo',
     });
@@ -83,7 +83,7 @@ suite('ShadowCreatorProvider — Webview Message Handlers', () => {
     assert.deepStrictEqual(spawnCall!.args[0], {
       branch: 'feat/test',
       description: 'Test description',
-      baseBranch: 'main',
+      parentBranch: 'main',
       templates: ['default'],
       repoRoot: '/mock/repo',
     });

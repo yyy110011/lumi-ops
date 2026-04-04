@@ -108,7 +108,7 @@ suite('AutoStatus — setStatusIfApplicable', () => {
   });
 
   test('transitions from undefined (missing) reviewStatus', () => {
-    writeMetadata({ 'feat/test': { baseBranch: 'main' } });
+    writeMetadata({ 'feat/test': { parentBranch: 'main' } });
     const result = setStatusIfApplicable(tmpDir, 'feat/test', 'inProgress', ['todo']);
     assert.strictEqual(result, true, 'Missing reviewStatus counts as eligible');
     assert.strictEqual(readMetadata()['feat/test'].reviewStatus, 'inProgress');

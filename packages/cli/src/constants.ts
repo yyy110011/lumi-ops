@@ -27,6 +27,11 @@ export const METADATA_FILE = '.lumi-metadata.json';
  * Review status for a shadow clone branch (user-assigned).
  */
 export type ReviewStatus = 'todo' | 'inProgress' | 'done' | 'wontDo' | 'needsReview' | 'needsRevision';
+
+/**
+ * Clone type: 'task' for implementation clones, 'integration' for coordinator clones.
+ */
+export type CloneType = 'task' | 'integration';
 /**
  * Get the per-repo storage directory for metadata and prompts.
  * Now unified with the worktrees directory.

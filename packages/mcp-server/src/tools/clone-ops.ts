@@ -30,7 +30,11 @@ export function registerCloneOpsTools(server: McpServer): void {
     {
       branch: z.string().describe('Branch name for the new clone'),
       description: z.string().optional().describe('Task description → MISSION.md'),
-      baseBranch: z.string().optional().describe('Base branch (default: current branch)'),
+      parentBranch: z.string().optional().describe('Base branch (default: current branch)'),
+      cloneType: z
+        .enum(['task', 'integration'])
+        .optional()
+        .describe('Clone type: "task" (default, leaf worker) or "integration" (coordinator that spawns sub-clones)'),
       prompt: z.string().optional().describe('Name of prompt file to load as description'),
       promptScope: z
         .enum(['global', 'project'])
@@ -40,7 +44,7 @@ export function registerCloneOpsTools(server: McpServer): void {
         'Any path inside the target repository. Worktree paths are automatically resolved to the main repo root.'
       ),
     },
-    async ({ branch, description, baseBranch, prompt, promptScope, repo }) => {
+    async ({ branch, description, parentBranch, cloneType, prompt, promptScope, repo }) => {
       const effectiveRoot = resolveEffectiveRoot(repo);
       const rootErr = ensureRootDir(effectiveRoot);
       if (rootErr) return rootErr;
@@ -77,7 +81,9 @@ export function registerCloneOpsTools(server: McpServer): void {
           spawn(branch, {
             root: effectiveRoot,
             description: finalDescription,
-            baseBranch,
+            baseBranch: parentBranch,
+            parentBranch,
+            cloneType,
           }),
         );
 
@@ -99,7 +105,7 @@ export function registerCloneOpsTools(server: McpServer): void {
             {
               type: 'text' as const,
               text: JSON.stringify(
-                { branch, path: path.join(getClonesDir(effectiveRoot), branch), baseBranch: baseBranch || 'current' },
+                { branch, path: path.join(getClonesDir(effectiveRoot), branch), baseBranch: parentBranch || 'current', parentBranch: parentBranch || 'current', cloneType: cloneType || 'task' },
                 null,
                 2,
               ),
@@ -147,6 +153,8 @@ export function registerCloneOpsTools(server: McpServer): void {
             return {
               ...base,
               baseBranch: meta.baseBranch || c.baseBranch,
+              parentBranch: meta.parentBranch || meta.baseBranch || c.baseBranch,
+              cloneType: meta.cloneType || 'task',
               reviewStatus: meta.reviewStatus,
             };
           }
@@ -219,6 +227,8 @@ export function registerCloneOpsTools(server: McpServer): void {
           title: extractTitle(meta?.description),
           description: meta?.description || null,
           baseBranch: meta?.baseBranch || clone.baseBranch,
+          parentBranch: meta?.parentBranch || meta?.baseBranch || clone.baseBranch,
+          cloneType: meta?.cloneType || 'task',
           reviewStatus: meta?.reviewStatus || null,
           missionComplete,
         };

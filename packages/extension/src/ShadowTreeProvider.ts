@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { parseWorktrees, ShadowClone, GitUtils, getRepoStorageDir, METADATA_FILE } from '@lumi-ops/cli';
-import type { ReviewStatus } from '@lumi-ops/cli';
+import type { ReviewStatus, CloneType } from '@lumi-ops/cli';
 import type { StatusEventBus } from './StatusEventBus';
 
 /** Extension-local type that enriches CLI's ShadowClone with the repo root it belongs to. */
@@ -48,6 +48,8 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
   private lastFocusedClone: string | null = null;
   /** Cached grouped clones for multi-root tree children lookup */
   private _repoCloneCache: Map<string, EnrichedClone[]> = new Map();
+  /** Sub-clone nesting cache: maps parent dirName to child clones */
+  private _subCloneCache: Map<string, EnrichedClone[]> = new Map();
 
   constructor(
     private workspaceRoots: string[],
@@ -92,6 +94,12 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
     if (element && element.role === 'repoHeader' && element.repoRoot) {
       const repoClones = this._repoCloneCache.get(element.repoRoot) || [];
       return this._buildCloneItems(repoClones);
+    }
+
+    // Sub-clone children for hierarchy
+    if (element && element.role === 'shadowClone' && element.clone) {
+      const subClones = this._subCloneCache.get(element.clone.dirName) || [];
+      return this._buildCloneItems(subClones, true);
     }
 
     if (element) {
@@ -141,11 +149,24 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
   }
 
   /** Build children items for a single repo (shared by single-root + multi-root tree) */
-  private _buildCloneItems(clones: EnrichedClone[]): ShadowItem[] {
+  private _buildCloneItems(clones: EnrichedClone[], isSubLevel = false): ShadowItem[] {
     const items: ShadowItem[] = [];
 
+    // Build sub-clone cache: parent dirName → child clones
+    if (!isSubLevel) {
+      this._subCloneCache.clear();
+      const dirNameSet = new Set(clones.filter(c => c.isShadow).map(c => c.dirName));
+      for (const clone of clones.filter(c => c.isShadow)) {
+        if (clone.parentBranch && dirNameSet.has(clone.parentBranch)) {
+          const children = this._subCloneCache.get(clone.parentBranch) || [];
+          children.push(clone);
+          this._subCloneCache.set(clone.parentBranch, children);
+        }
+      }
+    }
+
     const mainClone = clones.find(c => c.isMain);
-    if (mainClone) {
+    if (mainClone && !isSubLevel) {
       items.push(new ShadowItem(
         mainClone.currentBranch,
         vscode.TreeItemCollapsibleState.None,
@@ -156,13 +177,23 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
       ));
     }
 
-    for (const clone of clones.filter(c => c.isShadow)) {
+    // Filter: top-level only shows clones whose parentBranch is NOT another shadow clone
+    const dirNameSet = new Set(clones.filter(c => c.isShadow).map(c => c.dirName));
+    const visibleClones = isSubLevel
+      ? clones.filter(c => c.isShadow)
+      : clones.filter(c => c.isShadow && (!c.parentBranch || !dirNameSet.has(c.parentBranch)));
+
+    for (const clone of visibleClones) {
       const key = cacheKey(clone.repoRoot, clone.dirName);
       const cached = this.statusCache.get(key);
       if (cached !== undefined) clone.reviewStatus = cached;
+      const subClones = this._subCloneCache.get(clone.dirName);
+      const collapsible = subClones && subClones.length > 0
+        ? vscode.TreeItemCollapsibleState.Expanded
+        : vscode.TreeItemCollapsibleState.None;
       const item = new ShadowItem(
         clone.dirName,
-        vscode.TreeItemCollapsibleState.None,
+        collapsible,
         clone,
         'shadowClone',
         this.extensionPath,
@@ -186,7 +217,7 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
 
         // Load centralized metadata once per root
         const metadataPath = path.join(getRepoStorageDir(workspaceRoot), METADATA_FILE);
-        let metadata: Record<string, { baseBranch?: string; reviewStatus?: ReviewStatus; needsRebase?: boolean }> = {};
+        let metadata: Record<string, { baseBranch?: string; parentBranch?: string; cloneType?: CloneType; reviewStatus?: ReviewStatus; needsRebase?: boolean }> = {};
         try {
           const raw = fs.readFileSync(metadataPath, 'utf-8');
           metadata = JSON.parse(raw);
@@ -204,6 +235,8 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
           const meta = metadata[enriched.dirName];
           if (meta) {
             enriched.baseBranch = meta.baseBranch;
+            enriched.parentBranch = meta.parentBranch;
+            enriched.cloneType = meta.cloneType;
             enriched.reviewStatus = meta.reviewStatus;
             enriched.needsRebase = meta.needsRebase;
           }
@@ -363,9 +396,14 @@ export class ShadowItem extends vscode.TreeItem {
 
     // Stable ID using dirName so VS Code tracks this item across updates
     this.id = `shadow-${clone.dirName}-${role}`;
-    this.contextValue = (role === 'shadowClone' && clone.isDetached)
-      ? 'shadowClone-detached'
-      : role;
+    if (role === 'shadowClone' && clone) {
+      const isIntegration = clone.cloneType === 'integration';
+      this.contextValue = clone.isDetached
+        ? (isIntegration ? 'shadowClone-integration-detached' : 'shadowClone-detached')
+        : (isIntegration ? 'shadowClone-integration' : 'shadowClone');
+    } else {
+      this.contextValue = role;
+    }
 
     const conflictPrefix = clone.hasConflict ? '⚠️ · ' : '';
     const rebasePrefix = clone.needsRebase ? '⟲ rebase · ' : '';
@@ -388,6 +426,7 @@ export class ShadowItem extends vscode.TreeItem {
       const status: ReviewStatus = clone.reviewStatus || 'todo';
       this.applyStatus(status, clone);
       const detachedPrefix = clone.isDetached ? '🔀 rebasing · ' : '';
+      const integrationPrefix = clone.cloneType === 'integration' ? '🔀 ' : '';
       // Show branch drift indicator when currentBranch differs from dirName
       const branchDrift = clone.currentBranch !== clone.dirName
         ? `⚠️ on: ${clone.currentBranch} · `
@@ -395,8 +434,8 @@ export class ShadowItem extends vscode.TreeItem {
       const isCurrent = this.currentWorkspacePath && clone.path === this.currentWorkspacePath;
       const baseDesc = clone.baseBranch ? `← ${clone.baseBranch}` : 'Shadow Clone';
       this.description = isCurrent
-        ? `${conflictPrefix}${rebasePrefix}${detachedPrefix}${branchDrift}${baseDesc} · ★`
-        : `${conflictPrefix}${rebasePrefix}${detachedPrefix}${branchDrift}${baseDesc}`;
+        ? `${conflictPrefix}${rebasePrefix}${detachedPrefix}${integrationPrefix}${branchDrift}${baseDesc} · ★`
+        : `${conflictPrefix}${rebasePrefix}${detachedPrefix}${integrationPrefix}${branchDrift}${baseDesc}`;
       // Click = focus-then-cycle status (uses composite key as identifier)
       this.command = {
         command: 'lumi-ops.cycleReviewStatus',
@@ -409,6 +448,7 @@ export class ShadowItem extends vscode.TreeItem {
   /** Apply status visuals (icon + tooltip). Can be called to mutate in place. */
   private applyStatus(status: ReviewStatus, clone?: EnrichedClone): void {
     const clonePath = clone?.path ?? this.clone?.path ?? '';
+    const effectiveClone = clone ?? this.clone;
     this.tooltip = `[${STATUS_LABELS[status]}] ${clonePath}`;
     if (status === 'inProgress') {
       // Animated spinning icon in blue
@@ -418,6 +458,11 @@ export class ShadowItem extends vscode.TreeItem {
       this.iconPath = svgFile
         ? vscode.Uri.file(path.join(this.extensionPath!, 'media', svgFile))
         : new vscode.ThemeIcon('circle-outline');
+    }
+
+    // Integration clones: override icon with git-merge in blue
+    if (effectiveClone?.cloneType === 'integration') {
+      this.iconPath = new vscode.ThemeIcon('git-merge', new vscode.ThemeColor('charts.blue'));
     }
   }
 

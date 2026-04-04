@@ -85,7 +85,7 @@ describe('registerMergeCommands', () => {
     mockListWorktrees.mockResolvedValue([]);
     mockListBranches.mockResolvedValue(['main', 'develop', 'feat/other']);
     mockReadFileSync.mockReturnValue(JSON.stringify({
-      'feat/test': { baseBranch: 'main' },
+      'feat/test': { parentBranch: 'main' },
     }));
   });
 
@@ -113,7 +113,7 @@ describe('registerMergeCommands', () => {
   });
 
   describe('QuickPick item construction', () => {
-    it('pins baseBranch as recommended at top', async () => {
+    it('pins parentBranch as recommended at top', async () => {
       const handler = getCommandHandler();
       mockShowQuickPick.mockResolvedValue(null); // user cancels
 
@@ -133,14 +133,14 @@ describe('registerMergeCommands', () => {
       await handler({ clone: { currentBranch: 'feat/test', dirName: 'feat/test' } });
 
       const items = mockShowQuickPick.mock.calls[0][0];
-      // baseBranch 'main' is first, currentBranch 'develop' is second
+      // parentBranch 'main' is first, currentBranch 'develop' is second
       expect(items[0].label).toBe('main');
       expect(items[1].label).toBe('develop');
       expect(items[1].description).toBe('← current');
     });
 
-    it('does NOT pin currentBranch when it equals baseBranch', async () => {
-      // currentBranch = 'main', baseBranch = 'main' → only one pinned item
+    it('does NOT pin currentBranch when it equals parentBranch', async () => {
+      // currentBranch = 'main', parentBranch = 'main' → only one pinned item
       mockGetCurrentBranch.mockResolvedValue('main');
       const handler = getCommandHandler();
       mockShowQuickPick.mockResolvedValue(null);
@@ -193,7 +193,7 @@ describe('registerMergeCommands', () => {
 
       const items = mockShowQuickPick.mock.calls[0][0];
       const mainItem = items.find((i: any) => i.label === 'main');
-      // Main is baseBranch+currentBranch → pinned as recommended, no worktree warning
+      // Main is parentBranch+currentBranch → pinned as recommended, no worktree warning
       expect(mainItem?.description).not.toContain('⚠️ worktree');
     });
 
@@ -220,7 +220,7 @@ describe('registerMergeCommands', () => {
       expect(separators.length).toBe(0);
     });
 
-    it('handles missing metadata gracefully (no baseBranch pinned)', async () => {
+    it('handles missing metadata gracefully (no parentBranch pinned)', async () => {
       mockReadFileSync.mockImplementation(() => { throw new Error('ENOENT'); });
       const handler = getCommandHandler();
       mockShowQuickPick.mockResolvedValue(null);

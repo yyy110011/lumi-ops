@@ -30,6 +30,7 @@ import { registerMissionTemplateCommands } from './commands/missionTemplate';
 import { registerRootAgentMode, syncRootAgentRule } from './rootAgentMode';
 
 import { registerRebaseCommands } from './commands/rebase';
+import { registerCloneTypeCommands } from './commands/cloneType';
 
 export async function activate(context: vscode.ExtensionContext) {
 
@@ -411,6 +412,7 @@ Add JWT-based authentication to the Express.js API.
     ...registerPromptLibraryCommands(context, deps),
     ...registerMissionTemplateCommands(context, deps),
     ...registerRebaseCommands(context, deps),
+    ...registerCloneTypeCommands(context, deps),
   );
 
   // Expose internals for integration tests

@@ -218,8 +218,8 @@ describe('migration', () => {
         `gitdir: ${rootDir}/.git/worktrees/develop`
       );
 
-      const legacyData = { branch1: { baseBranch: 'main' } };
-      const existingData = { branch2: { baseBranch: 'develop' } };
+      const legacyData = { branch1: { parentBranch: 'main' } };
+      const existingData = { branch2: { parentBranch: 'develop' } };
 
       mockFs.readJSON.mockImplementation(async (p: string) => {
         if (p === newMetadata) return existingData;
@@ -232,7 +232,7 @@ describe('migration', () => {
       // Should write merged metadata (new takes precedence)
       expect(mockFs.writeJSON).toHaveBeenCalledWith(
         newMetadata,
-        { branch1: { baseBranch: 'main' }, branch2: { baseBranch: 'develop' } },
+        { branch1: { parentBranch: 'main' }, branch2: { parentBranch: 'develop' } },
         { spaces: 2 }
       );
       // Should remove legacy metadata

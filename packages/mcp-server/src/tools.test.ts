@@ -205,7 +205,8 @@ describe('spawn_clone tool', () => {
     expect(mocks.spawn).toHaveBeenCalledWith('feat/test', {
       root: ROOT_DIR,
       description: 'Build the widget',
-      baseBranch: undefined,
+      parentBranch: undefined,
+      cloneType: undefined,
     });
     expect(result.isError).toBeUndefined();
   });
@@ -232,7 +233,8 @@ describe('spawn_clone tool', () => {
     expect(mocks.spawn).toHaveBeenCalledWith('feat/from-prompt', {
       root: ROOT_DIR,
       description: 'Prompt content from file',
-      baseBranch: undefined,
+      parentBranch: undefined,
+      cloneType: undefined,
     });
     expect(result.isError).toBeUndefined();
   });
@@ -357,7 +359,8 @@ describe('spawn_clone with repo parameter', () => {
     expect(mocks.spawn).toHaveBeenCalledWith('feat/cross-repo', {
       root: ALT_REPO,
       description: 'Cross-repo task',
-      baseBranch: undefined,
+      parentBranch: undefined,
+      cloneType: undefined,
     });
     expect(result.isError).toBeUndefined();
     const parsed = JSON.parse(result.content[0].text);
@@ -382,7 +385,8 @@ describe('spawn_clone with repo parameter', () => {
     expect(mocks.spawn).toHaveBeenCalledWith('feat/default-repo', {
       root: ROOT_DIR,
       description: 'Default repo task',
-      baseBranch: undefined,
+      parentBranch: undefined,
+      cloneType: undefined,
     });
     expect(result.isError).toBeUndefined();
   });
@@ -734,9 +738,9 @@ describe('get_clone_log tool', () => {
     handler = getToolHandler('get_clone_log');
     // ensureRootDir uses execSync to validate git repo
     mocks.execSync.mockReturnValue('');
-    // Default: metadata returns baseBranch for look-up
+    // Default: metadata returns parentBranch for look-up
     mocks.readMetadata.mockResolvedValue({
-      'feat/test': { baseBranch: 'main' },
+      'feat/test': { parentBranch: 'main' },
     });
   });
 
@@ -752,7 +756,7 @@ describe('get_clone_log tool', () => {
 
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.branch).toBe('feat/test');
-    expect(parsed.baseBranch).toBe('main');
+    expect(parsed.parentBranch).toBe('main');
     expect(parsed.commits).toEqual([]);
     expect(parsed.totalCommits).toBe(0);
     expect(result.isError).toBeUndefined();
@@ -911,7 +915,7 @@ describe('lumi://clones resource', () => {
       { currentBranch: 'feat/beta', branch: 'feat/beta', path: clonePath2, dirName: 'feat/beta', baseBranch: 'main' },
     ]);
     mocks.readMetadata.mockResolvedValue({
-      'feat/alpha': { baseBranch: 'develop', description: 'Alpha task', reviewStatus: 'needsReview' },
+      'feat/alpha': { parentBranch: 'develop', description: 'Alpha task', reviewStatus: 'needsReview' },
     });
     existsSyncMock.mockImplementation((p: string) => {
       if (typeof p === 'string' && p.includes('feat/alpha') && p.includes('MISSION_COMPLETE.md')) return true;
@@ -926,7 +930,7 @@ describe('lumi://clones resource', () => {
 
     const alpha = parsed.clones.find((c: any) => c.dirName === 'feat/alpha');
     expect(alpha.hasReport).toBe(true);
-    expect(alpha.baseBranch).toBe('develop');
+    expect(alpha.parentBranch).toBe('develop');
     expect(alpha.title).toBe('Alpha task');
     expect(alpha.description).toBeUndefined();
     expect(alpha.reviewStatus).toBe('needsReview');
@@ -1305,7 +1309,7 @@ describe('describe_clone tool', () => {
       { currentBranch: 'feat/detail-me', branch: 'feat/detail-me', path: CLONE_PATH, dirName: 'feat/detail-me', baseBranch: 'main' },
     ]);
     mocks.readMetadata.mockResolvedValue({
-      'feat/detail-me': { baseBranch: 'develop', description: '# Mission: Implement OAuth\nDetailed steps here...', reviewStatus: 'inProgress' },
+      'feat/detail-me': { parentBranch: 'develop', description: '# Mission: Implement OAuth\nDetailed steps here...', reviewStatus: 'inProgress' },
     });
     const fsMod = await import('fs');
     existsSyncMock = fsMod.existsSync as ReturnType<typeof vi.fn>;
@@ -1321,7 +1325,7 @@ describe('describe_clone tool', () => {
     expect(parsed.branch).toBe('feat/detail-me');
     expect(parsed.title).toBe('Mission: Implement OAuth');
     expect(parsed.description).toBe('# Mission: Implement OAuth\nDetailed steps here...');
-    expect(parsed.baseBranch).toBe('develop');
+    expect(parsed.parentBranch).toBe('develop');
     expect(parsed.reviewStatus).toBe('inProgress');
     expect(parsed.hasReport).toBe(false);
     expect(parsed.missionComplete).toBeNull();
@@ -1365,7 +1369,7 @@ describe('describe_clone tool', () => {
       { currentBranch: 'feat/detail-me', branch: 'feat/detail-me', path: ALT_CLONE_PATH, dirName: 'feat/detail-me', baseBranch: 'main' },
     ]);
     mocks.readMetadata.mockResolvedValue({
-      'feat/detail-me': { baseBranch: 'main', description: '# Cross-repo task' },
+      'feat/detail-me': { parentBranch: 'main', description: '# Cross-repo task' },
     });
     existsSyncMock.mockReturnValue(false);
 
@@ -1474,7 +1478,7 @@ describe('review_clone with repo param', () => {
       { currentBranch: 'feat/review-me', branch: 'feat/review-me', path: CLONE_PATH, dirName: 'feat/review-me' },
     ]);
     mocks.readMetadata.mockResolvedValue({
-      'feat/review-me': { baseBranch: 'main' },
+      'feat/review-me': { parentBranch: 'main' },
     });
     mocks.fsPromises.readFile.mockRejectedValue(new Error('ENOENT'));
     mocks.execFileSync.mockReturnValue('');
@@ -1725,5 +1729,214 @@ describe('save_prompt with repo parameter', () => {
     const parsed = JSON.parse(result.content[0].text);
     expect(parsed.path).toBe(path.join(ALT_REPO, '.prompts', '_generated', 'auto-prompt.md'));
     expect(parsed.generated).toBe(true);
+  });
+});
+
+// ===========================================================================
+// Integration Branch Support Tests
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// spawn_clone with cloneType: 'integration'
+// ---------------------------------------------------------------------------
+
+describe('spawn_clone with cloneType', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.spawn.mockResolvedValue(undefined);
+    mocks.fsPromises.readFile.mockRejectedValue(new Error('ENOENT'));
+    mocks.fsPromises.writeFile.mockResolvedValue(undefined);
+    mocks.fsPromises.mkdir.mockResolvedValue(undefined);
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ROOT_DIR}/.git\n`;
+      }
+      return '';
+    });
+    handler = getToolHandler('spawn_clone');
+  });
+
+  it('should pass cloneType integration to CLI spawn', async () => {
+    const result = await handler({
+      branch: 'feat/coordinator',
+      description: 'Coordinate sub-tasks',
+      cloneType: 'integration',
+      repo: ROOT_DIR,
+    });
+
+    expect(mocks.spawn).toHaveBeenCalledWith('feat/coordinator', {
+      root: ROOT_DIR,
+      description: 'Coordinate sub-tasks',
+      parentBranch: undefined,
+      cloneType: 'integration',
+    });
+    expect(result.isError).toBeUndefined();
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.cloneType).toBe('integration');
+  });
+
+  it('should default cloneType to task in response', async () => {
+    const result = await handler({
+      branch: 'feat/worker',
+      description: 'Do the work',
+      repo: ROOT_DIR,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.cloneType).toBe('task');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// list_clones includes cloneType and parentBranch
+// ---------------------------------------------------------------------------
+
+describe('list_clones includes cloneType and parentBranch', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getToolHandler('list_clones');
+    mocks.execSync.mockImplementation((cmd: string) => {
+      if (typeof cmd === 'string' && cmd.includes('--git-common-dir')) {
+        return `${ROOT_DIR}/.git\n`;
+      }
+      return '';
+    });
+  });
+
+  it('should include parentBranch and cloneType from metadata', async () => {
+    const clonePath = path.join(ROOT_DIR, '.worktrees', 'feat/ib-test');
+    mocks.gitUtils.listWorktrees.mockResolvedValue([]);
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'feat/ib-test', branch: 'feat/ib-test', path: clonePath, dirName: 'feat/ib-test', baseBranch: 'main' },
+    ]);
+    mocks.readMetadata.mockResolvedValue({
+      'feat/ib-test': { parentBranch: 'develop', cloneType: 'integration', reviewStatus: 'inProgress' },
+    });
+
+    const fsMod = await import('fs');
+    (fsMod.existsSync as ReturnType<typeof vi.fn>).mockReturnValue(false);
+
+    const result = await handler({ repo: ROOT_DIR });
+
+    const parsed = JSON.parse(result.content[0].text);
+    const clone = parsed.clones.find((c: any) => c.dirName === 'feat/ib-test');
+    expect(clone.parentBranch).toBe('develop');
+    expect(clone.cloneType).toBe('integration');
+  });
+
+  it('should default cloneType to task when not in metadata', async () => {
+    const clonePath = path.join(ROOT_DIR, '.worktrees', 'feat/no-type');
+    mocks.gitUtils.listWorktrees.mockResolvedValue([]);
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'feat/no-type', branch: 'feat/no-type', path: clonePath, dirName: 'feat/no-type', baseBranch: 'main' },
+    ]);
+    mocks.readMetadata.mockResolvedValue({
+      'feat/no-type': { parentBranch: 'main' },
+    });
+
+    const fsMod = await import('fs');
+    (fsMod.existsSync as ReturnType<typeof vi.fn>).mockReturnValue(false);
+
+    const result = await handler({ repo: ROOT_DIR });
+
+    const parsed = JSON.parse(result.content[0].text);
+    const clone = parsed.clones.find((c: any) => c.dirName === 'feat/no-type');
+    expect(clone.cloneType).toBe('task');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// describe_clone includes cloneType and parentBranch
+// ---------------------------------------------------------------------------
+
+describe('describe_clone includes cloneType and parentBranch', () => {
+  let handler: ToolHandler;
+  const CLONE_PATH = path.join(ROOT_DIR, '.worktrees', 'feat/ib-describe');
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    handler = getToolHandler('describe_clone');
+    mocks.execSync.mockReturnValue('');
+    mocks.gitUtils.listWorktrees.mockResolvedValue([]);
+    mocks.parseWorktrees.mockReturnValue([
+      { currentBranch: 'feat/ib-describe', branch: 'feat/ib-describe', path: CLONE_PATH, dirName: 'feat/ib-describe', baseBranch: 'main' },
+    ]);
+    const fsMod = await import('fs');
+    (fsMod.existsSync as ReturnType<typeof vi.fn>).mockReturnValue(false);
+  });
+
+  it('should include cloneType integration from metadata', async () => {
+    mocks.readMetadata.mockResolvedValue({
+      'feat/ib-describe': { parentBranch: 'develop', cloneType: 'integration', description: '# Integration task' },
+    });
+
+    const result = await handler({ branch: 'feat/ib-describe', repo: ROOT_DIR });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.parentBranch).toBe('develop');
+    expect(parsed.cloneType).toBe('integration');
+  });
+
+  it('should default cloneType to task when not in metadata', async () => {
+    mocks.readMetadata.mockResolvedValue({
+      'feat/ib-describe': { parentBranch: 'main', description: '# Task' },
+    });
+
+    const result = await handler({ branch: 'feat/ib-describe', repo: ROOT_DIR });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.cloneType).toBe('task');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// evaluate-integration prompt tests
+// ---------------------------------------------------------------------------
+
+describe('evaluate-integration prompt', () => {
+  let handler: ToolHandler;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    handler = getPromptHandler('evaluate-integration');
+  });
+
+  it('should return messages with integration evaluation guidance', async () => {
+    const result = await handler({ branch: 'feat/integration', repo: '/home/user/repo' });
+
+    expect(result.messages).toHaveLength(1);
+    const text = result.messages[0].content.text;
+    expect(text).toContain('integration branch');
+    expect(text).toContain('feat/integration');
+    expect(text).toContain('/home/user/repo');
+  });
+
+  it('should reference relevant tools in the message', async () => {
+    const result = await handler({ branch: 'feat/ib', repo: '/repo' });
+
+    const text = result.messages[0].content.text;
+    expect(text).toContain('list_clones');
+    expect(text).toContain('review_clone');
+    expect(text).toContain('merge_clone');
+    expect(text).toContain('kill_clone');
+    expect(text).toContain('set_clone_status');
+    expect(text).toContain('request_revision');
+    expect(text).toContain('parentBranch');
+  });
+
+  it('should include branch and repo args in the message', async () => {
+    const result = await handler({ branch: 'feat/my-ib', repo: '/home/user/my-repo' });
+
+    const text = result.messages[0].content.text;
+    expect(text).toContain('feat/my-ib');
+    expect(text).toContain('/home/user/my-repo');
   });
 });

@@ -24,6 +24,7 @@ const { mockGitUtils, mockFs } = vi.hoisted(() => ({
     writeFile: vi.fn(),
     writeJSON: vi.fn(),
     writeJSONSync: vi.fn(),
+    unlink: vi.fn(),
   },
 }));
 
@@ -75,6 +76,7 @@ describe('spawn', () => {
     mockFs.writeJSON.mockResolvedValue(undefined);
     mockFs.readJSON.mockRejectedValue(new Error('ENOENT'));
     mockFs.readJSONSync.mockReturnValue({});
+    mockFs.unlink.mockRejectedValue(new Error('ENOENT'));
   });
 
   it('should create clones directory', async () => {
@@ -92,29 +94,29 @@ describe('spawn', () => {
     expect(mockGitUtils.addWorktreeExisting).not.toHaveBeenCalled();
   });
 
-  it('should use explicit baseBranch when provided', async () => {
+  it('should use explicit parentBranch when provided', async () => {
     mockGitUtils.getCurrentBranch.mockResolvedValue('main');
     mockGitUtils.branchExists.mockResolvedValue(false);
 
-    await spawn(branchName, { root: rootDir, baseBranch: 'staging' });
+    await spawn(branchName, { root: rootDir, parentBranch: 'staging' });
 
     expect(mockGitUtils.addWorktree).toHaveBeenCalledWith(branchName, targetPath, 'staging');
   });
 
-  it('should write .lumi-metadata.json with baseBranch', async () => {
+  it('should write .lumi-metadata.json with parentBranch', async () => {
     mockGitUtils.getCurrentBranch.mockResolvedValue('main');
     mockGitUtils.branchExists.mockResolvedValue(false);
 
-    await spawn(branchName, { root: rootDir, baseBranch: 'develop' });
+    await spawn(branchName, { root: rootDir, parentBranch: 'develop' });
 
     expect(mockFs.writeJSON).toHaveBeenCalledWith(
       path.join(repoStorageDir, METADATA_FILE),
-      { [branchName]: { baseBranch: 'develop' } },
+      { [branchName]: { baseBranch: 'develop', parentBranch: 'develop', cloneType: 'task' } },
       { spaces: 2 },
     );
   });
 
-  it('should write .lumi-metadata.json with current branch when no baseBranch provided', async () => {
+  it('should write .lumi-metadata.json with current branch when no parentBranch provided', async () => {
     mockGitUtils.getCurrentBranch.mockResolvedValue('main');
     mockGitUtils.branchExists.mockResolvedValue(false);
 
@@ -122,7 +124,7 @@ describe('spawn', () => {
 
     expect(mockFs.writeJSON).toHaveBeenCalledWith(
       path.join(repoStorageDir, METADATA_FILE),
-      { [branchName]: { baseBranch: 'main' } },
+      { [branchName]: { baseBranch: 'main', parentBranch: 'main', cloneType: 'task' } },
       { spaces: 2 },
     );
   });
@@ -359,7 +361,7 @@ describe('spawn', () => {
 
   // --- cloneAgentRules from .vscode/settings.json ---
 
-  it('should write clone agent rule file when cloneAgentRules is enabled', async () => {
+  it('should write clone agent rule file when cloneAgentRules is enabled (default task type)', async () => {
     mockFs.readJSON.mockImplementation(async (p: string) => {
       if (p === path.join(rootDir, '.vscode', 'settings.json')) {
         return { 'lumi-ops.cloneAgentRules': true };
@@ -377,7 +379,7 @@ describe('spawn', () => {
     expect(mockFs.ensureDir).toHaveBeenCalledWith(
       path.join(targetPath, '.agents', 'rules'),
     );
-    // Should write the rule file
+    // Should write the clone agent rule file
     const ruleWriteCall = mockFs.writeFile.mock.calls.find(
       (c: any[]) => c[0] === path.join(targetPath, '.agents', 'rules', 'lumi-ops-clone-agent.md'),
     );
@@ -385,6 +387,41 @@ describe('spawn', () => {
     expect(ruleWriteCall![1]).toContain('Clone Agent Rules');
     expect(ruleWriteCall![1]).toContain('set_clone_status');
     expect(ruleWriteCall![1]).toContain('MISSION_COMPLETE.md');
+    // Should attempt to clean up root-agent file (may not exist)
+    expect(mockFs.unlink).toHaveBeenCalledWith(
+      path.join(targetPath, '.agents', 'rules', 'lumi-ops-root-agent.md'),
+    );
+  });
+
+  it('should write root agent rule file when cloneType is integration', async () => {
+    mockFs.readJSON.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode', 'settings.json')) {
+        return { 'lumi-ops.cloneAgentRules': true };
+      }
+      throw new Error('ENOENT');
+    });
+    mockFs.pathExists.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode')) return true;
+      return false;
+    });
+
+    await spawn(branchName, { root: rootDir, cloneType: 'integration' });
+
+    // Should create .agents/rules directory
+    expect(mockFs.ensureDir).toHaveBeenCalledWith(
+      path.join(targetPath, '.agents', 'rules'),
+    );
+    // Should write root agent rule file (NOT clone agent)
+    const rootRuleCall = mockFs.writeFile.mock.calls.find(
+      (c: any[]) => c[0] === path.join(targetPath, '.agents', 'rules', 'lumi-ops-root-agent.md'),
+    );
+    expect(rootRuleCall).toBeDefined();
+    expect(rootRuleCall![1]).toContain('Root Agent Mode');
+    expect(rootRuleCall![1]).toContain('coordinator');
+    // Should attempt to clean up clone-agent file
+    expect(mockFs.unlink).toHaveBeenCalledWith(
+      path.join(targetPath, '.agents', 'rules', 'lumi-ops-clone-agent.md'),
+    );
   });
 
   it('should NOT write clone agent rule file when cloneAgentRules is not enabled', async () => {
@@ -400,8 +437,44 @@ describe('spawn', () => {
 
     // Should NOT write any rule file
     const ruleWriteCall = mockFs.writeFile.mock.calls.find(
-      (c: any[]) => typeof c[0] === 'string' && c[0].includes('lumi-ops-clone-agent.md'),
+      (c: any[]) => typeof c[0] === 'string' && (c[0].includes('lumi-ops-clone-agent.md') || c[0].includes('lumi-ops-root-agent.md')),
     );
     expect(ruleWriteCall).toBeUndefined();
+  });
+
+  it('should include cloneType in metadata for new branches', async () => {
+    mockGitUtils.branchExists.mockResolvedValue(false);
+
+    await spawn(branchName, { root: rootDir, cloneType: 'integration' });
+
+    expect(mockFs.writeJSON).toHaveBeenCalledWith(
+      path.join(repoStorageDir, METADATA_FILE),
+      { [branchName]: { baseBranch: 'main', parentBranch: 'main', cloneType: 'integration' } },
+      { spaces: 2 },
+    );
+  });
+
+  it('should default cloneType to task in metadata', async () => {
+    mockGitUtils.branchExists.mockResolvedValue(false);
+
+    await spawn(branchName, { root: rootDir });
+
+    expect(mockFs.writeJSON).toHaveBeenCalledWith(
+      path.join(repoStorageDir, METADATA_FILE),
+      { [branchName]: { baseBranch: 'main', parentBranch: 'main', cloneType: 'task' } },
+      { spaces: 2 },
+    );
+  });
+
+  it('should include cloneType in metadata for existing branches', async () => {
+    mockGitUtils.branchExists.mockResolvedValue(true);
+
+    await spawn(branchName, { root: rootDir, cloneType: 'integration' });
+
+    expect(mockFs.writeJSON).toHaveBeenCalledWith(
+      path.join(repoStorageDir, METADATA_FILE),
+      { [branchName]: { cloneType: 'integration' } },
+      { spaces: 2 },
+    );
   });
 });

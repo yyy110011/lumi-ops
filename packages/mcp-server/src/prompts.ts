@@ -203,4 +203,65 @@ If new conflicts arise, repeat this process.`,
       };
     },
   );
+  // ---------------------------------------------------------------------------
+  // MCP Prompt 5: Evaluate Integration Branch
+  // ---------------------------------------------------------------------------
+
+  server.prompt(
+    'evaluate-integration',
+    'Evaluate an integration branch — review all sub-clones and merge completed work',
+    {
+      branch: z.string().describe('Integration branch name'),
+      repo: z.string().describe('Repository path'),
+    },
+    async ({ branch, repo }) => {
+      return {
+        messages: [
+          {
+            role: 'user' as const,
+            content: {
+              type: 'text' as const,
+              text: [
+                `You are evaluating an **integration branch** and its sub-clones. Follow these steps:`,
+                ``,
+                `## Context`,
+                `- Integration branch: "${branch}"`,
+                `- Repository: "${repo}"`,
+                ``,
+                `## Step 1: List Sub-Clones`,
+                `Call \`list_clones\` with repo="${repo}". Filter results to find clones whose \`parentBranch\` is "${branch}".`,
+                `These are the sub-clones spawned from this integration branch.`,
+                ``,
+                `## Step 2: Review Each Sub-Clone`,
+                `For each sub-clone, check its status:`,
+                `- **needsReview**: Run \`review_clone\` to inspect the work. Use \`get_clone_file_diff\` for detailed file changes.`,
+                `- **inProgress**: The agent is still working. Report it as pending.`,
+                `- **todo**: Not started yet. Report it as pending.`,
+                `- **done**: Already reviewed and approved. Ready for merge if not already merged.`,
+                `- **needsRevision**: Waiting for the agent to address feedback.`,
+                ``,
+                `## Step 3: Approve or Request Revision`,
+                `For clones with **needsReview**:`,
+                `- If the work is satisfactory: \`set_clone_status\` → "done"`,
+                `- If changes needed: \`request_revision\` with specific, actionable feedback`,
+                ``,
+                `## Step 4: Merge Completed Work`,
+                `For clones with status **done** that haven't been merged yet:`,
+                `1. \`merge_clone\` with source=<sub-clone branch> and target="${branch}"`,
+                `2. If merge succeeds: \`kill_clone\` to clean up`,
+                `3. If merge conflicts: follow the resolve-conflict workflow`,
+                ``,
+                `## Step 5: Report Integration Status`,
+                `Summarize the overall status:`,
+                `- How many sub-clones are complete and merged`,
+                `- How many are still in progress or need revision`,
+                `- Any blockers or conflicts encountered`,
+                `- Whether the integration branch is ready for promotion to its parent branch`,
+              ].join('\n'),
+            },
+          },
+        ],
+      };
+    },
+  );
 }

@@ -11,7 +11,7 @@ import {
   readMetadata as cliReadMetadata,
   writeMetadata as cliWriteMetadata,
 } from '@lumi-ops/cli';
-import type { ReviewStatus } from '@lumi-ops/cli';
+import type { ReviewStatus, CloneType } from '@lumi-ops/cli';
 import { resolveMainRepoRoot } from './utils.js';
 
 // ---------------------------------------------------------------------------
@@ -83,7 +83,7 @@ export async function readMetadata(rootDir?: string) {
  * @param rootDir - Optional override; defaults to serverState.rootDir.
  */
 export async function writeMetadata(
-  metadata: Record<string, { baseBranch?: string; description?: string; reviewStatus?: ReviewStatus; sourcePrompt?: string }>,
+  metadata: Record<string, { baseBranch?: string; parentBranch?: string; cloneType?: CloneType; description?: string; reviewStatus?: ReviewStatus; sourcePrompt?: string }>,
   rootDir?: string,
 ) {
   return cliWriteMetadata(rootDir || serverState.rootDir, metadata);

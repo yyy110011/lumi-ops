@@ -22,7 +22,7 @@ export function registerMergeCommands(
       const git = new GitUtils(effectiveRoot);
       const fs = await import('fs');
 
-      // 1. Read baseBranch from centralized metadata
+      // 1. Read baseBranch from centralized metadata (git fork point = merge target)
       const metadataPath = path.join(getRepoStorageDir(effectiveRoot), METADATA_FILE);
       let baseBranch: string | undefined;
       try {

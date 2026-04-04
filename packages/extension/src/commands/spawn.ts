@@ -12,7 +12,7 @@ export function registerSpawnCommands(
     shadowTreeProvider.refresh();
   });
 
-  const spawnCmd = vscode.commands.registerCommand('lumi-ops.spawn', async (args?: { branch: string, description: string, baseBranch?: string, templates?: { name: string; content: string }[], repoRoot?: string }) => {
+  const spawnCmd = vscode.commands.registerCommand('lumi-ops.spawn', async (args?: { branch: string, description: string, baseBranch?: string, cloneType?: string, templates?: { name: string; content: string }[], repoRoot?: string }) => {
     // Resolve effective root: webview repoRoot > primary rootPath
     const effectiveRoot = args?.repoRoot || rootPath;
     if (!effectiveRoot) {
@@ -80,7 +80,7 @@ export function registerSpawnCommands(
             }
           }
 
-          await spawn(branchName, { root: effectiveRoot, description, baseBranch, templates: args?.templates,
+          await spawn(branchName, { root: effectiveRoot, description, baseBranch, cloneType: (args?.cloneType as any) || undefined, templates: args?.templates,
             copyFolders: (vscode.workspace.getConfiguration('lumi-ops').get<string>('copyOnSpawn') || '').split('\n').map((s: string) => s.trim()).filter(Boolean),
             onProgress: (message: string) => progress.report({ message }),
             missionTemplate: await (async () => {

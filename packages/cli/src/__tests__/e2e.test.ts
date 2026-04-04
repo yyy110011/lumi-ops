@@ -124,16 +124,16 @@ describe('e2e: spawn', () => {
     expect(await fs.pathExists(missionPath)).toBe(false);
   });
 
-  it('should record baseBranch in metadata for new branches', async () => {
-    await spawn('feat/meta-new', { root: tmpDir, baseBranch: 'main' });
+  it('should record parentBranch in metadata for new branches', async () => {
+    await spawn('feat/meta-new', { root: tmpDir, parentBranch: 'main' });
 
     const metadataPath = path.join(getRepoStorageDir(tmpDir), METADATA_FILE);
     const metadata = await fs.readJSON(metadataPath);
     expect(metadata['feat/meta-new']).toBeDefined();
-    expect(metadata['feat/meta-new'].baseBranch).toBe('main');
+    expect(metadata['feat/meta-new'].parentBranch).toBe('main');
   });
 
-  it('should NOT record baseBranch for existing branches', async () => {
+  it('should NOT record parentBranch for existing branches', async () => {
     // Pre-create a branch
     await git.checkoutLocalBranch('feat/meta-existing');
     await git.checkout('main');
@@ -143,18 +143,18 @@ describe('e2e: spawn', () => {
     const metadataPath = path.join(getRepoStorageDir(tmpDir), METADATA_FILE);
     const metadata = await fs.readJSON(metadataPath);
     expect(metadata['feat/meta-existing']).toBeDefined();
-    expect(metadata['feat/meta-existing'].baseBranch).toBeUndefined();
+    expect(metadata['feat/meta-existing'].parentBranch).toBeUndefined();
   });
 
-  it('should record custom baseBranch when provided', async () => {
+  it('should record custom parentBranch when provided', async () => {
     await git.checkoutLocalBranch('develop');
     await git.checkout('main');
 
-    await spawn('feat/meta-custom-base', { root: tmpDir, baseBranch: 'develop' });
+    await spawn('feat/meta-custom-base', { root: tmpDir, parentBranch: 'develop' });
 
     const metadataPath = path.join(getRepoStorageDir(tmpDir), METADATA_FILE);
     const metadata = await fs.readJSON(metadataPath);
-    expect(metadata['feat/meta-custom-base'].baseBranch).toBe('develop');
+    expect(metadata['feat/meta-custom-base'].parentBranch).toBe('develop');
   });
 });
 

@@ -95,15 +95,15 @@ describe('kill', () => {
 
   it('should remove entry from centralized metadata using identifier (dirName)', async () => {
     mockFs.readJSON.mockResolvedValue({
-      'feat/old-feature': { baseBranch: 'main' },
-      'feat/other': { baseBranch: 'develop' },
+      'feat/old-feature': { parentBranch: 'main' },
+      'feat/other': { parentBranch: 'develop' },
     });
 
     await kill(identifier, { root: rootDir });
 
     expect(mockFs.writeJSON).toHaveBeenCalledWith(
       metadataPath,
-      { 'feat/other': { baseBranch: 'develop' } },
+      { 'feat/other': { parentBranch: 'develop' } },
       { spaces: 2 },
     );
   });
@@ -167,7 +167,7 @@ describe('kill', () => {
   it('should delete generated prompt file when metadata has sourcePrompt in _generated/', async () => {
     mockFs.readJSON.mockResolvedValue({
       'feat/old-feature': {
-        baseBranch: 'main',
+        parentBranch: 'main',
         sourcePrompt: '_generated/old-feature.md',
       },
     });
@@ -188,7 +188,7 @@ describe('kill', () => {
   it('should NOT delete prompt when sourcePrompt is not in _generated/', async () => {
     mockFs.readJSON.mockResolvedValue({
       'feat/old-feature': {
-        baseBranch: 'main',
+        parentBranch: 'main',
         sourcePrompt: 'user-prompt.md',
       },
     });
@@ -203,7 +203,7 @@ describe('kill', () => {
   it('should handle already-deleted generated prompt gracefully', async () => {
     mockFs.readJSON.mockResolvedValue({
       'feat/old-feature': {
-        baseBranch: 'main',
+        parentBranch: 'main',
         sourcePrompt: '_generated/old-feature.md',
       },
     });

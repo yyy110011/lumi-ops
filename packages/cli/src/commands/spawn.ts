@@ -2,11 +2,13 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import { GitUtils } from '../utils/git';
 import { getClonesDir, getRepoStorageDir, METADATA_FILE } from '../constants';
+import type { CloneType } from '../constants';
 import { registerRepo } from '../registry';
 import chalk from 'chalk';
 import { DEFAULT_MISSION_TEMPLATE } from '../missionDefaults';
+import { CLONE_AGENT_RULE_CONTENT, ROOT_AGENT_RULE_CONTENT } from '../agentRules';
 
-export async function spawn(branchName: string, options: { root: string; description?: string; baseBranch?: string; templates?: { name: string; content: string }[]; missionTemplate?: { task?: string; rules: string; instructions: string }; copyFolders?: string[]; onProgress?: (message: string) => void }) {
+export async function spawn(branchName: string, options: { root: string; description?: string; baseBranch?: string; parentBranch?: string; cloneType?: CloneType; templates?: { name: string; content: string }[]; missionTemplate?: { task?: string; rules: string; instructions: string }; copyFolders?: string[]; onProgress?: (message: string) => void }) {
   const rootDir = path.resolve(options.root);
   const git = new GitUtils(rootDir);
   try {
@@ -30,7 +32,7 @@ export async function spawn(branchName: string, options: { root: string; descrip
 
     // 2. Add worktree — if branch exists, attach to it; otherwise create new from base branch
     const currentBranch = await git.getCurrentBranch();
-    const resolvedBase = options.baseBranch || currentBranch;
+    const resolvedBase = options.baseBranch || options.parentBranch || currentBranch;
     const exists = await git.branchExists(branchName);
 
     if (exists) {
@@ -40,17 +42,21 @@ export async function spawn(branchName: string, options: { root: string; descrip
       await git.addWorktree(branchName, targetPath, resolvedBase);
     }
 
-    // 3. Persist base branch metadata (centralized)
+    // 3. Persist parent branch metadata (centralized)
     const repoStorageDir = getRepoStorageDir(rootDir);
     const metadataPath = path.join(repoStorageDir, METADATA_FILE);
-    let metadata: Record<string, { baseBranch?: string; description?: string }> = {};
+    let metadata: Record<string, { baseBranch?: string; parentBranch?: string; cloneType?: CloneType; description?: string }> = {};
     try { metadata = await fs.readJSON(metadataPath); } catch {}
     if (exists) {
       // Existing branch — base is unknown, don't record
-      metadata[branchName] = {};
+      metadata[branchName] = { cloneType: options.cloneType || 'task' };
       console.log(chalk.gray(`✓ Base branch: unknown (existing branch)`));
     } else {
-      metadata[branchName] = { baseBranch: resolvedBase };
+      metadata[branchName] = {
+        baseBranch: resolvedBase,
+        parentBranch: options.parentBranch || resolvedBase,
+        cloneType: options.cloneType || 'task',
+      };
       console.log(chalk.gray(`✓ Recorded base branch: ${resolvedBase}`));
     }
     if (options.description) {
@@ -99,43 +105,20 @@ export async function spawn(branchName: string, options: { root: string; descrip
       }
     }
 
-    // 4c. Write clone agent rule file if enabled
+    // 4c. Write agent rule file based on clone type
     if (cloneAgentRulesEnabled) {
       const rulesDir = path.join(targetPath, '.agents', 'rules');
       await fs.ensureDir(rulesDir);
-      const ruleContent = `# Clone Agent Rules (Lumi-Ops)
 
-You are working inside a **Shadow Clone** worktree managed by the Lumi-Ops extension.
+      const isIntegration = (options.cloneType || 'task') === 'integration';
 
-## After Completing Work
-
-1. **Verify your changes work:**
-   - Run the project's test suite (check package.json scripts, Makefile, or common commands)
-   - If tests fail, investigate and fix — don't dismiss as "unrelated"
-   - Don't just confirm code exists — prove it produces correct output
-
-2. **Self-review your changes** — check your diff for:
-   - Duplicated logic that could use existing project utilities
-   - Unnecessary comments that explain *what* instead of *why*
-   - Operations that could run in parallel but are serialized
-   - Existence checks before operations (check-then-act) that should be try-catch instead
-
-3. Create \`.lumi/MISSION_COMPLETE.md\` summarising what you did (see MISSION.md for format).
-
-4. Call the MCP tool **set_clone_status** with status \`needsReview\`.
-
-## Revision Cycle
-
-If a file called \`.lumi/REVIEW_FEEDBACK.md\` exists, you are in a **revision cycle**:
-
-1. Read \`.lumi/MISSION.md\` → \`.lumi/MISSION_COMPLETE.md\` → \`.lumi/REVIEW_FEEDBACK.md\` (in that order).
-2. Address every item listed in the feedback.
-3. Verify your fixes work (run tests again).
-4. Update \`.lumi/MISSION_COMPLETE.md\` with what you changed.
-5. Call **set_clone_status** with status \`needsReview\` again.
-`;
-      await fs.writeFile(path.join(rulesDir, 'lumi-ops-clone-agent.md'), ruleContent);
-      console.log(chalk.gray('✓ Wrote clone agent rules.'));
+      if (isIntegration) {
+        await fs.writeFile(path.join(rulesDir, 'lumi-ops-root-agent.md'), ROOT_AGENT_RULE_CONTENT);
+        try { await fs.unlink(path.join(rulesDir, 'lumi-ops-clone-agent.md')); } catch {}
+      } else {
+        await fs.writeFile(path.join(rulesDir, 'lumi-ops-clone-agent.md'), CLONE_AGENT_RULE_CONTENT);
+        try { await fs.unlink(path.join(rulesDir, 'lumi-ops-root-agent.md')); } catch {}
+      }
     }
 
     // 5. Create MISSION.md (AI Agent Context - only when description is provided)

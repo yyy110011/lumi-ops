@@ -59,7 +59,7 @@ describe('setStatusIfApplicable', () => {
   });
 
   it('transitions from undefined (missing) reviewStatus', () => {
-    writeMetadata({ 'feat/test': { baseBranch: 'main' } });
+    writeMetadata({ 'feat/test': { parentBranch: 'main' } });
     const result = setStatusIfApplicable(tmpDir, 'feat/test', 'inProgress', ['todo']);
     expect(result).toBe(true);
     expect(readMetadata()['feat/test'].reviewStatus).toBe('inProgress');

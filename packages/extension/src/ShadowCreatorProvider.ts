@@ -32,6 +32,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
             branch: data.branch,
             description: data.description,
             baseBranch: data.baseBranch,
+            cloneType: data.cloneType,
             templates: data.templates,
             repoRoot: data.repoRoot,
           });
@@ -312,6 +313,11 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           display: block;
         }
 
+        /* -- Clone Type Toggle -- */
+        .clone-type-toggle { display: flex; gap: 0; border: 1px solid var(--vscode-input-border); border-radius: 3px; overflow: hidden; }
+        .type-pill { flex: 1; padding: 4px 8px; font-size: 11px; border: none; cursor: pointer; background: var(--vscode-input-background); color: var(--vscode-descriptionForeground); font-weight: 600; transition: all 0.15s; }
+        .type-pill.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+
       </style>
     </head>
     <body>
@@ -345,7 +351,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
 
       <!-- Task Description -->
       <div class="form-group desc-section">
-        <label for="description">Task Description</label>
+        <label for="description" id="descriptionLabel">Task Description</label>
         <div class="desc-container">
           <textarea id="description" placeholder="Describe the objective for the AI Agent..."></textarea>
           <div class="save-template-row">
@@ -355,6 +361,15 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
             </button>
             <span class="scope-pill scope-project" id="scopePill" title="Click to toggle scope">P</span>
           </div>
+        </div>
+      </div>
+
+      <!-- Clone Type Toggle -->
+      <div class="form-group">
+        <label>Clone Type</label>
+        <div class="clone-type-toggle">
+          <button class="type-pill active" data-type="task">Task</button>
+          <button class="type-pill" data-type="integration">Integration</button>
         </div>
       </div>
 
@@ -368,6 +383,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         let selectedBaseBranch = '';
         let worktreeBranches = [];
         let saveScope = 'project';
+        let cloneType = 'task';
         let repos = initialRepos;
         let selectedRepoRoot = repos.length > 0 ? repos[0].rootPath : '';
 
@@ -384,6 +400,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
         const baseBranchGroup = document.getElementById('baseBranchGroup');
         const branchRowArrow = document.querySelector('.branch-row-arrow');
         const descriptionEl = document.getElementById('description');
+        const descriptionLabel = document.getElementById('descriptionLabel');
         const spawnBtn = document.getElementById('spawnBtn');
         const scopePill = document.getElementById('scopePill');
 
@@ -426,6 +443,26 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           scopePill.title = saveScope === 'project' ? 'Saving to Project' : 'Saving to Global';
         });
 
+        // === Clone Type Toggle ===
+        function updateDescriptionLabel() {
+          if (cloneType === 'integration') {
+            descriptionLabel.textContent = 'Integration Purpose';
+            descriptionEl.placeholder = 'Describe the purpose of this integration branch...';
+          } else {
+            descriptionLabel.textContent = 'Task Description';
+            descriptionEl.placeholder = 'Describe the objective for the AI Agent...';
+          }
+        }
+        document.querySelectorAll('.type-pill').forEach(pill => {
+          pill.addEventListener('click', () => {
+            document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+            cloneType = pill.getAttribute('data-type') || 'task';
+            updateDescriptionLabel();
+            updateSpawnBtnText();
+          });
+        });
+
         // === Message handler ===
         window.addEventListener('message', event => {
           const msg = event.data;
@@ -448,6 +485,10 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
             case 'resetForm':
               branchInput.value = '';
               descriptionEl.value = '';
+              cloneType = 'task';
+              document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('active'));
+              document.querySelector('.type-pill[data-type="task"]').classList.add('active');
+              updateDescriptionLabel();
               spawnBtn.textContent = 'Create Clone Only';
               selectedBaseBranch = currentBranch;
               baseBranchInput.value = selectedBaseBranch;
@@ -664,7 +705,11 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
 
         // === Spawn Button ===
         function updateSpawnBtnText() {
-          spawnBtn.textContent = descriptionEl.value.trim() ? 'Spawn Agent' : 'Create Clone Only';
+          if (descriptionEl.value.trim()) {
+            spawnBtn.textContent = cloneType === 'integration' ? 'Spawn Coordinator' : 'Spawn Agent';
+          } else {
+            spawnBtn.textContent = 'Create Clone Only';
+          }
         }
         descriptionEl.addEventListener('input', updateSpawnBtnText);
 
@@ -687,6 +732,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
               branch: branch,
               description: description,
               baseBranch: selectedBaseBranch,
+              cloneType: cloneType,
               repoRoot: selectedRepoRoot
             });
           }

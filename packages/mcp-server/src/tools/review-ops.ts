@@ -98,14 +98,14 @@ export function registerReviewOpsTools(server: McpServer): void {
           // No report — that's fine
         }
 
-        // 3. Look up baseBranch from metadata
+        // 3. Look up baseBranch from metadata (git fork point for diff/log range)
         const metadata = await readMetadata(effectiveRoot);
-        const baseBranch = metadata[branch]?.baseBranch || 'main';
+        const baseBranch = metadata[branch]?.baseBranch || metadata[branch]?.parentBranch || 'main';
 
         // 4. Get diff stat
         let diffStat: ReturnType<typeof parseDiffStat> = { filesChanged: 0, insertions: 0, deletions: 0, files: [] };
         try {
-          const diffStatRaw = execFileSync('git', ['diff', '--numstat', `HEAD...${branch}`], {
+          const diffStatRaw = execFileSync('git', ['diff', '--numstat', `${baseBranch}...${branch}`], {
             cwd: effectiveRoot,
             encoding: 'utf-8',
             maxBuffer: 10 * 1024 * 1024,
@@ -128,7 +128,7 @@ export function registerReviewOpsTools(server: McpServer): void {
         // 5. Get commits
         let commits: { hash: string; message: string }[] = [];
         try {
-          const logRaw = execFileSync('git', ['log', '--oneline', `HEAD..${branch}`], {
+          const logRaw = execFileSync('git', ['log', '--oneline', `${baseBranch}..${branch}`], {
             cwd: effectiveRoot,
             encoding: 'utf-8',
           });
@@ -150,6 +150,7 @@ export function registerReviewOpsTools(server: McpServer): void {
         const result: Record<string, unknown> = {
           branch,
           baseBranch,
+          parentBranch: metadata[branch]?.parentBranch || baseBranch,
           report,
           commits,
           diffStat: {
@@ -190,9 +191,11 @@ export function registerReviewOpsTools(server: McpServer): void {
       const rootErr = ensureRootDir(effectiveRoot);
       if (rootErr) return rootErr;
       try {
+        const metadata = await readMetadata(effectiveRoot);
+        const baseBranch = metadata[branch]?.baseBranch || metadata[branch]?.parentBranch || 'main';
         let diff: string;
         try {
-          diff = execFileSync('git', ['diff', `HEAD...${branch}`, '--', filepath], {
+          diff = execFileSync('git', ['diff', `${baseBranch}...${branch}`, '--', filepath], {
             cwd: effectiveRoot,
             encoding: 'utf-8',
             maxBuffer: 10 * 1024 * 1024,
@@ -288,9 +291,9 @@ export function registerReviewOpsTools(server: McpServer): void {
       const rootErr = ensureRootDir(effectiveRoot);
       if (rootErr) return rootErr;
       try {
-        // 1. Read metadata to get baseBranch
+        // 1. Read metadata to get baseBranch (git fork point for log range)
         const metadata = await readMetadata(effectiveRoot);
-        const baseBranch = metadata[branch]?.baseBranch || 'main';
+        const baseBranch = metadata[branch]?.baseBranch || metadata[branch]?.parentBranch || 'main';
 
         // 2. Get formatted commit log
         let commits: { hash: string; message: string; date: string; author: string }[] = [];
@@ -330,7 +333,7 @@ export function registerReviewOpsTools(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: JSON.stringify({ branch, baseBranch, commits, totalCommits }, null, 2),
+              text: JSON.stringify({ branch, baseBranch, parentBranch: metadata[branch]?.parentBranch || baseBranch, commits, totalCommits }, null, 2),
             },
           ],
         };

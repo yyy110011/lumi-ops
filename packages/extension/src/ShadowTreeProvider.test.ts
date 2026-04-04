@@ -106,30 +106,30 @@ describe('ShadowItem', () => {
       expect(item.command?.arguments).toEqual(['/repo::feat/test']);
     });
 
-    it('shows baseBranch in description', () => {
-      const item = new ShadowItem('feat/test', NONE, makeClone({ baseBranch: 'develop' }), 'shadowClone', '/ext', undefined);
+    it('shows parentBranch in description', () => {
+      const item = new ShadowItem('feat/test', NONE, makeClone({ parentBranch: 'develop' }), 'shadowClone', '/ext', undefined);
       expect(item.description).toBe('← develop');
     });
 
-    it('shows "Shadow Clone" when no baseBranch', () => {
-      const item = new ShadowItem('feat/test', NONE, makeClone({ baseBranch: undefined }), 'shadowClone', '/ext', undefined);
+    it('shows "Shadow Clone" when no parentBranch', () => {
+      const item = new ShadowItem('feat/test', NONE, makeClone({ parentBranch: undefined }), 'shadowClone', '/ext', undefined);
       expect(item.description).toBe('Shadow Clone');
     });
 
     it('shows detached prefix for rebasing clones', () => {
-      const item = new ShadowItem('feat/test', NONE, makeClone({ isDetached: true, baseBranch: 'main' }), 'shadowClone', '/ext', undefined);
+      const item = new ShadowItem('feat/test', NONE, makeClone({ isDetached: true, parentBranch: 'main' }), 'shadowClone', '/ext', undefined);
       expect(item.description).toBe('🔀 rebasing · ← main');
     });
 
     it('shows conflict prefix', () => {
-      const item = new ShadowItem('feat/test', NONE, makeClone({ hasConflict: true, baseBranch: 'main' }), 'shadowClone', '/ext', undefined);
+      const item = new ShadowItem('feat/test', NONE, makeClone({ hasConflict: true, parentBranch: 'main' }), 'shadowClone', '/ext', undefined);
       expect(item.description).toBe('⚠️ · ← main');
     });
 
-    it('combines conflict + detached + baseBranch + ★', () => {
+    it('combines conflict + detached + parentBranch + ★', () => {
       const clonePath = '/repo.worktrees/feat/test';
       const item = new ShadowItem('feat/test', NONE, makeClone({
-        path: clonePath, hasConflict: true, isDetached: true, baseBranch: 'main'
+        path: clonePath, hasConflict: true, isDetached: true, parentBranch: 'main'
       }), 'shadowClone', '/ext', clonePath);
       expect(item.description).toBe('⚠️ · 🔀 rebasing · ← main · ★');
     });
@@ -144,33 +144,33 @@ describe('ShadowItem', () => {
         dirName: 'feat/task',
         currentBranch: 'develop',
         branch: 'develop',
-        baseBranch: 'main',
+        parentBranch: 'main',
       }), 'shadowClone', '/ext', undefined);
       expect(item.description).toBe('⚠️ on: develop · ← main');
     });
 
     it('does NOT show branch drift indicator when currentBranch matches dirName', () => {
       const item = new ShadowItem('feat/test', NONE, makeClone({
-        baseBranch: 'main',
+        parentBranch: 'main',
       }), 'shadowClone', '/ext', undefined);
       expect(item.description).toBe('← main');
       expect(item.description).not.toContain('on:');
     });
 
     it('shows rebase prefix when needsRebase is true', () => {
-      const item = new ShadowItem('feat/test', NONE, makeClone({ needsRebase: true, baseBranch: 'main' }), 'shadowClone', '/ext', undefined);
+      const item = new ShadowItem('feat/test', NONE, makeClone({ needsRebase: true, parentBranch: 'main' }), 'shadowClone', '/ext', undefined);
       expect(item.description).toBe('⟲ rebase · ← main');
     });
 
     it('does not show rebase prefix when needsRebase is false', () => {
-      const item = new ShadowItem('feat/test', NONE, makeClone({ needsRebase: false, baseBranch: 'main' }), 'shadowClone', '/ext', undefined);
+      const item = new ShadowItem('feat/test', NONE, makeClone({ needsRebase: false, parentBranch: 'main' }), 'shadowClone', '/ext', undefined);
       expect(item.description).toBe('← main');
     });
 
-    it('combines conflict + rebase + detached + baseBranch + ★', () => {
+    it('combines conflict + rebase + detached + parentBranch + ★', () => {
       const clonePath = '/repo.worktrees/feat/test';
       const item = new ShadowItem('feat/test', NONE, makeClone({
-        path: clonePath, hasConflict: true, needsRebase: true, isDetached: true, baseBranch: 'main'
+        path: clonePath, hasConflict: true, needsRebase: true, isDetached: true, parentBranch: 'main'
       }), 'shadowClone', '/ext', clonePath);
       expect(item.description).toBe('⚠️ · ⟲ rebase · 🔀 rebasing · ← main · ★');
     });

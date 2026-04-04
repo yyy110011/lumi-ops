@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { GitUtils } from '../utils/git';
-import type { ReviewStatus } from '../constants';
+import type { ReviewStatus, CloneType } from '../constants';
 import chalk from 'chalk';
 
 export interface ShadowClone {
@@ -11,7 +11,9 @@ export interface ShadowClone {
   isShadow: boolean;
   isMain?: boolean;
   isDetached?: boolean;
-  baseBranch?: string;
+  baseBranch?: string;       // git fork point (merge/rebase/diff target, display)
+  parentBranch?: string;     // logical hierarchy parent (tree nesting only)
+  cloneType?: CloneType;     // 'task' (default) or 'integration'
   description?: string;
   reviewStatus?: ReviewStatus;
   hasConflict?: boolean;

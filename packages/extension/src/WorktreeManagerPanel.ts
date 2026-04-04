@@ -227,7 +227,7 @@ export class WorktreeManagerPanel {
 
         // Enrich with metadata
         const metadataPath = path.join(getClonesDir(repo.rootDir), METADATA_FILE);
-        let metadata: Record<string, { baseBranch?: string; reviewStatus?: string }> = {};
+        let metadata: Record<string, { baseBranch?: string; parentBranch?: string; reviewStatus?: string }> = {};
         try {
           const raw = fs.readFileSync(metadataPath, 'utf-8');
           metadata = JSON.parse(raw);
@@ -237,6 +237,7 @@ export class WorktreeManagerPanel {
           const meta = metadata[clone.branch];
           if (meta) {
             clone.baseBranch = meta.baseBranch;
+            clone.parentBranch = meta.parentBranch;
             clone.reviewStatus = meta.reviewStatus as typeof clone.reviewStatus;
           }
         }

@@ -21,7 +21,7 @@ export function registerRebaseCommands(
       const branch = item.clone.branch;
       const metadataPath = path.join(getRepoStorageDir(effectiveRoot), METADATA_FILE);
 
-      // Read baseBranch from metadata
+      // Read parentBranch from metadata
       let metadata: Record<string, any> = {};
       try {
         const raw = fs.readFileSync(metadataPath, 'utf-8');

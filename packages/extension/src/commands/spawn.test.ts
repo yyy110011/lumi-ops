@@ -207,13 +207,13 @@ describe('registerSpawnCommands', () => {
       expect(mockFetchBranch).not.toHaveBeenCalled();
     });
 
-    it('fetches baseBranch from remote when it does not exist locally', async () => {
+    it('fetches parentBranch from remote when it does not exist locally', async () => {
       const { mockGetActiveTemplate } = setup();
       mockGetActiveTemplate.mockResolvedValue({ name: 'default' });
       mockGetConfiguration.mockReturnValue({ get: vi.fn().mockReturnValue('') });
       mockBranchExists
         .mockResolvedValueOnce(true)  // branchName exists
-        .mockResolvedValueOnce(false); // baseBranch doesn't exist
+        .mockResolvedValueOnce(false); // parentBranch doesn't exist
       mockListRemoteBranches.mockResolvedValue(['origin/develop']);
       mockFetchBranch.mockResolvedValue(undefined);
       mockSpawn.mockResolvedValue(undefined);
@@ -222,7 +222,7 @@ describe('registerSpawnCommands', () => {
       });
 
       const handler = getSpawnHandler();
-      await handler({ branch: 'feat/test', description: 'test', baseBranch: 'develop' });
+      await handler({ branch: 'feat/test', description: 'test', parentBranch: 'develop' });
 
       expect(mockFetchBranch).toHaveBeenCalledWith('develop', 'origin');
     });

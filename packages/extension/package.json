@@ -125,6 +125,10 @@
       {
         "command": "lumi-ops.abortRebase",
         "title": "⛔ Abort Rebase"
+      },
+      {
+        "command": "lumi-ops.convertToIntegration",
+        "title": "🔀 Promote to Integration Branch"
       }
     ],
     "menus": {
@@ -153,67 +157,42 @@
       "view/item/context": [
         {
           "command": "lumi-ops.open",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "when": "view == lumi-ops.activeClones && viewItem =~ /^shadowClone/",
           "group": "inline@1"
         },
         {
           "command": "lumi-ops.kill",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "when": "view == lumi-ops.activeClones && viewItem =~ /^shadowClone/",
           "group": "inline@2"
         },
         {
           "command": "lumi-ops.copyBranchName",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "when": "view == lumi-ops.activeClones && viewItem =~ /^shadowClone/",
           "group": "modification@0"
         },
         {
           "command": "lumi-ops.merge",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "when": "view == lumi-ops.activeClones && viewItem =~ /^shadowClone/",
           "group": "modification@1"
         },
         {
           "command": "lumi-ops.rebase",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "when": "view == lumi-ops.activeClones && viewItem =~ /^shadowClone/",
           "group": "modification@2"
         },
         {
           "command": "lumi-ops.kill",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone",
+          "when": "view == lumi-ops.activeClones && viewItem =~ /^shadowClone/",
           "group": "modification@3"
         },
         {
-          "command": "lumi-ops.open",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone-detached",
-          "group": "inline@1"
-        },
-        {
-          "command": "lumi-ops.kill",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone-detached",
-          "group": "inline@2"
-        },
-        {
-          "command": "lumi-ops.copyBranchName",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone-detached",
-          "group": "modification@0"
-        },
-        {
-          "command": "lumi-ops.merge",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone-detached",
-          "group": "modification@1"
-        },
-        {
-          "command": "lumi-ops.rebase",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone-detached",
-          "group": "modification@2"
+          "command": "lumi-ops.convertToIntegration",
+          "when": "view == lumi-ops.activeClones && viewItem =~ /^shadowClone/ && viewItem != shadowClone-integration && viewItem != shadowClone-integration-detached",
+          "group": "type@1"
         },
         {
           "command": "lumi-ops.abortRebase",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone-detached",
-          "group": "modification@3"
-        },
-        {
-          "command": "lumi-ops.kill",
-          "when": "view == lumi-ops.activeClones && viewItem == shadowClone-detached",
+          "when": "view == lumi-ops.activeClones && viewItem =~ /^shadowClone.*detached/",
           "group": "modification@4"
         }
       ]

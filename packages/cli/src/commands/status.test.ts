@@ -44,7 +44,7 @@ describe('setCloneStatus', () => {
 
     const metadata = await readMetadata(tmpDir);
     expect(metadata['feat/existing'].reviewStatus).toBe('done');
-    expect(metadata['feat/existing'].baseBranch).toBe('main');
+    expect(metadata['feat/existing'].parentBranch).toBe('main');
     expect(metadata['feat/existing'].description).toBe('test');
   });
 
