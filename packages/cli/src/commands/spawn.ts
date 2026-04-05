@@ -52,9 +52,11 @@ export async function spawn(branchName: string, options: { root: string; descrip
       metadata[branchName] = { cloneType: options.cloneType || 'task' };
       console.log(chalk.gray(`✓ Base branch: unknown (existing branch)`));
     } else {
+      // Auto-detect parentBranch: only set if baseBranch matches an existing clone
+      const isSubClone = options.parentBranch || Object.keys(metadata).some(k => k === resolvedBase);
       metadata[branchName] = {
         baseBranch: resolvedBase,
-        parentBranch: options.parentBranch || resolvedBase,
+        ...(isSubClone ? { parentBranch: options.parentBranch || resolvedBase } : {}),
         cloneType: options.cloneType || 'task',
       };
       console.log(chalk.gray(`✓ Recorded base branch: ${resolvedBase}`));

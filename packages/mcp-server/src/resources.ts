@@ -79,7 +79,7 @@ export function registerResources(server: McpServer, version: string): void {
           return {
             ...base,
             baseBranch: meta.baseBranch || c.baseBranch,
-            parentBranch: meta.parentBranch || meta.baseBranch || c.baseBranch,
+            parentBranch: meta.parentBranch || null,
             cloneType: meta.cloneType || 'task',
             reviewStatus: meta.reviewStatus,
           };

@@ -30,7 +30,7 @@ export function registerCloneOpsTools(server: McpServer): void {
     {
       branch: z.string().describe('Branch name for the new clone'),
       description: z.string().optional().describe('Task description → MISSION.md'),
-      parentBranch: z.string().optional().describe('Base branch (default: current branch)'),
+      baseBranch: z.string().optional().describe('Base branch (default: current branch)'),
       cloneType: z
         .enum(['task', 'integration'])
         .optional()
@@ -44,7 +44,7 @@ export function registerCloneOpsTools(server: McpServer): void {
         'Any path inside the target repository. Worktree paths are automatically resolved to the main repo root.'
       ),
     },
-    async ({ branch, description, parentBranch, cloneType, prompt, promptScope, repo }) => {
+    async ({ branch, description, baseBranch, cloneType, prompt, promptScope, repo }) => {
       const effectiveRoot = resolveEffectiveRoot(repo);
       const rootErr = ensureRootDir(effectiveRoot);
       if (rootErr) return rootErr;
@@ -81,8 +81,7 @@ export function registerCloneOpsTools(server: McpServer): void {
           spawn(branch, {
             root: effectiveRoot,
             description: finalDescription,
-            baseBranch: parentBranch,
-            parentBranch,
+            baseBranch,
             cloneType,
           }),
         );
@@ -105,7 +104,7 @@ export function registerCloneOpsTools(server: McpServer): void {
             {
               type: 'text' as const,
               text: JSON.stringify(
-                { branch, path: path.join(getClonesDir(effectiveRoot), branch), baseBranch: parentBranch || 'current', parentBranch: parentBranch || 'current', cloneType: cloneType || 'task' },
+                { branch, path: path.join(getClonesDir(effectiveRoot), branch), baseBranch: baseBranch || 'current', cloneType: cloneType || 'task' },
                 null,
                 2,
               ),
@@ -153,7 +152,7 @@ export function registerCloneOpsTools(server: McpServer): void {
             return {
               ...base,
               baseBranch: meta.baseBranch || c.baseBranch,
-              parentBranch: meta.parentBranch || meta.baseBranch || c.baseBranch,
+              parentBranch: meta.parentBranch || null,
               cloneType: meta.cloneType || 'task',
               reviewStatus: meta.reviewStatus,
             };
@@ -227,7 +226,7 @@ export function registerCloneOpsTools(server: McpServer): void {
           title: extractTitle(meta?.description),
           description: meta?.description || null,
           baseBranch: meta?.baseBranch || clone.baseBranch,
-          parentBranch: meta?.parentBranch || meta?.baseBranch || clone.baseBranch,
+          parentBranch: meta?.parentBranch || null,
           cloneType: meta?.cloneType || 'task',
           reviewStatus: meta?.reviewStatus || null,
           missionComplete,

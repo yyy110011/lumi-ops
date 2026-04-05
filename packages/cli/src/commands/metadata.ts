@@ -22,9 +22,6 @@ export interface CloneMetadata {
 /**
  * Read and parse the centralized .lumi-metadata.json for a repo.
  * Returns an empty object if the file doesn't exist or is unparseable.
- *
- * Includes migration shim: if entry has `baseBranch` but no `parentBranch`,
- * copies baseBranch → parentBranch. Does NOT delete baseBranch.
  */
 export async function readMetadata(
   rootDir: string,
@@ -32,15 +29,7 @@ export async function readMetadata(
   const metaPath = path.join(getRepoStorageDir(rootDir), METADATA_FILE);
   try {
     const raw = await fs.readFile(metaPath, 'utf-8');
-    const parsed = JSON.parse(raw);
-    // Migration: ensure parentBranch exists (copy from baseBranch if missing)
-    for (const key of Object.keys(parsed)) {
-      const entry = parsed[key];
-      if (entry.baseBranch && !entry.parentBranch) {
-        entry.parentBranch = entry.baseBranch;
-      }
-    }
-    return parsed;
+    return JSON.parse(raw);
   } catch {
     return {};
   }

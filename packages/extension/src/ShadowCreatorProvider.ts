@@ -313,10 +313,30 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           display: block;
         }
 
-        /* -- Clone Type Toggle -- */
-        .clone-type-toggle { display: flex; gap: 0; border: 1px solid var(--vscode-input-border); border-radius: 3px; overflow: hidden; }
-        .type-pill { flex: 1; padding: 4px 8px; font-size: 11px; border: none; cursor: pointer; background: var(--vscode-input-background); color: var(--vscode-descriptionForeground); font-weight: 600; transition: all 0.15s; }
-        .type-pill.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+        /* -- Integration Checkbox -- */
+        .desc-label-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 3px;
+        }
+        .desc-label-row label {
+          margin-bottom: 0;
+        }
+        .integration-check {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 11px;
+          color: var(--vscode-descriptionForeground);
+          cursor: pointer;
+          user-select: none;
+        }
+        .integration-check input[type="checkbox"] {
+          width: auto;
+          margin: 0;
+          cursor: pointer;
+        }
 
       </style>
     </head>
@@ -351,7 +371,10 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
 
       <!-- Task Description -->
       <div class="form-group desc-section">
-        <label for="description" id="descriptionLabel">Task Description</label>
+        <div class="desc-label-row">
+          <label for="description" id="descriptionLabel">Task Description</label>
+          <label class="integration-check"><input type="checkbox" id="integrationToggle"> Integration</label>
+        </div>
         <div class="desc-container">
           <textarea id="description" placeholder="Describe the objective for the AI Agent..."></textarea>
           <div class="save-template-row">
@@ -361,15 +384,6 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
             </button>
             <span class="scope-pill scope-project" id="scopePill" title="Click to toggle scope">P</span>
           </div>
-        </div>
-      </div>
-
-      <!-- Clone Type Toggle -->
-      <div class="form-group">
-        <label>Clone Type</label>
-        <div class="clone-type-toggle">
-          <button class="type-pill active" data-type="task">Task</button>
-          <button class="type-pill" data-type="integration">Integration</button>
         </div>
       </div>
 
@@ -443,7 +457,8 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
           scopePill.title = saveScope === 'project' ? 'Saving to Project' : 'Saving to Global';
         });
 
-        // === Clone Type Toggle ===
+        // === Integration Toggle ===
+        const integrationToggle = document.getElementById('integrationToggle');
         function updateDescriptionLabel() {
           if (cloneType === 'integration') {
             descriptionLabel.textContent = 'Integration Purpose';
@@ -453,14 +468,10 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
             descriptionEl.placeholder = 'Describe the objective for the AI Agent...';
           }
         }
-        document.querySelectorAll('.type-pill').forEach(pill => {
-          pill.addEventListener('click', () => {
-            document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('active'));
-            pill.classList.add('active');
-            cloneType = pill.getAttribute('data-type') || 'task';
-            updateDescriptionLabel();
-            updateSpawnBtnText();
-          });
+        integrationToggle.addEventListener('change', () => {
+          cloneType = integrationToggle.checked ? 'integration' : 'task';
+          updateDescriptionLabel();
+          updateSpawnBtnText();
         });
 
         // === Message handler ===
@@ -486,8 +497,7 @@ export class ShadowCreatorProvider implements vscode.WebviewViewProvider {
               branchInput.value = '';
               descriptionEl.value = '';
               cloneType = 'task';
-              document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('active'));
-              document.querySelector('.type-pill[data-type="task"]').classList.add('active');
+              integrationToggle.checked = false;
               updateDescriptionLabel();
               spawnBtn.textContent = 'Create Clone Only';
               selectedBaseBranch = currentBranch;

@@ -150,7 +150,7 @@ export function registerReviewOpsTools(server: McpServer): void {
         const result: Record<string, unknown> = {
           branch,
           baseBranch,
-          parentBranch: metadata[branch]?.parentBranch || baseBranch,
+          parentBranch: metadata[branch]?.parentBranch || null,
           report,
           commits,
           diffStat: {
@@ -333,7 +333,7 @@ export function registerReviewOpsTools(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: JSON.stringify({ branch, baseBranch, parentBranch: metadata[branch]?.parentBranch || baseBranch, commits, totalCommits }, null, 2),
+              text: JSON.stringify({ branch, baseBranch, parentBranch: metadata[branch]?.parentBranch || null, commits, totalCommits }, null, 2),
             },
           ],
         };

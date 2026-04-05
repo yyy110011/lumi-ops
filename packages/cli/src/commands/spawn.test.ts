@@ -124,7 +124,7 @@ describe('spawn', () => {
 
     expect(mockFs.writeJSON).toHaveBeenCalledWith(
       path.join(repoStorageDir, METADATA_FILE),
-      { [branchName]: { baseBranch: 'main', parentBranch: 'main', cloneType: 'task' } },
+      { [branchName]: { baseBranch: 'main', cloneType: 'task' } },
       { spaces: 2 },
     );
   });
@@ -449,7 +449,7 @@ describe('spawn', () => {
 
     expect(mockFs.writeJSON).toHaveBeenCalledWith(
       path.join(repoStorageDir, METADATA_FILE),
-      { [branchName]: { baseBranch: 'main', parentBranch: 'main', cloneType: 'integration' } },
+      { [branchName]: { baseBranch: 'main', cloneType: 'integration' } },
       { spaces: 2 },
     );
   });
@@ -461,7 +461,7 @@ describe('spawn', () => {
 
     expect(mockFs.writeJSON).toHaveBeenCalledWith(
       path.join(repoStorageDir, METADATA_FILE),
-      { [branchName]: { baseBranch: 'main', parentBranch: 'main', cloneType: 'task' } },
+      { [branchName]: { baseBranch: 'main', cloneType: 'task' } },
       { spaces: 2 },
     );
   });
