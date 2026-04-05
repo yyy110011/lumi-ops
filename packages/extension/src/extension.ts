@@ -14,6 +14,7 @@ import { StatusEventBus } from './StatusEventBus';
 import { runMigrations } from './migrations';
 import { deriveCloneId, setStatusIfApplicable } from './autoStatus';
 import { setupAutoCloseWatcher } from './autoCloseWatcher';
+import { setupRevisionFeedbackWatcher } from './revisionFeedbackWatcher';
 import { resolveWorkspaceRoots } from './workspaceRoots';
 
 import { GitUtils, getClonesDir, getRepoStorageDir, LUMI_OPS_HOME, METADATA_FILE, registerRepo } from '@lumi-ops/cli';
@@ -156,6 +157,12 @@ export async function activate(context: vscode.ExtensionContext) {
     const disposable = setupAutoCloseWatcher(currentWorkspacePath);
     if (disposable) {
       context.subscriptions.push(disposable);
+    }
+
+    // -- Watch for revision feedback in clone workspaces --
+    const revisionDisposable = setupRevisionFeedbackWatcher(currentWorkspacePath);
+    if (revisionDisposable) {
+      context.subscriptions.push(revisionDisposable);
     }
   }
 
