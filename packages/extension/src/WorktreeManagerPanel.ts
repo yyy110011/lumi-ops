@@ -227,7 +227,7 @@ export class WorktreeManagerPanel {
 
         // Enrich with metadata
         const metadataPath = path.join(getClonesDir(repo.rootDir), METADATA_FILE);
-        let metadata: Record<string, { baseBranch?: string; parentBranch?: string; reviewStatus?: string }> = {};
+        let metadata: Record<string, { baseBranch?: string; parentBranch?: string; cloneType?: string; reviewStatus?: string }> = {};
         try {
           const raw = fs.readFileSync(metadataPath, 'utf-8');
           metadata = JSON.parse(raw);
@@ -238,6 +238,7 @@ export class WorktreeManagerPanel {
           if (meta) {
             clone.baseBranch = meta.baseBranch;
             clone.parentBranch = meta.parentBranch;
+            clone.cloneType = meta.cloneType;
             clone.reviewStatus = meta.reviewStatus as typeof clone.reviewStatus;
           }
         }
@@ -457,12 +458,52 @@ export class WorktreeManagerPanel {
       min-width: 0;
       position: relative;
     }
+    .worktree-item.sub-clone {
+      padding-left: 40px;
+    }
     .worktree-item:hover {
       background: var(--vscode-list-hoverBackground);
     }
     .worktree-item.selected {
       background: var(--vscode-list-activeSelectionBackground);
       color: var(--vscode-list-activeSelectionForeground);
+    }
+    .wt-icon.status-integration {
+      color: var(--vscode-charts-blue, #3794ff);
+    }
+    .wt-icon.status-needsReview { color: var(--vscode-notificationsWarningIcon-foreground, #cca700); }
+    .wt-icon.status-needsRevision { color: var(--vscode-notificationsErrorIcon-foreground, #f44747); }
+    .parent-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      cursor: pointer;
+      font-size: 10px;
+      border-radius: 3px;
+      color: var(--vscode-foreground);
+      opacity: 0.7;
+      transition: transform 0.15s, opacity 0.1s;
+    }
+    .parent-toggle:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, rgba(90,93,94,0.31)); }
+    .parent-toggle.collapsed { transform: rotate(-90deg); }
+    .sub-clone-group {
+      overflow: hidden;
+      transition: max-height 0.2s ease;
+    }
+    .sub-clone-group.collapsed {
+      max-height: 0 !important;
+    }
+    .wt-coordinator-badge {
+      font-size: 9px;
+      padding: 0 4px;
+      border-radius: 3px;
+      background: var(--vscode-badge-background, rgba(255,255,255,0.1));
+      color: var(--vscode-badge-foreground, var(--vscode-descriptionForeground));
+      white-space: nowrap;
+      flex-shrink: 0;
     }
     .wt-icon {
       flex-shrink: 0;
@@ -646,6 +687,7 @@ export class WorktreeManagerPanel {
     let repos = [];
     let selectedKey = null; // "repoName:branch"
     let collapsedRepos = {};
+    let collapsedParents = {}; // track collapsed integration parents
 
     // ── Init ──
     vscode.postMessage({ command: 'getRepos' });
@@ -770,83 +812,161 @@ export class WorktreeManagerPanel {
         // Worktree list
         const list = document.createElement('div');
         list.className = 'worktree-list' + (isCollapsed ? ' collapsed' : '');
-        list.style.maxHeight = isCollapsed ? '0' : (repo.worktrees.length * 30 + 4) + 'px';
 
         if (repo.reachable) {
+          // Build hierarchy: identify which branches are sub-clones
+          const branchSet = new Set(repo.worktrees.filter(w => !w.isMain).map(w => w.branch));
+          const childrenMap = {}; // parentBranch -> [child wt, ...]
+          const subCloneBranches = new Set();
           repo.worktrees.forEach((wt) => {
-            const key = repo.name + ':' + wt.branch;
-            const item = document.createElement('div');
-            item.className = 'worktree-item' + (selectedKey === key ? ' selected' : '');
-            item.setAttribute('data-branch', wt.branch);
-            item.setAttribute('data-root', repo.rootDir);
-            item.setAttribute('data-status', wt.reviewStatus || 'todo');
-
-            const isMain = wt.isMain;
-            const status = wt.reviewStatus || 'todo';
-            let iconClass, iconCodicon;
-            if (isMain) {
-              iconClass = 'main';
-              iconCodicon = 'codicon-home';
-            } else if (wt.isDetached) {
-              iconClass = 'detached';
-              iconCodicon = 'codicon-sync';
-            } else {
-              iconClass = 'status-' + status;
-              iconCodicon = status === 'inProgress' ? 'codicon-sync' : status === 'done' ? 'codicon-pass-filled' : status === 'wontDo' ? 'codicon-close' : 'codicon-circle-outline';
+            if (!wt.isMain && wt.parentBranch && branchSet.has(wt.parentBranch)) {
+              if (!childrenMap[wt.parentBranch]) childrenMap[wt.parentBranch] = [];
+              childrenMap[wt.parentBranch].push(wt);
+              subCloneBranches.add(wt.branch);
             }
-            const clickable = (!isMain && !wt.isDetached) ? ' clickable' : '';
-            item.innerHTML =
-              '<span class="wt-icon ' + iconClass + clickable + '" data-status-btn="true"><span class="codicon ' + iconCodicon + '"></span></span>' +
-              '<span class="wt-name">' + escHtml(wt.branch) + '</span>' +
-              '<span class="wt-actions">' +
-                '<button class="wt-action-btn" title="Open in New Window" data-act="open"><span class="codicon codicon-window"></span></button>' +
-                (!isMain ? '<button class="wt-action-btn danger" title="Kill Shadow Clone" data-act="delete"><span class="codicon codicon-trash"></span></button>' : '') +
-              '</span>';
+          });
 
-            // Click to select
-            item.addEventListener('click', (e) => {
-              if (e.target.closest('.wt-action-btn')) return;
-              selectedKey = key;
-              renderRepoList();
-              renderDetail();
-            });
+          // Top-level worktrees: main + clones that are NOT sub-clones of another existing clone
+          const topLevel = repo.worktrees.filter(w => w.isMain || !subCloneBranches.has(w.branch));
 
-            // Status icon click to cycle
-            const statusBtn = item.querySelector('[data-status-btn]');
-            if (statusBtn && !isMain && !wt.isDetached) {
-              statusBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                vscode.postMessage({ command: 'cycleStatus', branch: wt.branch, rootDir: repo.rootDir });
-              });
+          // Calculate total visible items for maxHeight
+          let totalItems = 0;
+          topLevel.forEach(wt => {
+            totalItems++;
+            const children = childrenMap[wt.branch];
+            if (children && !(collapsedParents[repo.name + ':' + wt.branch])) {
+              totalItems += children.length;
             }
+          });
+          list.style.maxHeight = isCollapsed ? '0' : (totalItems * 30 + 4) + 'px';
 
-            // Hover action buttons
-            item.querySelectorAll('.wt-action-btn').forEach(btn => {
-              btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const act = btn.getAttribute('data-act');
-                if (act === 'open') {
-                  vscode.postMessage({ command: 'openWorktree', path: wt.path });
-                } else if (act === 'delete') {
-                  vscode.postMessage({ command: 'deleteWorktree', branch: wt.branch, rootDir: repo.rootDir, worktreePath: wt.path });
-                }
+          topLevel.forEach((wt) => {
+            const hasChildren = childrenMap[wt.branch] && childrenMap[wt.branch].length > 0;
+            const itemEl = createWorktreeItem(wt, repo, false, hasChildren);
+            list.appendChild(itemEl);
+
+            // Render sub-clones if this is a parent
+            if (hasChildren) {
+              const parentKey = repo.name + ':' + wt.branch;
+              const isParentCollapsed = collapsedParents[parentKey] ?? false;
+              const subGroup = document.createElement('div');
+              subGroup.className = 'sub-clone-group' + (isParentCollapsed ? ' collapsed' : '');
+              subGroup.style.maxHeight = isParentCollapsed ? '0' : (childrenMap[wt.branch].length * 30 + 2) + 'px';
+              childrenMap[wt.branch].forEach(child => {
+                subGroup.appendChild(createWorktreeItem(child, repo, true, false));
               });
-            });
-
-            // Right-click context menu
-            item.addEventListener('contextmenu', (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              showContextMenu(e.clientX, e.clientY, wt, repo);
-            });
-
-            list.appendChild(item);
+              list.appendChild(subGroup);
+            }
           });
         }
 
         group.appendChild(list);
         container.appendChild(group);
       });
+    }
+
+    function createWorktreeItem(wt, repo, isSubClone, hasChildren) {
+      const key = repo.name + ':' + wt.branch;
+      const item = document.createElement('div');
+      item.className = 'worktree-item' + (selectedKey === key ? ' selected' : '') + (isSubClone ? ' sub-clone' : '');
+      item.setAttribute('data-branch', wt.branch);
+      item.setAttribute('data-root', repo.rootDir);
+      item.setAttribute('data-status', wt.reviewStatus || 'todo');
+
+      const isMain = wt.isMain;
+      const isIntegration = wt.cloneType === 'integration';
+      const status = wt.reviewStatus || 'todo';
+      let iconClass, iconCodicon;
+      if (isMain) {
+        iconClass = 'main';
+        iconCodicon = 'codicon-home';
+      } else if (isIntegration) {
+        iconClass = 'status-integration';
+        iconCodicon = 'codicon-git-merge';
+      } else if (wt.isDetached) {
+        iconClass = 'detached';
+        iconCodicon = 'codicon-sync';
+      } else {
+        iconClass = 'status-' + status;
+        iconCodicon = status === 'inProgress' ? 'codicon-sync'
+          : status === 'done' ? 'codicon-pass-filled'
+          : status === 'wontDo' ? 'codicon-close'
+          : status === 'needsReview' ? 'codicon-eye'
+          : status === 'needsRevision' ? 'codicon-edit'
+          : 'codicon-circle-outline';
+      }
+      const clickable = (!isMain && !wt.isDetached && !isIntegration) ? ' clickable' : '';
+
+      // Build toggle button for parents with children
+      let toggleHtml = '';
+      if (hasChildren) {
+        const parentKey = repo.name + ':' + wt.branch;
+        const isParentCollapsed = collapsedParents[parentKey] ?? false;
+        toggleHtml = '<span class="parent-toggle' + (isParentCollapsed ? ' collapsed' : '') + '" data-toggle="true">▼</span>';
+      }
+
+      // Coordinator badge for integration clones
+      const badge = isIntegration ? '<span class="wt-coordinator-badge">coordinator</span>' : '';
+
+      item.innerHTML =
+        toggleHtml +
+        '<span class="wt-icon ' + iconClass + clickable + '" data-status-btn="true"><span class="codicon ' + iconCodicon + '"></span></span>' +
+        '<span class="wt-name">' + escHtml(wt.branch) + '</span>' +
+        badge +
+        '<span class="wt-actions">' +
+          '<button class="wt-action-btn" title="Open in New Window" data-act="open"><span class="codicon codicon-window"></span></button>' +
+          (!isMain ? '<button class="wt-action-btn danger" title="Kill Shadow Clone" data-act="delete"><span class="codicon codicon-trash"></span></button>' : '') +
+        '</span>';
+
+      // Toggle click for expand/collapse
+      const toggleBtn = item.querySelector('[data-toggle]');
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const parentKey = repo.name + ':' + wt.branch;
+          collapsedParents[parentKey] = !collapsedParents[parentKey];
+          renderRepoList();
+        });
+      }
+
+      // Click to select
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.wt-action-btn') || e.target.closest('[data-toggle]')) return;
+        selectedKey = key;
+        renderRepoList();
+        renderDetail();
+      });
+
+      // Status icon click to cycle
+      const statusBtn = item.querySelector('[data-status-btn]');
+      if (statusBtn && !isMain && !wt.isDetached) {
+        statusBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          vscode.postMessage({ command: 'cycleStatus', branch: wt.branch, rootDir: repo.rootDir });
+        });
+      }
+
+      // Hover action buttons
+      item.querySelectorAll('.wt-action-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const act = btn.getAttribute('data-act');
+          if (act === 'open') {
+            vscode.postMessage({ command: 'openWorktree', path: wt.path });
+          } else if (act === 'delete') {
+            vscode.postMessage({ command: 'deleteWorktree', branch: wt.branch, rootDir: repo.rootDir, worktreePath: wt.path });
+          }
+        });
+      });
+
+      // Right-click context menu
+      item.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        showContextMenu(e.clientX, e.clientY, wt, repo);
+      });
+
+      return item;
     }
 
     // ── Detail ──
@@ -882,16 +1002,21 @@ export class WorktreeManagerPanel {
         detailIconCodicon = status === 'inProgress' ? 'codicon-sync' : status === 'done' ? 'codicon-pass-filled' : status === 'wontDo' ? 'codicon-close' : 'codicon-circle-outline';
       }
 
+      const isIntegration = wt.cloneType === 'integration';
+      const cloneTypeLabel = isMain ? 'Main worktree' : (wt.isDetached ? 'Detached HEAD' : (isIntegration ? 'Integration (Coordinator)' : 'Task'));
+
       panel.innerHTML =
         '<div class="detail-title">' +
           '<span class="wt-icon ' + detailIconClass + '" style="font-size:16px;"><span class="codicon ' + detailIconCodicon + '"></span></span>' +
           escHtml(wt.branch) +
+          (isIntegration ? ' <span class="wt-coordinator-badge">coordinator</span>' : '') +
         '</div>' +
         '<div class="detail-grid">' +
           '<span class="detail-label">Repo</span><span class="detail-value">' + escHtml(repo.name) + '</span>' +
-          '<span class="detail-label">Type</span><span class="detail-value">' + (isMain ? 'Main worktree' : (wt.isDetached ? 'Detached HEAD' : 'Shadow Clone')) + '</span>' +
+          '<span class="detail-label">Clone Type</span><span class="detail-value">' + cloneTypeLabel + '</span>' +
           (!isMain && !wt.isDetached ? '<span class="detail-label">Status</span><span class="detail-value">' + (statusLabels[status] || status) + '</span>' : '') +
           (wt.baseBranch ? '<span class="detail-label">Base</span><span class="detail-value">' + escHtml(wt.baseBranch) + '</span>' : '') +
+          (wt.parentBranch ? '<span class="detail-label">Parent</span><span class="detail-value">' + escHtml(wt.parentBranch) + '</span>' : '') +
           '<span class="detail-label">Path</span><span class="detail-value">' + escHtml(wt.path) + '</span>' +
         '</div>' +
         '<div class="detail-future">Changed files will appear here</div>';
