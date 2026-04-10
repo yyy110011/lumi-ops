@@ -357,21 +357,15 @@ describe('spawn', () => {
     await expect(spawn(branchName, { root: rootDir })).resolves.not.toThrow();
   });
 
-  // --- cloneAgentRules from .vscode/settings.json ---
+  // --- cloneAgentRules ---
 
-  it('should write clone agent rule file when cloneAgentRules is enabled', async () => {
-    mockFs.readJSON.mockImplementation(async (p: string) => {
-      if (p === path.join(rootDir, '.vscode', 'settings.json')) {
-        return { 'lumi-ops.cloneAgentRules': true };
-      }
-      throw new Error('ENOENT');
-    });
+  it('should write clone agent rule file when cloneAgentRules option is true', async () => {
     mockFs.pathExists.mockImplementation(async (p: string) => {
       if (p === path.join(rootDir, '.vscode')) return true;
       return false;
     });
 
-    await spawn(branchName, { root: rootDir });
+    await spawn(branchName, { root: rootDir, cloneAgentRules: true });
 
     // Should create .agents/rules directory
     expect(mockFs.ensureDir).toHaveBeenCalledWith(
@@ -387,21 +381,56 @@ describe('spawn', () => {
     expect(ruleWriteCall![1]).toContain('MISSION_COMPLETE.md');
   });
 
-  it('should NOT write clone agent rule file when cloneAgentRules is not enabled', async () => {
-    mockFs.readJSON.mockImplementation(async (p: string) => {
-      if (p === path.join(rootDir, '.vscode', 'settings.json')) {
-        return { 'lumi-ops.cloneAgentRules': false };
-      }
-      throw new Error('ENOENT');
-    });
+  it('should NOT write clone agent rule file when cloneAgentRules option is false', async () => {
     mockFs.pathExists.mockResolvedValue(false);
 
-    await spawn(branchName, { root: rootDir });
+    await spawn(branchName, { root: rootDir, cloneAgentRules: false });
 
     // Should NOT write any rule file
     const ruleWriteCall = mockFs.writeFile.mock.calls.find(
       (c: any[]) => typeof c[0] === 'string' && c[0].includes('lumi-ops-clone-agent.md'),
     );
     expect(ruleWriteCall).toBeUndefined();
+  });
+
+  it('should use explicit cloneAgentRules option over settings.json value', async () => {
+    // settings.json says false, but option says true
+    mockFs.readJSON.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode', 'settings.json')) {
+        return { 'lumi-ops.cloneAgentRules': false };
+      }
+      throw new Error('ENOENT');
+    });
+    mockFs.pathExists.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode')) return true;
+      return false;
+    });
+
+    await spawn(branchName, { root: rootDir, cloneAgentRules: true });
+
+    const ruleWriteCall = mockFs.writeFile.mock.calls.find(
+      (c: any[]) => typeof c[0] === 'string' && c[0].includes('lumi-ops-clone-agent.md'),
+    );
+    expect(ruleWriteCall).toBeDefined();
+  });
+
+  it('should fall back to settings.json when cloneAgentRules option is undefined', async () => {
+    mockFs.readJSON.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode', 'settings.json')) {
+        return { 'lumi-ops.cloneAgentRules': true };
+      }
+      throw new Error('ENOENT');
+    });
+    mockFs.pathExists.mockImplementation(async (p: string) => {
+      if (p === path.join(rootDir, '.vscode')) return true;
+      return false;
+    });
+
+    await spawn(branchName, { root: rootDir });
+
+    const ruleWriteCall = mockFs.writeFile.mock.calls.find(
+      (c: any[]) => typeof c[0] === 'string' && c[0].includes('lumi-ops-clone-agent.md'),
+    );
+    expect(ruleWriteCall).toBeDefined();
   });
 });

@@ -6,7 +6,7 @@ import { registerRepo } from '../registry';
 import chalk from 'chalk';
 import { DEFAULT_MISSION_TEMPLATE } from '../missionDefaults';
 
-export async function spawn(branchName: string, options: { root: string; description?: string; baseBranch?: string; templates?: { name: string; content: string }[]; missionTemplate?: { task?: string; rules: string; instructions: string }; copyFolders?: string[]; onProgress?: (message: string) => void }) {
+export async function spawn(branchName: string, options: { root: string; description?: string; baseBranch?: string; templates?: { name: string; content: string }[]; missionTemplate?: { task?: string; rules: string; instructions: string }; copyFolders?: string[]; cloneAgentRules?: boolean; onProgress?: (message: string) => void }) {
   const rootDir = path.resolve(options.root);
   const git = new GitUtils(rootDir);
   try {
@@ -68,7 +68,8 @@ export async function spawn(branchName: string, options: { root: string; descrip
 
     // 4b. Read copyOnSpawn from .vscode/settings.json
     let settingsCopyFolders: string[] = [];
-    let cloneAgentRulesEnabled = false;
+    // Use explicit option if provided; only fall back to settings.json when undefined
+    let cloneAgentRulesEnabled = options.cloneAgentRules ?? false;
     try {
       const settingsPath = path.join(rootDir, '.vscode', 'settings.json');
       const settings = await fs.readJSON(settingsPath);
@@ -76,7 +77,7 @@ export async function spawn(branchName: string, options: { root: string; descrip
       if (typeof copyOnSpawn === 'string') {
         settingsCopyFolders = copyOnSpawn.split('\n').map(s => s.trim()).filter(Boolean);
       }
-      if (settings['lumi-ops.cloneAgentRules'] === true) {
+      if (options.cloneAgentRules === undefined && settings['lumi-ops.cloneAgentRules'] === true) {
         cloneAgentRulesEnabled = true;
       }
     } catch { /* no settings file */ }
@@ -109,8 +110,20 @@ You are working inside a **Shadow Clone** worktree managed by the Lumi-Ops exten
 
 ## After Completing Work
 
-1. Create \`.lumi/MISSION_COMPLETE.md\` summarising what you did.
-2. Call the MCP tool **set_clone_status** with status \`needsReview\`.
+1. **Verify your changes work:**
+   - Run the project's test suite (check package.json scripts, Makefile, or common commands)
+   - If tests fail, investigate and fix — don't dismiss as "unrelated"
+   - Don't just confirm code exists — prove it produces correct output
+
+2. **Self-review your changes** — check your diff for:
+   - Duplicated logic that could use existing project utilities
+   - Unnecessary comments that explain *what* instead of *why*
+   - Operations that could run in parallel but are serialized
+   - Existence checks before operations (check-then-act) that should be try-catch instead
+
+3. Create \`.lumi/MISSION_COMPLETE.md\` summarising what you did (see MISSION.md for format).
+
+4. Call the MCP tool **set_clone_status** with status \`needsReview\`.
 
 ## Revision Cycle
 
@@ -118,8 +131,9 @@ If a file called \`.lumi/REVIEW_FEEDBACK.md\` exists, you are in a **revision cy
 
 1. Read \`.lumi/MISSION.md\` → \`.lumi/MISSION_COMPLETE.md\` → \`.lumi/REVIEW_FEEDBACK.md\` (in that order).
 2. Address every item listed in the feedback.
-3. Update \`.lumi/MISSION_COMPLETE.md\` with what you changed.
-4. Call **set_clone_status** with status \`needsReview\` again.
+3. Verify your fixes work (run tests again).
+4. Update \`.lumi/MISSION_COMPLETE.md\` with what you changed.
+5. Call **set_clone_status** with status \`needsReview\` again.
 `;
       await fs.writeFile(path.join(rulesDir, 'lumi-ops-clone-agent.md'), ruleContent);
       console.log(chalk.gray('✓ Wrote clone agent rules.'));

@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.5.5
+
+### 🐛 Bug Fixes
+- **Clone Agent Rules Fix** — The `cloneAgentRules` setting was never passed from the Extension to the CLI `spawn()` function, causing agent rule files to never be written into clones. Now correctly passes the setting as an explicit option with proper precedence over `.vscode/settings.json` fallback.
+- **Clone Agent Rules Scope** — Changed `lumi-ops.cloneAgentRules` setting scope from `window` to `resource` so the default `true` value is properly accessible per-workspace.
+
+### ✨ Features
+- **Auto Git Exclude** — New `ensureGitExclude()` utility auto-manages `.git/info/exclude` on extension activation, preventing `.lumi/` and `.agents/rules/lumi-ops-*.md` from polluting `git status`. Uses `.git/info/exclude` instead of `.gitignore` for zero user-facing file modifications. Worktree-aware — resolves worktree `.git` pointer files to the common git directory.
+- **Agent Intelligence Upgrade** — Enhanced mission templates with self-review and verification sections. Upgraded root agent rules with coordinator protocol. Improved MCP workflow prompt templates.
+- **Agent Skills** — Added `codebase-pattern-mining` and `skillify` reusable agent skills.
+
 ## v0.5.4
 
 ### ✨ Features

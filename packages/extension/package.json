@@ -254,7 +254,7 @@
         "lumi-ops.cloneAgentRules": {
           "type": "boolean",
           "default": true,
-          "scope": "window",
+          "scope": "resource",
           "markdownDescription": "When enabled, injects a rule file (`.agents/rules/lumi-ops-clone-agent.md`) into clone workspaces that instructs AI agents to manage their clone status via MCP tools after completing work."
         }
       }
