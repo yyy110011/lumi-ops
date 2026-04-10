@@ -10,6 +10,7 @@ export * from './commands/metadata';
 export * from './commands/status';
 export * from './commands/revision';
 export * from './utils/git';
+export * from './utils/gitExclude';
 export * from './constants';
 export * from './registry';
 export * from './missionDefaults';

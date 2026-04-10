@@ -16,7 +16,7 @@ import { deriveCloneId, setStatusIfApplicable } from './autoStatus';
 import { setupAutoCloseWatcher } from './autoCloseWatcher';
 import { resolveWorkspaceRoots } from './workspaceRoots';
 
-import { GitUtils, getClonesDir, getRepoStorageDir, LUMI_OPS_HOME, METADATA_FILE, registerRepo } from '@lumi-ops/cli';
+import { GitUtils, getClonesDir, getRepoStorageDir, LUMI_OPS_HOME, METADATA_FILE, registerRepo, ensureGitExclude } from '@lumi-ops/cli';
 
 import { CommandDeps } from './commands/types';
 import { registerSettingsCommands } from './commands/settings';
@@ -125,6 +125,11 @@ export async function activate(context: vscode.ExtensionContext) {
   // Root Agent Mode: inject/remove .agents/rules/ based on setting
   const isCloneWorkspace = !!currentWorkspacePath;
   registerRootAgentMode(context, rootPath, isCloneWorkspace);
+
+  // Ensure .git/info/exclude has Lumi-Ops entries (non-fatal)
+  for (const root of allRoots) {
+    ensureGitExclude(root).catch(() => { /* non-fatal */ });
+  }
 
 
   // -- Auto-status transitions for clone workspaces --

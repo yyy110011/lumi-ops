@@ -6,7 +6,7 @@ import { registerRepo } from '../registry';
 import chalk from 'chalk';
 import { DEFAULT_MISSION_TEMPLATE } from '../missionDefaults';
 
-export async function spawn(branchName: string, options: { root: string; description?: string; baseBranch?: string; templates?: { name: string; content: string }[]; missionTemplate?: { task?: string; rules: string; instructions: string }; copyFolders?: string[]; onProgress?: (message: string) => void }) {
+export async function spawn(branchName: string, options: { root: string; description?: string; baseBranch?: string; templates?: { name: string; content: string }[]; missionTemplate?: { task?: string; rules: string; instructions: string }; copyFolders?: string[]; cloneAgentRules?: boolean; onProgress?: (message: string) => void }) {
   const rootDir = path.resolve(options.root);
   const git = new GitUtils(rootDir);
   try {
@@ -68,7 +68,8 @@ export async function spawn(branchName: string, options: { root: string; descrip
 
     // 4b. Read copyOnSpawn from .vscode/settings.json
     let settingsCopyFolders: string[] = [];
-    let cloneAgentRulesEnabled = false;
+    // Use explicit option if provided; only fall back to settings.json when undefined
+    let cloneAgentRulesEnabled = options.cloneAgentRules ?? false;
     try {
       const settingsPath = path.join(rootDir, '.vscode', 'settings.json');
       const settings = await fs.readJSON(settingsPath);
@@ -76,7 +77,7 @@ export async function spawn(branchName: string, options: { root: string; descrip
       if (typeof copyOnSpawn === 'string') {
         settingsCopyFolders = copyOnSpawn.split('\n').map(s => s.trim()).filter(Boolean);
       }
-      if (settings['lumi-ops.cloneAgentRules'] === true) {
+      if (options.cloneAgentRules === undefined && settings['lumi-ops.cloneAgentRules'] === true) {
         cloneAgentRulesEnabled = true;
       }
     } catch { /* no settings file */ }

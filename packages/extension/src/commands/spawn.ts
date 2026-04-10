@@ -81,6 +81,7 @@ export function registerSpawnCommands(
           }
 
           await spawn(branchName, { root: effectiveRoot, description, baseBranch, templates: args?.templates,
+            cloneAgentRules: vscode.workspace.getConfiguration('lumi-ops').get<boolean>('cloneAgentRules', true),
             copyFolders: (vscode.workspace.getConfiguration('lumi-ops').get<string>('copyOnSpawn') || '').split('\n').map((s: string) => s.trim()).filter(Boolean),
             onProgress: (message: string) => progress.report({ message }),
             missionTemplate: await (async () => {
