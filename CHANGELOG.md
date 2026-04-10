@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## v0.5.5
+## v0.5.6
 
 ### 🐛 Bug Fixes
 - **Clone Agent Rules Fix** — The `cloneAgentRules` setting was never passed from the Extension to the CLI `spawn()` function, causing agent rule files to never be written into clones. Now correctly passes the setting as an explicit option with proper precedence over `.vscode/settings.json` fallback.
