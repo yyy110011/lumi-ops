@@ -9,7 +9,7 @@ description: Architecture map and patterns for the Lumi-Ops VS Code extension. R
 
 | File | Size | Responsibility |
 |------|------|----------------|
-| `extension.ts` | ~434 lines | Activation, provider instantiation, fs.watch watchers, polling, command module registration via `CommandDeps` |
+| `extension.ts` | ~438 lines | Activation, provider instantiation, fs.watch watchers, polling, command module registration via `CommandDeps` |
 | `commands/types.ts` | ~18 lines | `CommandDeps` interface — shared dependency bag passed to all command modules |
 | `commands/spawn.ts` | ~4.6KB | `lumi-ops.spawn` + `lumi-ops.refresh` commands |
 | `commands/kill.ts` | ~1.9KB | `lumi-ops.kill` command (two-choice modal) |
@@ -20,7 +20,7 @@ description: Architecture map and patterns for the Lumi-Ops VS Code extension. R
 | `commands/settings.ts` | ~2.6KB | `lumi-ops.openSettings`, `pickCopyFolders` |
 | `commands/promptLibrary.ts` | ~10KB | All prompt library commands (CRUD, import, copy scope, inline create) |
 | `commands/missionTemplate.ts` | ~6.9KB | All mission template commands (switch, edit, fork, copy scope, delete) |
-| `rootAgentMode.ts` | ~2.5KB | Root Agent Mode rule file injection/removal based on setting |
+| `rootAgentMode.ts` | ~135 lines | Root Agent Mode rule file injection/removal based on setting; includes coordinator protocol, self-review, and verification instructions |
 | `autoStatus.ts` | ~1.7KB | `deriveCloneId()` + `setStatusIfApplicable()` — auto status transitions |
 | `autoCloseWatcher.ts` | ~1.7KB | `setupAutoCloseWatcher()` — auto-close window when worktree is removed |
 | `workspaceRoots.ts` | ~3.6KB | `resolveWorkspaceRoots()` — multi-root dedup, `pickRoot()` QuickPick |
@@ -46,13 +46,14 @@ After the command extraction refactor, `extension.ts` is now a clean orchestrato
 | 50-104 | Shadow clone MISSION.md auto-open + status-aware prompt (revision detection) |
 | 109-121 | Multi-root workspace resolution via `resolveWorkspaceRoots()` |
 | 122-128 | Migrations + Root Agent Mode registration |
-| 130-159 | Auto-status transitions (todo→inProgress) + auto-close watcher for clone workspaces |
-| 161-197 | Provider instantiation (StatusEventBus, ShadowTree, Creator, PromptLibrary, MissionTemplate, CustomEditor) |
-| 199-340 | fs.watch watchers: prompts (global + project), metadata, git refs (needsRebase detection) |
-| 342-365 | Polling interval (5s) for live refresh + branch change detection |
-| 367-390 | WorktreeManagerPanel registration + repo auto-register |
-| 392-414 | `CommandDeps` construction + all command module registration |
-| 416-433 | Test API return + `deactivate()` |
+| 129-132 | `ensureGitExclude()` — auto-manage `.git/info/exclude` for all workspace roots |
+| 135-164 | Auto-status transitions (todo→inProgress) + auto-close watcher for clone workspaces |
+| 166-202 | Provider instantiation (StatusEventBus, ShadowTree, Creator, PromptLibrary, MissionTemplate, CustomEditor) |
+| 204-345 | fs.watch watchers: prompts (global + project), metadata, git refs (needsRebase detection) |
+| 347-370 | Polling interval (5s) for live refresh + branch change detection |
+| 372-395 | WorktreeManagerPanel registration + repo auto-register |
+| 397-419 | `CommandDeps` construction + all command module registration |
+| 421-438 | Test API return + `deactivate()` |
 
 ## Command Registry (All Registered Commands)
 
@@ -191,6 +192,7 @@ Used in `package.json` `menus.view/item/context` for conditional menu items:
 | `lumi-ops.activeMissionTemplate` | string | Active template in `name:scope` format |
 | `lumi-ops.copyOnSpawn` | string | Newline-separated folders/files to copy |
 | `lumi-ops.rootAgentMode` | boolean | Inject `.agents/rules/lumi-ops-root-agent.md` in main workspace |
+| `lumi-ops.cloneAgentRules` | boolean | Inject `.agents/rules/lumi-ops-clone-agent.md` into clone workspaces on spawn |
 
 ## Key Patterns
 
