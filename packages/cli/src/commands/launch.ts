@@ -95,7 +95,7 @@ export async function launch(branchName: string, options: LaunchCommandOptions):
     const metadata = await fs.readJSON(metadataPath);
     if (metadata[branchName]) {
       const current = metadata[branchName].reviewStatus;
-      if (!current || current === 'todo') {
+      if (!current || current === 'todo' || current === 'needsRevision') {
         metadata[branchName].reviewStatus = 'inProgress';
         await fs.writeJSON(metadataPath, metadata, { spaces: 2 });
       }

@@ -197,4 +197,20 @@ describe('launch', () => {
     );
     expect(writeJSONCalls).toHaveLength(0);
   });
+
+  it('transitions needsRevision to inProgress on re-launch', async () => {
+    fsMocks.readJSON.mockResolvedValue({
+      'feat/test': { reviewStatus: 'needsRevision', baseBranch: 'main' },
+    });
+
+    await launch('feat/test', { root: '/repo', driver: 'claude' });
+
+    expect(fsMocks.writeJSON).toHaveBeenCalledWith(
+      expect.stringContaining('.lumi-metadata.json'),
+      expect.objectContaining({
+        'feat/test': expect.objectContaining({ reviewStatus: 'inProgress' }),
+      }),
+      { spaces: 2 }
+    );
+  });
 });
