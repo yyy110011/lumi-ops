@@ -37,5 +37,8 @@ export async function writeMetadata(
   metadata: Record<string, CloneMetadata>,
 ): Promise<void> {
   const metaPath = path.join(getRepoStorageDir(rootDir), METADATA_FILE);
+  // The `.lumi/` storage dir may not exist yet (it no longer rides along with
+  // the `.worktrees/` container) — ensure it before writing.
+  await fs.ensureDir(path.dirname(metaPath));
   await fs.writeFile(metaPath, JSON.stringify(metadata, null, 2));
 }

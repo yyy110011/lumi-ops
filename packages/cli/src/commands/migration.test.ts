@@ -198,7 +198,9 @@ describe('migration', () => {
 
     it('should merge metadata files during migration', async () => {
       const legacyMetadata = path.join(legacyDir, '.lumi-metadata.json');
-      const newMetadata = path.join(repoStorageDir, '.lumi-metadata.json');
+      // migrateLegacyClones targets the `.worktrees/` intermediate; the later
+      // migrateMetadataToLumiDir hop moves it on to `.lumi/`.
+      const newMetadata = path.join(clonesDir, '.lumi-metadata.json');
 
       mockFs.existsSync.mockImplementation((p: string) => {
         if (p === legacyDir) return true;
@@ -241,7 +243,9 @@ describe('migration', () => {
 
     it('should migrate .prompts directory', async () => {
       const legacyPrompts = path.join(legacyDir, '.prompts');
-      const newPrompts = path.join(repoStorageDir, '.prompts');
+      // migrateLegacyClones targets the `.worktrees/` intermediate (project
+      // prompts are later moved to <root>/.prompts by the extension migration).
+      const newPrompts = path.join(clonesDir, '.prompts');
 
       mockFs.existsSync.mockImplementation((p: string) => {
         if (p === legacyDir) return true;

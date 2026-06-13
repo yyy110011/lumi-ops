@@ -11,6 +11,7 @@ const { mockGitUtils, mockFs } = vi.hoisted(() => ({
     addWorktree: vi.fn(),
     addWorktreeExisting: vi.fn(),
     branchExists: vi.fn(),
+    pruneWorktrees: vi.fn(),
   },
   mockFs: {
     ensureDir: vi.fn(),
@@ -66,6 +67,7 @@ describe('spawn', () => {
     mockGitUtils.addWorktree.mockResolvedValue(undefined);
     mockGitUtils.addWorktreeExisting.mockResolvedValue(undefined);
     mockGitUtils.branchExists.mockResolvedValue(false);
+    mockGitUtils.pruneWorktrees.mockResolvedValue(undefined);
     mockFs.ensureDir.mockResolvedValue(undefined);
     // No longer need to mock pathExists for lumi-ops-id
     mockFs.readFile.mockResolvedValue('');

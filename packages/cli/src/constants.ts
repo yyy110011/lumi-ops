@@ -28,11 +28,14 @@ export const METADATA_FILE = '.lumi-metadata.json';
  */
 export type ReviewStatus = 'todo' | 'inProgress' | 'done' | 'wontDo' | 'needsReview' | 'needsRevision';
 /**
- * Get the per-repo storage directory for metadata and prompts.
- * Now unified with the worktrees directory.
+ * Get the per-repo storage directory for durable Lumi-Ops state (metadata).
+ * Lives at `<repoRoot>/.lumi/` — decoupled from the transient `.worktrees/`
+ * container so the worktrees folder can be deleted freely without losing
+ * metadata. Already git-excluded via `ensureGitExclude` (`.lumi/` is in the
+ * exclude patterns), so it is never accidentally committed.
  */
 export function getRepoStorageDir(rootDir: string): string {
-  return getClonesDir(rootDir);
+  return path.join(path.resolve(rootDir), '.lumi');
 }
 
 /**

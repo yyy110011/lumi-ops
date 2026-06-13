@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { getRepoStorageDir, LUMI_OPS_HOME, hasLegacyClones, migrateLegacyClones } from '@lumi-ops/cli';
+import { getClonesDir, LUMI_OPS_HOME, hasLegacyClones, migrateLegacyClones, migrateMetadataToLumiDir } from '@lumi-ops/cli';
 
 /**
  * Run all one-time migrations during extension activation.
@@ -8,8 +8,24 @@ import { getRepoStorageDir, LUMI_OPS_HOME, hasLegacyClones, migrateLegacyClones 
  */
 export async function runMigrations(context: vscode.ExtensionContext, rootPath: string | undefined): Promise<void> {
   await migrateLegacyWorktrees(rootPath);
+  await migrateMetadataLocation(rootPath);
   await migrateGlobalPrompts(context);
   await migrateProjectPrompts(rootPath);
+}
+
+/**
+ * Move the centralized metadata file out of the transient `.worktrees/`
+ * container into the durable `<repoRoot>/.lumi/` storage dir. Runs after the
+ * legacy `.shadow-clones` → `.worktrees` migration (two-hop) and before the
+ * sidebar first reads metadata. Best-effort.
+ */
+async function migrateMetadataLocation(rootPath: string | undefined): Promise<void> {
+  if (!rootPath) return;
+  try {
+    await migrateMetadataToLumiDir(rootPath);
+  } catch {
+    // Best-effort — don't block activation
+  }
 }
 
 /**
@@ -60,7 +76,8 @@ async function migrateGlobalPrompts(context: vscode.ExtensionContext): Promise<v
 async function migrateProjectPrompts(rootPath: string | undefined): Promise<void> {
   if (!rootPath) return;
   try {
-    const legacyDir = vscode.Uri.file(path.join(getRepoStorageDir(rootPath), '.prompts'));
+    // Legacy project prompts lived inside the `.worktrees/` container.
+    const legacyDir = vscode.Uri.file(path.join(getClonesDir(rootPath), '.prompts'));
     const entries = await vscode.workspace.fs.readDirectory(legacyDir);
     if (entries.length === 0) return;
 

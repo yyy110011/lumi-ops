@@ -7,7 +7,8 @@ import {
   unregisterRepo,
   parseWorktrees,
   GitUtils,
-  getClonesDir,
+  getRepoStorageDir,
+  migrateMetadataToLumiDir,
   METADATA_FILE,
 } from '@lumi-ops/cli';
 import type { ShadowClone, RegisteredRepo } from '@lumi-ops/cli';
@@ -154,7 +155,7 @@ export class WorktreeManagerPanel {
           case 'cycleStatus':
             if (msg.branch && msg.rootDir) {
               const statusOrder = ['todo', 'inProgress', 'done', 'wontDo'];
-              const metaPath = path.join(getClonesDir(msg.rootDir), METADATA_FILE);
+              const metaPath = path.join(getRepoStorageDir(msg.rootDir), METADATA_FILE);
               let meta: Record<string, any> = {};
               try {
                 const raw = fs.readFileSync(metaPath, 'utf-8');
@@ -222,11 +223,14 @@ export class WorktreeManagerPanel {
         }
 
         await git.pruneWorktrees();
+        // Idempotent: migrate this repo's metadata to <root>/.lumi/ even if it
+        // was never opened as the active workspace (so the manager enriches it).
+        await migrateMetadataToLumiDir(repo.rootDir);
         const worktreesRaw = await git.listWorktrees();
         const clones = parseWorktrees(worktreesRaw, repo.rootDir);
 
         // Enrich with metadata
-        const metadataPath = path.join(getClonesDir(repo.rootDir), METADATA_FILE);
+        const metadataPath = path.join(getRepoStorageDir(repo.rootDir), METADATA_FILE);
         let metadata: Record<string, { baseBranch?: string; reviewStatus?: string }> = {};
         try {
           const raw = fs.readFileSync(metadataPath, 'utf-8');
@@ -267,7 +271,7 @@ export class WorktreeManagerPanel {
   private _metaDebounce: ReturnType<typeof setTimeout> | null = null;
 
   private _setupMetadataWatchers(repos: { name: string; rootDir: string }[]) {
-    const currentDirs = new Set(repos.map(r => getClonesDir(r.rootDir)));
+    const currentDirs = new Set(repos.map(r => getRepoStorageDir(r.rootDir)));
 
     // Skip if same set of dirs already watched
     if (currentDirs.size === this._watchedDirs.size &&
