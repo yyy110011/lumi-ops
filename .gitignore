@@ -6,6 +6,11 @@ out/
 .DS_Store
 .vscode-test/
 *.vsix
+
+# Local-only editor / binary artifacts
+.vscode/mcp.json
+*.pdf
+doc/*.png
 doc/Background-Agent-Plan.md
 doc/QA-merge-improvement.md
 doc/conflict-detection.md
