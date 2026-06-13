@@ -117,10 +117,15 @@ describe('kill', () => {
     expect(mockExit).not.toHaveBeenCalled();
   });
 
-  it('should throw when removeWorktree fails', async () => {
+  it('should gracefully handle removeWorktree failure and still clean up', async () => {
     mockGitUtils.removeWorktree.mockRejectedValue(new Error('worktree not found'));
 
-    await expect(kill(identifier, { root: rootDir })).rejects.toThrow('worktree not found');
+    // Should NOT throw — graceful fallback to prune
+    await kill(identifier, { root: rootDir });
+
+    // Should still prune and delete branch
+    expect(mockGitUtils.pruneWorktrees).toHaveBeenCalled();
+    expect(mockGitUtils.deleteBranch).toHaveBeenCalledWith('feat/old-feature', true);
   });
 
   it('should throw when deleteBranch fails for actual branch', async () => {

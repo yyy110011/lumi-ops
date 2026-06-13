@@ -32,7 +32,7 @@ export function registerKillCommands(
             title: `Killing shadow clone: ${cloneId}`,
             cancellable: false
           }, async () => {
-            await kill(cloneId, { root: effectiveRoot!, keepBranch });
+            await kill(cloneId, { root: effectiveRoot!, keepBranch, worktreePath: item?.clone?.path });
           });
           
           const msg = keepBranch

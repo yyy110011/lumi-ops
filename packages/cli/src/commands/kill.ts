@@ -28,9 +28,15 @@ export async function kill(identifier: string, options: { root: string; keepBran
     }
 
     // 2. Remove worktree
-    await git.removeWorktree(targetPath, true);
+    try {
+      await git.removeWorktree(targetPath, true);
+      console.log(chalk.gray('✓ Removed git worktree.'));
+    } catch {
+      // Worktree directory may already be gone (manually deleted) —
+      // fall back to prune to clean up stale git internal references.
+      console.log(chalk.gray('⚠ Worktree directory not found, pruning stale reference...'));
+    }
     await git.pruneWorktrees();
-    console.log(chalk.gray('✓ Removed git worktree.'));
 
     // 2b. Clean up residual clone directory (e.g. extension re-created files after kill)
     if (await fs.pathExists(targetPath)) {
