@@ -2,6 +2,58 @@
 
 > Based on current feature status, design documents, and recent refactoring.
 
+---
+
+## 🧭 Strategic Direction (v0.6+) — Refocus on Worktree
+
+> Decided 2026-06-13 based on real dogfooding: in daily use, only the worktree
+> management layer is actually used. The agent-orchestration layer (background
+> agents, mission system, review protocol, agent rules) is being parked.
+
+**Positioning**: Lumi-Ops is a **VS Code worktree workflow tool**. Open clean,
+configure (copy patterns, post-create hooks), recycle in one click. Agent
+orchestration is the platform's job (Claude Code / Gemini already manage their
+own subagents + worktree isolation) — Lumi-Ops does **not** compete there.
+
+### Two modes (shared core, not a fork)
+
+The worktree core (list / spawn / kill / merge / prune, path convention, copy
+patterns) is **one implementation**. A mode only controls which UI / commands /
+MCP tools are *exposed*. Any feature added in Worktree Mode is automatically in
+Default Mode too — this is what keeps the cost low.
+
+| Mode | Default? | What it shows | Contract |
+|---|---|---|---|
+| **Default Mode** | ✅ Yes (unchanged for existing users) | Everything, including agent features | Agent features carry a **`deprecated` badge** — no bug fixes, no new work, not yet removed |
+| **Worktree Mode** | Opt-in toggle | Pure worktree management — agent UI/commands/MCP tools hidden | The focus of all future development |
+
+### Deprecation contract for the agent layer
+
+"No longer maintained" means: **bugs won't be fixed, no new features, but not
+removed yet.** Marked in two places — a `deprecated` badge in the UI and a note
+in the docs. Worktree Mode simply hides these. Once confirmed unused over a
+version or two, the agent layer can be extracted to its own package or deleted
+(git history preserves it).
+
+### TUI is spun out
+
+The Rust TUI (`lumi-ops-tui`) becomes a **separate project**, not a package in
+this repo. It targets a different niche — a cross-repo, multi-session monitor
+("which of my parallel AI sessions is waiting / done / stuck"). It shares
+*conventions* with this repo (git porcelain, `.worktrees/` layout), not code.
+
+### Worktree feature focus (promoted from "small stuff" to mainline)
+
+- **Lifecycle**: post-create command (`pnpm install`), copy patterns (`.env*`),
+  one-click recycle of merged worktrees (branch + dir + residue), prune → GC.
+- **Visibility**: diff summary vs base branch, stale/merged detection, disk usage.
+- **Cross-repo**: grow the Worktree Manager (beta) into a machine-wide view of
+  all repos' worktrees.
+- **Hygiene**: standardized paths, auto gitignore management, batch-clean stale
+  branches.
+
+---
+
 ## Current (v0.4.0)
 
 ✅ Spawn / Kill / Merge — Full lifecycle management
@@ -83,7 +135,15 @@
 
 ---
 
-## v0.5 — Background Agent Automation
+## ⚠️ DEPRECATED / PARKED — Agent Orchestration Layer
+
+> Parked 2026-06-13. See [Strategic Direction](#-strategic-direction-v06--refocus-on-worktree).
+> The sections below (v0.5 Background Agents, v0.6 MCP Agent Sandbox, plus the
+> Mission System / Root Agent Mode / Review Protocol / Clone Agent Rules listed
+> under "Current") are **no longer maintained**: no bug fixes, no new features,
+> not yet removed. Hidden in Worktree Mode.
+
+## v0.5 — Background Agent Automation _(parked)_
 
 **Goal**: Launch background agents with `--driver` via `spawn` (e.g., Antigravity or tmux) for fully automated background work.
 **Reference**: [Background-Agent-Plan.md](./Background-Agent-Plan.md)
@@ -104,7 +164,7 @@
 
 ---
 
-## v0.6 — MCP Agent Sandbox
+## v0.6 — MCP Agent Sandbox _(parked)_
 
 **Goal**: Ensure AI-controlled agents execute external commands exclusively through the Root-side MCP Server, preventing system-wide or main project impact.
 **Reference**: [mcp-agent-sandbox.md](./mcp-agent-sandbox.md)
