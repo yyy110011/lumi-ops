@@ -355,17 +355,29 @@ describe('e2e: kill orphan parent cleanup', () => {
     expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'feat/sibling-b'))).toBe(true);
   });
 
-  it('should NEVER delete the .worktrees root directory', async () => {
+  it('should remove the empty .worktrees root after the last clone is killed', async () => {
     await spawn('solo-branch', { root: tmpDir });
 
     await kill('solo-branch', { root: tmpDir });
 
     expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'solo-branch'))).toBe(false);
-    // The .worktrees root must NEVER be deleted
+    // The .worktrees container is now self-tidying: empty after the last kill → removed.
+    expect(await fs.pathExists(getClonesDir(tmpDir))).toBe(false);
+  });
+
+  it('should NOT remove the .worktrees root while other clones remain', async () => {
+    await spawn('keeper', { root: tmpDir });
+    await spawn('goner', { root: tmpDir });
+
+    await kill('goner', { root: tmpDir });
+
+    expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'goner'))).toBe(false);
+    // Other clone still present → container preserved.
+    expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'keeper'))).toBe(true);
     expect(await fs.pathExists(getClonesDir(tmpDir))).toBe(true);
   });
 
-  it('should handle deeply nested branch names (a/b/c) and clean all empty parents', async () => {
+  it('should handle deeply nested branch names (a/b/c) and clean all empty parents incl. root', async () => {
     await spawn('a/b/c', { root: tmpDir });
 
     await kill('a/b/c', { root: tmpDir });
@@ -373,8 +385,8 @@ describe('e2e: kill orphan parent cleanup', () => {
     expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'a/b/c'))).toBe(false);
     expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'a/b'))).toBe(false);
     expect(await fs.pathExists(path.join(getClonesDir(tmpDir), 'a'))).toBe(false);
-    // Root clones dir must survive
-    expect(await fs.pathExists(getClonesDir(tmpDir))).toBe(true);
+    // Empty root container is removed too once the last clone is gone.
+    expect(await fs.pathExists(getClonesDir(tmpDir))).toBe(false);
   });
 
   it('should only clean empty levels in partially nested structure', async () => {
@@ -401,8 +413,9 @@ describe('e2e: kill orphan parent cleanup', () => {
 
     // Parent 'chore/' should be cleaned up despite .DS_Store
     expect(await fs.pathExists(chorePath)).toBe(false);
-    // The .worktrees root must still exist
-    expect(await fs.pathExists(getClonesDir(tmpDir))).toBe(true);
+    // chore/ds-test was the only clone → the now-empty .worktrees root is
+    // self-tidied away too (a stray .DS_Store doesn't block removal).
+    expect(await fs.pathExists(getClonesDir(tmpDir))).toBe(false);
   });
 });
 

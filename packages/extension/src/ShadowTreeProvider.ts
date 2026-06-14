@@ -195,7 +195,16 @@ export class ShadowTreeProvider implements vscode.TreeDataProvider<ShadowItem> {
         }
 
         const worktreesRaw = await git.listWorktrees();
-        const clones = parseWorktrees(worktreesRaw, workspaceRoot);
+        const parsed = parseWorktrees(worktreesRaw, workspaceRoot);
+
+        // Condition-driven self-tidy: git flags a worktree whose folder was
+        // deleted manually as `prunable`. Drop those from the list (no ghost
+        // entries) and reconcile git's stale registrations — but only when
+        // something is actually prunable, so steady-state refreshes do no work.
+        const clones = parsed.filter(c => !c.prunable);
+        if (parsed.some(c => c.prunable)) {
+          try { await git.pruneWorktrees(); } catch { /* best-effort */ }
+        }
 
         // Enrich with metadata (keyed by dirName) and repoRoot
         for (const clone of clones) {

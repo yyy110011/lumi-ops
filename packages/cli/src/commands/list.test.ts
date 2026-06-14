@@ -48,6 +48,7 @@ describe('list', () => {
       path: '/fake/root',
       isShadow: false,
       isMain: true,
+      prunable: false,
     });
     expect(output[1]).toEqual({
       dirName: 'feat/test',
@@ -56,7 +57,21 @@ describe('list', () => {
       path: '/fake/root.worktrees/feat/test',
       isShadow: true,
       isMain: false,
+      prunable: false,
     });
+  });
+
+  it('should flag a worktree whose folder was deleted as prunable', async () => {
+    mockGitUtils.listWorktrees.mockResolvedValue([
+      'worktree /fake/root\nHEAD abc123\nbranch refs/heads/main',
+      `worktree /fake/root.worktrees/feat/gone\nHEAD def456\nbranch refs/heads/feat/gone\nprunable gitdir file points to non-existent location`,
+    ]);
+
+    await list({ root: rootDir, json: true });
+
+    const output = JSON.parse(consoleSpy.mock.calls[0][0]);
+    expect(output[0].prunable).toBe(false);
+    expect(output[1].prunable).toBe(true);
   });
 
   it('should strip refs/heads/ from branch names', async () => {

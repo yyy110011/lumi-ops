@@ -280,18 +280,40 @@ describe('kill', () => {
     expect(removeCalls).not.toContain(parentPath);
   });
 
-  it('should NOT delete the clones directory root for non-nested branches', async () => {
+  it('should remove the empty clones root for a flat last branch', async () => {
     const flatIdentifier = 'mybranch';
+    const clonesDir = getClonesDir(rootDir);
     mockExecSync.mockReturnValue('mybranch\n');
+
+    // clones root has no remaining worktree subdirs → should be removed
+    mockFs.readdir.mockImplementation(async (dir: string) => {
+      if (dir === clonesDir) return [];
+      throw new Error('ENOENT');
+    });
 
     await kill(flatIdentifier, { root: rootDir });
 
-    // remove should not have been called with the clones dir
-    const removeCalls = mockFs.remove.mock.calls.map((c: any[]) => c[0]);
-    expect(removeCalls).not.toContain(getClonesDir(rootDir));
+    expect(mockFs.remove).toHaveBeenCalledWith(clonesDir);
   });
 
-  it('should handle deeply nested branch names (a/b/c)', async () => {
+  it('should NOT remove the clones root while other clones remain', async () => {
+    const flatIdentifier = 'mybranch';
+    const clonesDir = getClonesDir(rootDir);
+    mockExecSync.mockReturnValue('mybranch\n');
+
+    // another clone directory still present → root must be preserved
+    mockFs.readdir.mockImplementation(async (dir: string) => {
+      if (dir === clonesDir) return [{ name: 'other', isDirectory: () => true }];
+      throw new Error('ENOENT');
+    });
+
+    await kill(flatIdentifier, { root: rootDir });
+
+    const removeCalls = mockFs.remove.mock.calls.map((c: any[]) => c[0]);
+    expect(removeCalls).not.toContain(clonesDir);
+  });
+
+  it('should handle deeply nested branch names (a/b/c) and remove the empty root', async () => {
     const deepIdentifier = 'a/b/c';
     const clonesDir = getClonesDir(rootDir);
     const parentB = path.join(clonesDir, 'a', 'b');
@@ -299,18 +321,16 @@ describe('kill', () => {
     mockExecSync.mockReturnValue('a/b/c\n');
 
     mockFs.readdir.mockImplementation(async (dir: string) => {
-      if (dir === parentB || dir === parentA) return [];
+      if (dir === parentB || dir === parentA || dir === clonesDir) return [];
       throw new Error('ENOENT');
     });
 
     await kill(deepIdentifier, { root: rootDir });
 
-    // Both empty parents should be removed
+    // Both empty parents AND the now-empty clones root should be removed
     expect(mockFs.remove).toHaveBeenCalledWith(parentB);
     expect(mockFs.remove).toHaveBeenCalledWith(parentA);
-    // But NOT the clonesDir itself
-    const removeCalls = mockFs.remove.mock.calls.map((c: any[]) => c[0]);
-    expect(removeCalls).not.toContain(clonesDir);
+    expect(mockFs.remove).toHaveBeenCalledWith(clonesDir);
   });
 
   it('should clean up parent directory containing only .DS_Store (no subdirectories)', async () => {
