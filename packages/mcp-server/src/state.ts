@@ -10,6 +10,7 @@ import {
   getLumiOpsHome,
   readMetadata as cliReadMetadata,
   writeMetadata as cliWriteMetadata,
+  migrateMetadataToLumiDir,
 } from '@lumi-ops/cli';
 import type { ReviewStatus } from '@lumi-ops/cli';
 import { resolveMainRepoRoot } from './utils.js';
@@ -71,11 +72,29 @@ export function ensureRootDir(rootDir?: string): { content: { type: 'text'; text
   }
 }
 
+/**
+ * Idempotent: move this repo's metadata out of the legacy `.worktrees/`
+ * container into `<root>/.lumi/` before any read/write. The MCP server has no
+ * activation hook of its own (unlike the extension), so this chokepoint is how
+ * agents that drive the server standalone get migrated. Cheap no-op after the
+ * first move. Best-effort — never block a metadata access on it.
+ */
+async function ensureMetadataMigrated(root: string): Promise<void> {
+  if (!root) return;
+  try {
+    await migrateMetadataToLumiDir(root);
+  } catch {
+    /* best-effort */
+  }
+}
+
 /** Read metadata for the current repo (delegates to CLI).
  * @param rootDir - Optional override; defaults to serverState.rootDir.
  */
 export async function readMetadata(rootDir?: string) {
-  return cliReadMetadata(rootDir || serverState.rootDir);
+  const root = rootDir || serverState.rootDir;
+  await ensureMetadataMigrated(root);
+  return cliReadMetadata(root);
 }
 
 /** Write metadata for the current repo (delegates to CLI).
@@ -86,7 +105,9 @@ export async function writeMetadata(
   metadata: Record<string, { baseBranch?: string; description?: string; reviewStatus?: ReviewStatus; sourcePrompt?: string }>,
   rootDir?: string,
 ) {
-  return cliWriteMetadata(rootDir || serverState.rootDir, metadata);
+  const root = rootDir || serverState.rootDir;
+  await ensureMetadataMigrated(root);
+  return cliWriteMetadata(root, metadata);
 }
 
 /** List .md files in a directory, excluding subdirectories like _missions/. */

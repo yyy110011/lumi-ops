@@ -64,8 +64,18 @@ becomes `<root>/.lumi/<METADATA_FILE>`. Clones already resolve via
 `mainRepoRoot`, so they keep reading the root's metadata.
 
 ### Migration
-One-time, reuse the `migration.ts` pattern: if old
-`.worktrees/.lumi-metadata.json` exists and the new location doesn't, move it.
+One-time, idempotent `migrateMetadataToLumiDir()`: if old
+`.worktrees/.lumi-metadata.json` exists, move it (merge if both exist, new wins).
+Triggered on every surface so it can't be missed:
+- **extension** — `runMigrations()` on activation (before the first sidebar read).
+- **CLI** — start of `spawn()`.
+- **WorktreeManager** — per-repo on panel refresh.
+- **MCP** — inside the `state.ts` `readMetadata`/`writeMetadata` chokepoint, so
+  an agent driving the MCP server *standalone* (no extension activation) is
+  migrated on its first metadata access regardless of which tool it calls first.
+  (Deliberately NOT added to CLI `kill()` — that would couple kill to the heavy
+  `migration.ts` module and break its child_process test mock; spawn + the MCP
+  chokepoint already cover the agent path.)
 
 ### Call-site impact (honestly scoped)
 Most reads go through `getRepoStorageDir()` → change that **one helper** to the

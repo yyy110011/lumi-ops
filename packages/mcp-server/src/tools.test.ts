@@ -64,6 +64,7 @@ const mocks = vi.hoisted(() => {
     },
     readMetadata: vi.fn().mockResolvedValue({}),
     writeMetadata: vi.fn().mockResolvedValue(undefined),
+    migrateMetadataToLumiDir: vi.fn().mockResolvedValue(false),
     setCloneStatus: vi.fn().mockResolvedValue(undefined),
     requestRevision: vi.fn().mockResolvedValue({ feedbackPath: '/mock/path' }),
     tool: toolFn,
@@ -99,6 +100,7 @@ vi.mock('@lumi-ops/cli', () => ({
   METADATA_FILE: '.lumi-metadata.json',
   readMetadata: (...args: any[]) => mocks.readMetadata(...args),
   writeMetadata: (...args: any[]) => mocks.writeMetadata(...args),
+  migrateMetadataToLumiDir: (...args: any[]) => mocks.migrateMetadataToLumiDir(...args),
   setCloneStatus: (...args: any[]) => mocks.setCloneStatus(...args),
   requestRevision: (...args: any[]) => mocks.requestRevision(...args),
 }));
@@ -1375,6 +1377,8 @@ describe('describe_clone tool', () => {
     expect(mocks.GitUtilsConstructor).toHaveBeenCalledWith(ALT_REPO);
     expect(mocks.parseWorktrees).toHaveBeenCalledWith(expect.anything(), ALT_REPO);
     expect(mocks.readMetadata).toHaveBeenCalledWith(ALT_REPO);
+    // The metadata read path migrates the resolved root out of .worktrees first.
+    expect(mocks.migrateMetadataToLumiDir).toHaveBeenCalledWith(ALT_REPO);
   });
 });
 
