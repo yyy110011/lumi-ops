@@ -62,6 +62,21 @@ export async function kill(identifier: string, options: { root: string; keepBran
       }
     }
 
+    // 2d. Remove the empty .worktrees container itself when no worktrees remain.
+    //     Safe now that metadata lives in <root>/.lumi/, not inside .worktrees —
+    //     so "no worktree subdirs" means the folder is genuinely empty. Files
+    //     like .DS_Store are ignored and removed with the folder. Best-effort.
+    try {
+      const entries = await fs.readdir(clonesDir, { withFileTypes: true });
+      const hasSubdirs = entries.some((e: { isDirectory: () => boolean }) => e.isDirectory());
+      if (!hasSubdirs) {
+        await fs.remove(clonesDir);
+        console.log(chalk.gray('✓ Removed empty .worktrees container.'));
+      }
+    } catch {
+      // .worktrees already gone or unreadable — nothing to do
+    }
+
     // 3. Delete branch (unless keepBranch is set)
     if (!options.keepBranch) {
       // Delete the actual current branch

@@ -38,8 +38,9 @@ vi.mock('fs', () => ({
   readFileSync: vi.fn(() => '{}'),
 }));
 
-import { ShadowItem } from './ShadowTreeProvider';
+import { ShadowItem, ShadowTreeProvider } from './ShadowTreeProvider';
 import type { EnrichedClone } from './ShadowTreeProvider';
+import { parseWorktrees, GitUtils } from '@lumi-ops/cli';
 
 const NONE = 0; // TreeItemCollapsibleState.None
 
@@ -189,5 +190,47 @@ describe('ShadowItem', () => {
       const item = new ShadowItem('main', NONE, makeClone({ dirName: 'root', currentBranch: 'main', path: '/repo', isShadow: false }), 'currentBranch', '/ext', undefined);
       expect(item.contextValue).toBe('currentBranch');
     });
+  });
+});
+
+describe('ShadowTreeProvider.getChildren — prunable self-tidy', () => {
+  const fakeBus = { onDidChange: () => ({ dispose() {} }) } as any;
+
+  function setup(clones: EnrichedClone[]) {
+    const gitInstance = {
+      listWorktrees: vi.fn(async () => ['raw']),
+      pruneWorktrees: vi.fn(async () => {}),
+      hasConflicts: vi.fn(async () => false),
+    };
+    (GitUtils as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => gitInstance);
+    (parseWorktrees as unknown as ReturnType<typeof vi.fn>).mockReturnValue(clones);
+    return gitInstance;
+  }
+
+  it('excludes prunable worktrees from the sidebar and prunes exactly once', async () => {
+    const git = setup([
+      makeClone({ dirName: 'root', currentBranch: 'main', branch: 'main', path: '/repo', isShadow: false, isMain: true }),
+      makeClone({ dirName: 'feat/gone', path: '/repo.worktrees/feat/gone', prunable: true }),
+      makeClone({ dirName: 'feat/live', path: '/repo.worktrees/feat/live' }),
+    ]);
+    const provider = new ShadowTreeProvider(['/repo'], '/ext', fakeBus);
+
+    const labels = (await provider.getChildren()).map(i => i.label);
+
+    expect(labels).toContain('feat/live');
+    expect(labels).not.toContain('feat/gone'); // ghost entry filtered out
+    expect(git.pruneWorktrees).toHaveBeenCalledTimes(1); // reconcile fired by the prunable entry
+  });
+
+  it('does not prune when nothing is prunable', async () => {
+    const git = setup([
+      makeClone({ dirName: 'root', currentBranch: 'main', branch: 'main', path: '/repo', isShadow: false, isMain: true }),
+      makeClone({ dirName: 'feat/live', path: '/repo.worktrees/feat/live' }),
+    ]);
+    const provider = new ShadowTreeProvider(['/repo'], '/ext', fakeBus);
+
+    await provider.getChildren();
+
+    expect(git.pruneWorktrees).not.toHaveBeenCalled(); // zero work in steady state
   });
 });

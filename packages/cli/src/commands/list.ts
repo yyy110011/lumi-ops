@@ -11,6 +11,7 @@ export interface ShadowClone {
   isShadow: boolean;
   isMain?: boolean;
   isDetached?: boolean;
+  prunable?: boolean;     // git reports the worktree dir is gone (folder deleted manually)
   baseBranch?: string;
   description?: string;
   reviewStatus?: ReviewStatus;
@@ -56,6 +57,9 @@ export function parseWorktrees(rawEntries: string[], _rootDir: string): ShadowCl
     const worktreePath = wtLine ? wtLine.substring('worktree '.length) : undefined;
     const branchRef = lines.find(l => l.startsWith('branch'))?.split(' ').pop();
     const isMain = i === 0;
+    // git marks an entry `prunable` when its worktree dir no longer exists
+    // (e.g. the user deleted the folder manually).
+    const prunable = lines.some(l => l.startsWith('prunable'));
 
     if (worktreePath && branchRef) {
       const currentBranch = branchRef.replace('refs/heads/', '');
@@ -67,6 +71,7 @@ export function parseWorktrees(rawEntries: string[], _rootDir: string): ShadowCl
         path: worktreePath,
         isShadow: !isMain,
         isMain,
+        prunable,
       });
     } else if (worktreePath && !branchRef) {
       // Detached HEAD (e.g. during rebase conflict) — derive branch from path
@@ -81,6 +86,7 @@ export function parseWorktrees(rawEntries: string[], _rootDir: string): ShadowCl
         isShadow: !isMain,
         isMain,
         isDetached: true,
+        prunable,
       });
     }
   }

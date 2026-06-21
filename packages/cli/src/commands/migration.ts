@@ -25,6 +25,45 @@ export function hasLegacyClones(rootDir: string): boolean {
 }
 
 /**
+ * Migrate the centralized metadata file from its legacy location inside the
+ * transient `.worktrees/` container to the durable `<repoRoot>/.lumi/` storage
+ * dir. Idempotent — a no-op once migrated (or if there was nothing to migrate).
+ *
+ * This is the keystone that lets `.worktrees/` be deleted freely: durable
+ * metadata no longer lives inside the folder the user is free to remove.
+ *
+ * @returns true if a migration was performed.
+ */
+export async function migrateMetadataToLumiDir(rootDir: string): Promise<boolean> {
+  const oldPath = path.join(getClonesDir(rootDir), METADATA_FILE);
+  const newPath = path.join(getRepoStorageDir(rootDir), METADATA_FILE);
+
+  // Safety: if the two helpers ever resolve to the same place, nothing to do.
+  if (path.resolve(oldPath) === path.resolve(newPath)) return false;
+  if (!(await fs.pathExists(oldPath))) return false;
+
+  try {
+    await fs.ensureDir(path.dirname(newPath));
+    if (await fs.pathExists(newPath)) {
+      // Both exist — merge, with the new location taking precedence.
+      let merged: Record<string, any> = {};
+      try { merged = await fs.readJSON(newPath); } catch { /* unreadable → {} */ }
+      let legacy: Record<string, any> = {};
+      try { legacy = await fs.readJSON(oldPath); } catch { /* unreadable → {} */ }
+      merged = { ...legacy, ...merged };
+      await fs.writeJSON(newPath, merged, { spaces: 2 });
+      await fs.remove(oldPath);
+    } else {
+      await fs.move(oldPath, newPath);
+    }
+    return true;
+  } catch {
+    // Best-effort — never block the caller on a migration failure.
+    return false;
+  }
+}
+
+/**
  * Migrate all worktrees from the legacy `.shadow-clones/` directory
  * to the new external storage at `<repoRoot>.worktrees/`.
  *

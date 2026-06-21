@@ -277,7 +277,9 @@ Add JWT-based authentication to the Express.js API.
   // -- fs.watch for instant cross-window metadata (status) refresh --
   // Set up watchers for ALL resolved roots (multi-root support)
   for (const watchRoot of allRoots) {
-    const metadataDir = getClonesDir(watchRoot);
+    // Metadata now lives in <root>/.lumi/, not the transient .worktrees/ —
+    // watch the durable storage dir so deleting .worktrees can't break sync.
+    const metadataDir = getRepoStorageDir(watchRoot);
     try {
       if (!fs.existsSync(metadataDir)) {
         fs.mkdirSync(metadataDir, { recursive: true });

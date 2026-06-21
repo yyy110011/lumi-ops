@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import { GitUtils } from '../utils/git';
 import { getClonesDir, getRepoStorageDir, METADATA_FILE } from '../constants';
+import { migrateMetadataToLumiDir } from './migration';
 import { registerRepo } from '../registry';
 import chalk from 'chalk';
 import { DEFAULT_MISSION_TEMPLATE } from '../missionDefaults';
@@ -17,6 +18,14 @@ export async function spawn(branchName: string, options: { root: string; descrip
     if (!(await git.hasCommits())) {
       throw new Error('Repository has no commits. Please make an initial commit before creating a Shadow Clone.');
     }
+
+    // 0a. One-time migration: move metadata out of the transient .worktrees/
+    //     container into the durable <repo>/.lumi/ storage dir (idempotent).
+    await migrateMetadataToLumiDir(rootDir);
+
+    // 0b. Defensive prune: clear stale .git/worktrees/ registrations left by a
+    //     manually-deleted folder, so re-spawning that branch name can't fail.
+    await git.pruneWorktrees();
 
     // 0. Resolve clones directory
 
@@ -42,6 +51,7 @@ export async function spawn(branchName: string, options: { root: string; descrip
 
     // 3. Persist base branch metadata (centralized)
     const repoStorageDir = getRepoStorageDir(rootDir);
+    await fs.ensureDir(repoStorageDir);
     const metadataPath = path.join(repoStorageDir, METADATA_FILE);
     let metadata: Record<string, { baseBranch?: string; description?: string }> = {};
     try { metadata = await fs.readJSON(metadataPath); } catch {}

@@ -75,15 +75,15 @@ suite('AutoStatus — setStatusIfApplicable', () => {
 
   setup(() => {
     // Create a temp directory that mimics a repo root.
-    // getRepoStorageDir(root) returns `${root}.worktrees`
+    // getRepoStorageDir(root) returns ${root}/.lumi
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lumi-test-'));
-    const storageDir = `${tmpDir}.worktrees`;
+    const storageDir = path.join(tmpDir, '.lumi');
     fs.mkdirSync(storageDir, { recursive: true });
   });
 
   teardown(() => {
     // Clean up temp dirs
-    const storageDir = `${tmpDir}.worktrees`;
+    const storageDir = path.join(tmpDir, '.lumi');
     const metadataPath = path.join(storageDir, '.lumi-metadata.json');
     try { fs.unlinkSync(metadataPath); } catch { /* ignore */ }
     try { fs.rmdirSync(storageDir); } catch { /* ignore */ }
@@ -91,12 +91,12 @@ suite('AutoStatus — setStatusIfApplicable', () => {
   });
 
   function writeMetadata(data: Record<string, any>) {
-    const metadataPath = path.join(`${tmpDir}.worktrees`, '.lumi-metadata.json');
+    const metadataPath = path.join(tmpDir, '.lumi', '.lumi-metadata.json');
     fs.writeFileSync(metadataPath, JSON.stringify(data, null, 2));
   }
 
   function readMetadata(): Record<string, any> {
-    const metadataPath = path.join(`${tmpDir}.worktrees`, '.lumi-metadata.json');
+    const metadataPath = path.join(tmpDir, '.lumi', '.lumi-metadata.json');
     return JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
   }
 
