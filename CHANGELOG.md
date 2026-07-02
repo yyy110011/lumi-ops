@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.6.0
+
+### ✨ Features
+- **Metadata Decoupled from `.worktrees/`** — Clone metadata (`.lumi-metadata.json`) now lives in `<repo>/.lumi/` instead of inside the transient `<repo>.worktrees/` container, so the worktrees folder can be deleted freely without losing metadata. Existing metadata is auto-migrated on first access — via extension activation, CLI commands, or the MCP server's read/write chokepoint — no user action needed.
+- **Self-Tidy `.worktrees` Container** — Killing the last clone now also removes the empty `.worktrees` container directory itself, leaving no residue next to the repo.
+- **Condition-Driven Prune** — Stale worktree detection is now driven by git's own `prunable` flag from `git worktree list --porcelain` instead of directory heuristics. The sidebar filters out prunable entries and cleanup targets exactly what git considers stale.
+
+### 🐛 Bug Fixes
+- **Sidebar Kill for Legacy-Path Worktrees (#44)** — The sidebar kill command now passes the actual worktree path to the CLI, so clones living at legacy locations (e.g. `.shadow-clones/`) can be killed from the sidebar instead of only from the Worktree Manager. Kill also gracefully falls back to `git worktree prune` when the worktree directory is already gone.
+
+### 🔧 Improvements
+- **Repo Tidy** — Local editor config and binary artifacts are no longer tracked; roadmap refocused on the worktree workflow (agent orchestration layer parked).
+
 ## v0.5.6
 
 ### 🐛 Bug Fixes
