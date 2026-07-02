@@ -36,11 +36,13 @@ jobs:
       - name: Set version in package.json
         run: |
           cd packages/cli
-          npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
           cd ../extension
-          npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
           cd ../mcp-server
-          npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -51,6 +53,8 @@ jobs:
       - name: Build MCP Server
         run: pnpm --filter @lumi-ops/mcp-server build
 
+      # skipDuplicate on marketplace steps + registry check on npm keep every
+      # publish step idempotent, so a partially failed run can be re-run safely.
       - name: Publish to Open VSX
         uses: HaaLeo/publish-vscode-extension@v2
         with:
@@ -58,6 +62,7 @@ jobs:
           registryUrl: https://open-vsx.org
           packagePath: packages/extension
           dependencies: false
+          skipDuplicate: true
 
       - name: Publish to VS Code Marketplace
         uses: HaaLeo/publish-vscode-extension@v2
@@ -66,17 +71,33 @@ jobs:
           registryUrl: https://marketplace.visualstudio.com
           packagePath: packages/extension
           dependencies: false
+          skipDuplicate: true
 
       - name: Publish MCP Server to npm
-        run: npm publish --access public
+        run: |
+          if npm view "@lumi-ops/mcp-server@${VERSION}" version >/dev/null 2>&1; then
+            echo "⏭ @lumi-ops/mcp-server@${VERSION} already on npm — skipping"
+          else
+            npm publish --access public
+          fi
         working-directory: packages/mcp-server
         env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Create version bump PR
         run: |
-          VERSION=${{ steps.version.outputs.VERSION }}
           BRANCH="chore/bump-v${VERSION}"
+
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "⏭ Branch ${BRANCH} already exists — skipping bump PR"
+            exit 0
+          fi
+
+          if git diff --quiet -- packages/cli/package.json packages/extension/package.json packages/mcp-server/package.json; then
+            echo "⏭ Versions already at ${VERSION} on main — skipping bump PR"
+            exit 0
+          fi
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -92,4 +113,5 @@ jobs:
             --base main \
             --head "$BRANCH"
         env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
