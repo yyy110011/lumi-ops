@@ -87,7 +87,7 @@ describe('registerRootAgentMode', () => {
       const content = mockWriteFile.mock.calls[0][1];
       expect(content).toContain('Root Agent Mode');
       expect(content).toContain('DO NOT implement code directly');
-      expect(content).toContain('.prompts/');
+      expect(content).toContain('Coordinator Protocol');
     });
 
     it('deletes rule file when disabled + root workspace', async () => {
