@@ -191,3 +191,43 @@ The crash matters for **Linux/Windows** users you ship to:
    re-spawnable).
 5. ⏳ OPEN: Phase 3 watcher hardening — bundle now, or separate release-hardening pass?
 6. ⏳ Per CLAUDE.md: design-only so far; **awaiting explicit go-ahead before any code.**
+
+## 7. Phase 2b — location-agnostic cleanup (legacy `.shadow-clones` self-tidy) — APPROVED 2026-07-08
+
+**Problem.** Killing a worktree at the legacy location (`<repo>/.shadow-clones/`)
+removes the worktree (post-#44) but skips all cleanup: step 2c
+(`kill.ts` parent-climb) and step 2d (empty-container removal) are both gated on
+`getClonesDir()` — the new `<repo>.worktrees` sibling — so legacy empty shells
+(`.shadow-clones/feat/` after killing `feat/x`, and the empty `.shadow-clones/`
+container itself) are left behind forever.
+
+**Design.** Derive the cleanup boundary from the actual `targetPath` instead of
+assuming the new location:
+
+- `resolveCleanupContainer(rootDir, targetPath)` → returns whichever known
+  container the target lives in — `getClonesDir(rootDir)` or
+  `<rootDir>/${SHADOW_CLONES_DIR}` — or `null` for a custom path outside both.
+  Match with `startsWith(container + path.sep)` (also fixes the pre-existing
+  unbounded `startsWith` that would confuse `/repo.worktrees-backup` with
+  `/repo.worktrees`).
+- Step 2c climbs within the resolved container; `null` → skip (no safe boundary).
+- Step 2d rules differ per container:
+  - `.worktrees` (new): unchanged — remove when no subdirectories remain
+    (stray files like `.DS_Store` are ignored; metadata is guaranteed in `.lumi/`).
+  - `.shadow-clones` (legacy): stricter — remove only when there are no
+    subdirectories **and** no files other than `.DS_Store`. The legacy container
+    may still hold an unmigrated `.lumi-metadata.json` (see `migration.ts`
+    legacy meta paths); the loose rule would delete it.
+- Hardening (same code path): call `migrateMetadataToLumiDir(rootDir)` at the
+  top of `kill()`. The CLI currently has this chokepoint only in `spawn()` —
+  a pure-CLI user who kills without ever spawning post-upgrade could still have
+  metadata inside `.worktrees/`, which step 2d would delete with the container.
+
+**Out of scope:** `deriveDirName` last-segment metadata-key mismatch for legacy
+nested branches; command-palette kill route losing `worktreePath`.
+
+**Tests** (`kill.test.ts`): legacy nested shell + container removed when empty;
+container kept while other clones remain; container kept when it still holds
+`.lumi-metadata.json`; custom out-of-container path → no climb, no removal;
+unmigrated `.worktrees` metadata survives kill via migration; existing suite
+unchanged as regression guard.
