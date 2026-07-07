@@ -1,9 +1,25 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { GitUtils } from '../utils/git';
-import { getClonesDir, getRepoStorageDir, METADATA_FILE } from '../constants';
+import { getClonesDir, getRepoStorageDir, METADATA_FILE, SHADOW_CLONES_DIR } from '../constants';
+import { migrateMetadataToLumiDir } from './migration';
 import chalk from 'chalk';
 import { execSync } from 'child_process';
+
+/**
+ * Resolve which known clones container a worktree path lives in — the current
+ * `<repo>.worktrees` sibling or the legacy `<repo>/.shadow-clones` — so the
+ * post-kill cleanup can climb and self-tidy within the right boundary.
+ * Returns null for a path outside both: no known boundary means no cleanup.
+ */
+function resolveCleanupContainer(rootDir: string, targetPath: string): string | null {
+  const candidates = [
+    getClonesDir(rootDir),
+    path.join(path.resolve(rootDir), SHADOW_CLONES_DIR),
+  ];
+  const resolved = path.resolve(targetPath);
+  return candidates.find((dir) => resolved.startsWith(dir + path.sep)) ?? null;
+}
 
 export async function kill(identifier: string, options: { root: string; keepBranch?: boolean; worktreePath?: string }) {
   const rootDir = path.resolve(options.root);
@@ -12,6 +28,12 @@ export async function kill(identifier: string, options: { root: string; keepBran
 
   try {
     console.log(chalk.yellow(`🧨 Killing shadow clone: ${identifier}...`));
+
+    // 0. Move durable metadata out of the transient container before the
+    //    cleanup below can remove the folder it may still live in (a pure-CLI
+    //    user can reach kill without ever hitting the spawn/extension/MCP
+    //    migration chokepoints). Idempotent, best-effort.
+    await migrateMetadataToLumiDir(rootDir);
 
     // 1. Read the actual current branch before removing the worktree
     let actualBranch: string | undefined;
@@ -44,37 +66,48 @@ export async function kill(identifier: string, options: { root: string; keepBran
       console.log(chalk.gray('✓ Cleaned up residual clone directory.'));
     }
 
-    // 2c. Clean up empty parent directories left by nested branch names (e.g. feat/xxx)
-    const clonesDir = getClonesDir(rootDir);
-    let parentDir = path.dirname(targetPath);
-    while (parentDir !== clonesDir && parentDir.startsWith(clonesDir)) {
-      try {
-        const entries = await fs.readdir(parentDir, { withFileTypes: true });
-        const hasSubdirs = entries.some((e: { isDirectory: () => boolean }) => e.isDirectory());
-        if (!hasSubdirs) {
-          await fs.remove(parentDir);
-          parentDir = path.dirname(parentDir);
-        } else {
-          break; // Parent still has child directories (other clones), stop climbing
+    // 2c. Clean up empty parent directories left by nested branch names (e.g. feat/xxx).
+    //     The climb is bounded by whichever known container the target lives in —
+    //     the current .worktrees or the legacy .shadow-clones. A custom path
+    //     outside both has no safe boundary: no climb, no container removal.
+    const containerDir = resolveCleanupContainer(rootDir, targetPath);
+    if (containerDir) {
+      let parentDir = path.dirname(targetPath);
+      while (parentDir.startsWith(containerDir + path.sep)) {
+        try {
+          const entries = await fs.readdir(parentDir, { withFileTypes: true });
+          const hasSubdirs = entries.some((e: { isDirectory: () => boolean }) => e.isDirectory());
+          if (!hasSubdirs) {
+            await fs.remove(parentDir);
+            parentDir = path.dirname(parentDir);
+          } else {
+            break; // Parent still has child directories (other clones), stop climbing
+          }
+        } catch {
+          break; // Directory doesn't exist or not accessible, stop
         }
-      } catch {
-        break; // Directory doesn't exist or not accessible, stop
       }
     }
 
-    // 2d. Remove the empty .worktrees container itself when no worktrees remain.
-    //     Safe now that metadata lives in <root>/.lumi/, not inside .worktrees —
-    //     so "no worktree subdirs" means the folder is genuinely empty. Files
-    //     like .DS_Store are ignored and removed with the folder. Best-effort.
-    try {
-      const entries = await fs.readdir(clonesDir, { withFileTypes: true });
-      const hasSubdirs = entries.some((e: { isDirectory: () => boolean }) => e.isDirectory());
-      if (!hasSubdirs) {
-        await fs.remove(clonesDir);
-        console.log(chalk.gray('✓ Removed empty .worktrees container.'));
+    // 2d. Remove the empty container itself when no worktrees remain.
+    //     .worktrees is safe to drop with stray files inside (metadata lives in
+    //     <root>/.lumi/, so files like .DS_Store go with the folder). The legacy
+    //     .shadow-clones may still hold an unmigrated .lumi-metadata.json, so it
+    //     is only removed when nothing but .DS_Store remains. Best-effort.
+    if (containerDir) {
+      const isLegacyContainer = containerDir !== getClonesDir(rootDir);
+      try {
+        const entries = await fs.readdir(containerDir, { withFileTypes: true });
+        const hasSubdirs = entries.some((e: { isDirectory: () => boolean }) => e.isDirectory());
+        const hasBlockingFiles = isLegacyContainer &&
+          entries.some((e: { name: string; isDirectory: () => boolean }) => !e.isDirectory() && e.name !== '.DS_Store');
+        if (!hasSubdirs && !hasBlockingFiles) {
+          await fs.remove(containerDir);
+          console.log(chalk.gray(`✓ Removed empty ${isLegacyContainer ? SHADOW_CLONES_DIR : '.worktrees'} container.`));
+        }
+      } catch {
+        // Container already gone or unreadable — nothing to do
       }
-    } catch {
-      // .worktrees already gone or unreadable — nothing to do
     }
 
     // 3. Delete branch (unless keepBranch is set)

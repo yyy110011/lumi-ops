@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as path from 'path';
 
 // --- Mocks (vi.hoisted ensures these are available when vi.mock factories run) ---
-const { mockGitUtils, mockFs, mockExecSync } = vi.hoisted(() => ({
+const { mockGitUtils, mockFs, mockExecSync, mockMigrate } = vi.hoisted(() => ({
   mockGitUtils: {
     removeWorktree: vi.fn(),
     deleteBranch: vi.fn(),
@@ -17,10 +17,15 @@ const { mockGitUtils, mockFs, mockExecSync } = vi.hoisted(() => ({
     remove: vi.fn(),
   },
   mockExecSync: vi.fn(),
+  mockMigrate: vi.fn(),
 }));
 
 vi.mock('../utils/git', () => ({
   GitUtils: vi.fn(() => mockGitUtils),
+}));
+
+vi.mock('./migration', () => ({
+  migrateMetadataToLumiDir: mockMigrate,
 }));
 
 vi.mock('fs-extra', () => ({
@@ -44,7 +49,7 @@ vi.mock('child_process', () => ({
 const mockExit = vi.spyOn(process, 'exit').mockImplementation((() => {}) as any);
 
 import { kill } from './kill';
-import { getClonesDir, getRepoStorageDir, METADATA_FILE } from '../constants';
+import { getClonesDir, getRepoStorageDir, METADATA_FILE, SHADOW_CLONES_DIR } from '../constants';
 
 describe('kill', () => {
   const identifier = 'feat/old-feature';
@@ -61,6 +66,7 @@ describe('kill', () => {
     mockFs.pathExists.mockResolvedValue(false);
     mockFs.remove.mockResolvedValue(undefined);
     mockFs.readdir.mockRejectedValue(new Error('ENOENT'));
+    mockMigrate.mockResolvedValue(false);
     // Default: actual branch matches identifier
     mockExecSync.mockReturnValue('feat/old-feature\n');
   });
@@ -345,5 +351,109 @@ describe('kill', () => {
     await kill(nestedIdentifier, { root: rootDir });
 
     expect(mockFs.remove).toHaveBeenCalledWith(parentPath);
+  });
+
+  // --- Legacy .shadow-clones cleanup tests (location-agnostic cleanup) ---
+
+  const legacyContainer = path.join(rootDir, SHADOW_CLONES_DIR);
+
+  it('should clean up empty parent shell and .shadow-clones container after killing a legacy-path worktree', async () => {
+    const legacyTarget = path.join(legacyContainer, 'feat', 'x');
+    const legacyParent = path.join(legacyContainer, 'feat');
+    mockExecSync.mockReturnValue('feat/x\n');
+    mockFs.readdir.mockImplementation(async (dir: string) => {
+      if (dir === legacyParent || dir === legacyContainer) return [];
+      throw new Error('ENOENT');
+    });
+
+    await kill('x', { root: rootDir, worktreePath: legacyTarget });
+
+    expect(mockGitUtils.removeWorktree).toHaveBeenCalledWith(legacyTarget, true);
+    expect(mockFs.remove).toHaveBeenCalledWith(legacyParent);
+    expect(mockFs.remove).toHaveBeenCalledWith(legacyContainer);
+  });
+
+  it('should NOT remove .shadow-clones while other legacy clones remain', async () => {
+    const legacyTarget = path.join(legacyContainer, 'gone');
+    mockExecSync.mockReturnValue('gone\n');
+    mockFs.readdir.mockImplementation(async (dir: string) => {
+      if (dir === legacyContainer) return [{ name: 'other', isDirectory: () => true }];
+      throw new Error('ENOENT');
+    });
+
+    await kill('gone', { root: rootDir, worktreePath: legacyTarget });
+
+    const removeCalls = mockFs.remove.mock.calls.map((c: any[]) => c[0]);
+    expect(removeCalls).not.toContain(legacyContainer);
+  });
+
+  it('should NOT remove .shadow-clones when an unmigrated metadata file remains inside', async () => {
+    const legacyTarget = path.join(legacyContainer, 'last-one');
+    mockExecSync.mockReturnValue('last-one\n');
+    mockFs.readdir.mockImplementation(async (dir: string) => {
+      if (dir === legacyContainer) return [{ name: METADATA_FILE, isDirectory: () => false }];
+      throw new Error('ENOENT');
+    });
+
+    await kill('last-one', { root: rootDir, worktreePath: legacyTarget });
+
+    const removeCalls = mockFs.remove.mock.calls.map((c: any[]) => c[0]);
+    expect(removeCalls).not.toContain(legacyContainer);
+  });
+
+  it('should remove .shadow-clones when only .DS_Store remains inside', async () => {
+    const legacyTarget = path.join(legacyContainer, 'last-one');
+    mockExecSync.mockReturnValue('last-one\n');
+    mockFs.readdir.mockImplementation(async (dir: string) => {
+      if (dir === legacyContainer) return [{ name: '.DS_Store', isDirectory: () => false }];
+      throw new Error('ENOENT');
+    });
+
+    await kill('last-one', { root: rootDir, worktreePath: legacyTarget });
+
+    expect(mockFs.remove).toHaveBeenCalledWith(legacyContainer);
+  });
+
+  it('should skip parent climb and container removal for a custom worktreePath outside known containers', async () => {
+    const customPath = '/elsewhere/my-worktree';
+    mockExecSync.mockReturnValue('mybranch\n');
+
+    await kill('mybranch', { root: rootDir, worktreePath: customPath });
+
+    expect(mockGitUtils.removeWorktree).toHaveBeenCalledWith(customPath, true);
+    // No known container boundary → cleanup never probes or removes directories
+    expect(mockFs.readdir).not.toHaveBeenCalled();
+    expect(mockFs.remove).not.toHaveBeenCalled();
+  });
+
+  it('should not treat a sibling directory sharing the .worktrees prefix as inside the container', async () => {
+    // /fake/root.worktrees-backup shares the raw string prefix of /fake/root.worktrees
+    const trickyPath = path.join(`${getClonesDir(rootDir)}-backup`, 'mybranch');
+    mockExecSync.mockReturnValue('mybranch\n');
+
+    await kill('mybranch', { root: rootDir, worktreePath: trickyPath });
+
+    expect(mockFs.readdir).not.toHaveBeenCalled();
+    expect(mockFs.remove).not.toHaveBeenCalled();
+  });
+
+  // --- Metadata migration chokepoint ---
+
+  it('should migrate metadata to .lumi/ before any container cleanup', async () => {
+    const clonesDir = getClonesDir(rootDir);
+    mockExecSync.mockReturnValue('mybranch\n');
+    mockFs.readdir.mockImplementation(async (dir: string) => {
+      if (dir === clonesDir) return [];
+      throw new Error('ENOENT');
+    });
+
+    await kill('mybranch', { root: rootDir });
+
+    expect(mockMigrate).toHaveBeenCalledWith(rootDir);
+    // Migration must run before the container is removed, or an unmigrated
+    // metadata file would be deleted with it
+    expect(mockMigrate.mock.invocationCallOrder[0]).toBeLessThan(
+      mockFs.remove.mock.invocationCallOrder[0],
+    );
   });
 });
