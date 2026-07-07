@@ -3,6 +3,7 @@ import * as fs from 'fs-extra';
 import { GitUtils } from '../utils/git';
 import { getClonesDir, getRepoStorageDir, METADATA_FILE, SHADOW_CLONES_DIR } from '../constants';
 import { migrateMetadataToLumiDir } from './migration';
+import { parseWorktrees } from './list';
 import chalk from 'chalk';
 import { execSync } from 'child_process';
 
@@ -21,10 +22,36 @@ function resolveCleanupContainer(rootDir: string, targetPath: string): string | 
   return candidates.find((dir) => resolved.startsWith(dir + path.sep)) ?? null;
 }
 
+/**
+ * Resolve the real on-disk worktree path for an identifier by asking git.
+ * Callers that don't know the path (MCP kill_clone, the command palette,
+ * raw CLI) previously guessed `<clonesDir>/<identifier>`, which misses
+ * worktrees at the legacy .shadow-clones or any custom location — and could
+ * even hit an unrelated directory sitting at the guessed path. Matches the
+ * checked-out branch name first (unique per git), then the derived dirName
+ * when exactly one worktree matches; the main worktree is never a candidate.
+ * Returns null when nothing matches unambiguously — the caller keeps the
+ * historical fallback.
+ */
+async function resolveWorktreePath(git: GitUtils, rootDir: string, identifier: string): Promise<string | null> {
+  try {
+    const entries = await git.listWorktrees();
+    const clones = parseWorktrees(entries, rootDir).filter((c) => !c.isMain);
+    const byBranch = clones.find((c) => c.currentBranch === identifier);
+    if (byBranch) return byBranch.path;
+    const byDirName = clones.filter((c) => c.dirName === identifier);
+    return byDirName.length === 1 ? byDirName[0].path : null;
+  } catch {
+    return null; // porcelain unavailable — keep the fallback path
+  }
+}
+
 export async function kill(identifier: string, options: { root: string; keepBranch?: boolean; worktreePath?: string }) {
   const rootDir = path.resolve(options.root);
   const git = new GitUtils(rootDir);
-  const targetPath = options.worktreePath || path.join(getClonesDir(rootDir), identifier);
+  const targetPath = options.worktreePath
+    || (await resolveWorktreePath(git, rootDir, identifier))
+    || path.join(getClonesDir(rootDir), identifier);
 
   try {
     console.log(chalk.yellow(`🧨 Killing shadow clone: ${identifier}...`));
