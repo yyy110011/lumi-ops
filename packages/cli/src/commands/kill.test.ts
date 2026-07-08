@@ -116,6 +116,38 @@ describe('kill', () => {
     );
   });
 
+  it('should clean up metadata by actual branch name when identifier key is missing', async () => {
+    // Legacy nested clone: caller passes last-segment dirName 'x', but the
+    // metadata entry is keyed by the spawn-time identifier 'feat/x'
+    mockExecSync.mockReturnValue('feat/x\n');
+    mockFs.readJSON.mockResolvedValue({
+      'feat/x': { baseBranch: 'main', sourcePrompt: '_generated/x.md' },
+      'feat/other': { baseBranch: 'main' },
+    });
+
+    await kill('x', { root: rootDir, worktreePath: path.join(rootDir, SHADOW_CLONES_DIR, 'feat', 'x') });
+
+    expect(mockFs.unlinkSync).toHaveBeenCalledWith(
+      path.join(rootDir, '.prompts', '_generated/x.md'),
+    );
+    expect(mockFs.writeJSON).toHaveBeenCalledWith(
+      metadataPath,
+      { 'feat/other': { baseBranch: 'main' } },
+      { spaces: 2 },
+    );
+  });
+
+  it('should NOT touch metadata when neither identifier nor actual branch matches', async () => {
+    mockExecSync.mockReturnValue('feat/unrelated\n');
+    mockFs.readJSON.mockResolvedValue({
+      'feat/other': { baseBranch: 'main' },
+    });
+
+    await kill('nonexistent', { root: rootDir });
+
+    expect(mockFs.writeJSON).not.toHaveBeenCalled();
+  });
+
   it('should not fail when metadata file does not exist', async () => {
     mockFs.readJSON.mockRejectedValue(new Error('ENOENT'));
 
@@ -455,25 +487,28 @@ describe('kill', () => {
     expect(mockGitUtils.removeWorktree).toHaveBeenCalledWith(legacyPath, true);
   });
 
-  it('should resolve by derived dirName when the identifier is not a branch name', async () => {
+  it('should resolve by derived dirName when the branch has drifted', async () => {
+    // Worktree created as feat/x, but a different branch is now checked out —
+    // dirName (full relative suffix under the legacy container) still matches
     const legacyPath = path.join(legacyContainer, 'feat', 'x');
-    mockExecSync.mockReturnValue('feat/x\n');
+    mockExecSync.mockReturnValue('develop\n');
     mockGitUtils.listWorktrees.mockResolvedValue([
       mainEntry,
-      `worktree ${legacyPath}\nHEAD bbb\nbranch refs/heads/feat/x`,
+      `worktree ${legacyPath}\nHEAD bbb\nbranch refs/heads/develop`,
     ]);
 
-    await kill('x', { root: rootDir });
+    await kill('feat/x', { root: rootDir });
 
     expect(mockGitUtils.removeWorktree).toHaveBeenCalledWith(legacyPath, true);
   });
 
   it('should fall back to the default path when dirName matches are ambiguous', async () => {
+    // Out-of-container worktrees derive last-segment dirNames, which can collide
     mockExecSync.mockReturnValue('x\n');
     mockGitUtils.listWorktrees.mockResolvedValue([
       mainEntry,
-      `worktree ${path.join(legacyContainer, 'feat', 'x')}\nHEAD bbb\nbranch refs/heads/feat/x`,
-      `worktree ${path.join(legacyContainer, 'fix', 'x')}\nHEAD ccc\nbranch refs/heads/fix/x`,
+      `worktree /elsewhere/a/x\nHEAD bbb\nbranch refs/heads/feat/x`,
+      `worktree /elsewhere/b/x\nHEAD ccc\nbranch refs/heads/fix/x`,
     ]);
 
     await kill('x', { root: rootDir });
