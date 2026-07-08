@@ -36,7 +36,17 @@ describe('merge', () => {
     vi.clearAllMocks();
     mockGitUtils.mergeSquash.mockResolvedValue(undefined);
     mockGitUtils.commit.mockResolvedValue(undefined);
+    // Default: the unmerged-paths probe reports a clean state
+    mockExecSync.mockReturnValue('');
   });
+
+  /** Make the `git diff --diff-filter=U` probe report unmerged (conflicted) files. */
+  function probeReportsConflicts() {
+    mockExecSync.mockImplementation((cmd: string) => {
+      if (cmd.includes('--diff-filter=U')) return 'src/conflicted-file.ts\n';
+      return '';
+    });
+  }
 
   // --- Basic merge (no cwd, legacy fallback) ---
 
@@ -84,16 +94,51 @@ describe('merge', () => {
 
   // --- Conflict handling ---
 
-  it('should throw CONFLICT error when merge has conflicts', async () => {
+  it('should throw CONFLICT when git reports unmerged paths', async () => {
+    probeReportsConflicts();
     mockGitUtils.mergeSquash.mockRejectedValue(new Error('CONFLICT (content): merge conflict in file.ts'));
 
     await expect(merge(branchName, options)).rejects.toThrow('CONFLICT');
   });
 
-  it('should throw CONFLICT error for lowercase conflict message', async () => {
+  it('should throw CONFLICT on a localized error message when git reports unmerged paths', async () => {
+    probeReportsConflicts();
+    // git localizes its messages — e.g. zh_TW says 「合併衝突」, no 'conflict' substring
+    mockGitUtils.mergeSquash.mockRejectedValue(new Error('自動合併失敗；請修正後再提交結果。'));
+
+    await expect(merge(branchName, options)).rejects.toThrow('CONFLICT');
+  });
+
+  it('should probe unmerged paths in the merge directory', async () => {
+    probeReportsConflicts();
+    mockGitUtils.mergeSquash.mockRejectedValue(new Error('whatever'));
+
+    await expect(
+      merge(branchName, { ...options, cwd: '/fake/worktree/develop' }),
+    ).rejects.toThrow('CONFLICT');
+
+    expect(mockExecSync).toHaveBeenCalledWith(
+      'git diff --name-only --diff-filter=U',
+      expect.objectContaining({ cwd: '/fake/worktree/develop' }),
+    );
+  });
+
+  it('should fall back to the message heuristic when the probe cannot run', async () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error('spawn git ENOENT');
+    });
     mockGitUtils.mergeSquash.mockRejectedValue(new Error('Automatic merge failed; fix conflict'));
 
     await expect(merge(branchName, options)).rejects.toThrow('CONFLICT');
+  });
+
+  it('should trust the probe over the message when git reports no unmerged paths', async () => {
+    // Probe runs and reports clean → a message that merely mentions conflict
+    // is not treated as one (e.g. a failure about a file named CONFLICT)
+    const originalError = new Error('fatal: pathspec CONFLICT.md did not match any files');
+    mockGitUtils.mergeSquash.mockRejectedValue(originalError);
+
+    await expect(merge(branchName, options)).rejects.toThrow(originalError);
   });
 
   it('should re-throw non-conflict errors', async () => {
