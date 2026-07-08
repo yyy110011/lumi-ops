@@ -7,6 +7,7 @@ const { mockGitUtils, mockFs, mockExecSync, mockMigrate } = vi.hoisted(() => ({
     removeWorktree: vi.fn(),
     deleteBranch: vi.fn(),
     pruneWorktrees: vi.fn(),
+    listWorktrees: vi.fn(),
   },
   mockFs: {
     readJSON: vi.fn(),
@@ -61,6 +62,7 @@ describe('kill', () => {
     vi.clearAllMocks();
     mockGitUtils.removeWorktree.mockResolvedValue(undefined);
     mockGitUtils.deleteBranch.mockResolvedValue(undefined);
+    mockGitUtils.listWorktrees.mockResolvedValue([]);
     mockFs.readJSON.mockRejectedValue(new Error('ENOENT'));
     mockFs.writeJSON.mockResolvedValue(undefined);
     mockFs.pathExists.mockResolvedValue(false);
@@ -435,6 +437,76 @@ describe('kill', () => {
 
     expect(mockFs.readdir).not.toHaveBeenCalled();
     expect(mockFs.remove).not.toHaveBeenCalled();
+  });
+
+  // --- Worktree path resolution (no explicit worktreePath) ---
+
+  const mainEntry = `worktree ${rootDir}\nHEAD aaa\nbranch refs/heads/main`;
+
+  it('should resolve the real worktree path from git when the caller does not pass one', async () => {
+    const legacyPath = path.join(legacyContainer, 'feat', 'old-feature');
+    mockGitUtils.listWorktrees.mockResolvedValue([
+      mainEntry,
+      `worktree ${legacyPath}\nHEAD bbb\nbranch refs/heads/feat/old-feature`,
+    ]);
+
+    await kill(identifier, { root: rootDir });
+
+    expect(mockGitUtils.removeWorktree).toHaveBeenCalledWith(legacyPath, true);
+  });
+
+  it('should resolve by derived dirName when the identifier is not a branch name', async () => {
+    const legacyPath = path.join(legacyContainer, 'feat', 'x');
+    mockExecSync.mockReturnValue('feat/x\n');
+    mockGitUtils.listWorktrees.mockResolvedValue([
+      mainEntry,
+      `worktree ${legacyPath}\nHEAD bbb\nbranch refs/heads/feat/x`,
+    ]);
+
+    await kill('x', { root: rootDir });
+
+    expect(mockGitUtils.removeWorktree).toHaveBeenCalledWith(legacyPath, true);
+  });
+
+  it('should fall back to the default path when dirName matches are ambiguous', async () => {
+    mockExecSync.mockReturnValue('x\n');
+    mockGitUtils.listWorktrees.mockResolvedValue([
+      mainEntry,
+      `worktree ${path.join(legacyContainer, 'feat', 'x')}\nHEAD bbb\nbranch refs/heads/feat/x`,
+      `worktree ${path.join(legacyContainer, 'fix', 'x')}\nHEAD ccc\nbranch refs/heads/fix/x`,
+    ]);
+
+    await kill('x', { root: rootDir });
+
+    expect(mockGitUtils.removeWorktree).toHaveBeenCalledWith(
+      path.join(getClonesDir(rootDir), 'x'), true,
+    );
+  });
+
+  it('should never resolve the identifier to the main worktree', async () => {
+    mockExecSync.mockReturnValue('main\n');
+    mockGitUtils.listWorktrees.mockResolvedValue([mainEntry]);
+
+    await kill('main', { root: rootDir });
+
+    // Falls back to the guessed clone path — the repo root is never a kill target
+    expect(mockGitUtils.removeWorktree).toHaveBeenCalledWith(
+      path.join(getClonesDir(rootDir), 'main'), true,
+    );
+  });
+
+  it('should not query git for worktrees when an explicit worktreePath is supplied', async () => {
+    await kill(identifier, { root: rootDir, worktreePath: targetPath });
+
+    expect(mockGitUtils.listWorktrees).not.toHaveBeenCalled();
+  });
+
+  it('should fall back gracefully when git worktree listing fails', async () => {
+    mockGitUtils.listWorktrees.mockRejectedValue(new Error('not a git repo'));
+
+    await kill(identifier, { root: rootDir });
+
+    expect(mockGitUtils.removeWorktree).toHaveBeenCalledWith(targetPath, true);
   });
 
   // --- Metadata migration chokepoint ---

@@ -231,3 +231,35 @@ container kept while other clones remain; container kept when it still holds
 `.lumi-metadata.json`; custom out-of-container path → no climb, no removal;
 unmigrated `.worktrees` metadata survives kill via migration; existing suite
 unchanged as regression guard.
+
+## 8. Kill target resolution via git (Option D) — APPROVED 2026-07-08
+
+**Problem.** Only the sidebar and the Worktree Manager pass the real worktree
+path into `kill()`. The other three routes — MCP `kill_clone`
+(`clone-ops.ts`), the command palette (no tree item → no `worktreePath`), and
+raw CLI — guess `<clonesDir>/<identifier>`. For a worktree at the legacy
+`.shadow-clones/` or any custom location, the kill half-fails (worktree not
+removed, prune no-op, branch delete refused because still checked out); if an
+unrelated directory happens to sit at the guessed path, step 2b removes it —
+a wrong-target deletion.
+
+**Design.** Fix at the CLI chokepoint so all callers benefit:
+`resolveWorktreePath(git, rootDir, identifier)` queries
+`git worktree list --porcelain` (via the existing `GitUtils.listWorktrees` +
+`parseWorktrees`) and resolves the identifier to the registered on-disk path:
+
+- Match order: exact checked-out **branch name** first (git guarantees
+  uniqueness), then derived **dirName** if exactly one worktree matches.
+- The **main worktree is never a candidate** (the repo root must never become
+  a kill target).
+- Ambiguous or no match → return null and keep the historical
+  `<clonesDir>/<identifier>` fallback. Porcelain failure (not a git repo) →
+  same fallback, never throws.
+- Explicit `options.worktreePath` still short-circuits everything.
+
+Composes with §7: the resolved path feeds `resolveCleanupContainer`, so legacy
+worktrees killed via MCP/palette/CLI now get the same self-tidy.
+
+**Behavior note.** A manually created worktree (outside any lumi container) is
+now resolvable by its branch name — consistent with the sidebar, which already
+lists every non-main worktree as a manageable clone.
