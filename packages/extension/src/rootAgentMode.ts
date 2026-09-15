@@ -98,6 +98,31 @@ function getRulesDir(rootPath: string): string {
   return path.join(rootPath, '.agents', 'rules');
 }
 
+/**
+ * Write `content` to `filePath` without ever exposing a truncated file.
+ *
+ * `fs.promises.writeFile` opens the target with O_TRUNC and then writes, so a
+ * concurrent reader — or a second concurrent writer, which happens when the
+ * config-change listener and a direct `syncRootAgentRule` call overlap — can
+ * observe an empty file in between. Writing to a temp file in the same
+ * directory and renaming it over the target is atomic on every platform we
+ * ship to, so readers see either the previous or the new content.
+ *
+ * `rename` can still fail when another process holds the target open
+ * (Windows reports EPERM); in that case fall back to an in-place write and
+ * drop the temp file rather than leave the rule missing.
+ */
+async function writeFileAtomic(filePath: string, content: string): Promise<void> {
+  const tmpPath = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  await fs.promises.writeFile(tmpPath, content);
+  try {
+    await fs.promises.rename(tmpPath, filePath);
+  } catch {
+    try { await fs.promises.unlink(tmpPath); } catch { /* already gone */ }
+    await fs.promises.writeFile(filePath, content);
+  }
+}
+
 export async function syncRootAgentRule(rootPath: string, isCloneWorkspace: boolean): Promise<void> {
   const config = vscode.workspace.getConfiguration('lumi-ops');
   const enabled = config.get<boolean>('rootAgentMode', false);
@@ -105,9 +130,9 @@ export async function syncRootAgentRule(rootPath: string, isCloneWorkspace: bool
   const ruleFilePath = path.join(rulesDir, RULE_FILENAME);
 
   if (enabled && !isCloneWorkspace) {
-    // Write rule file
+    // Write rule file (atomically — see writeFileAtomic)
     await fs.promises.mkdir(rulesDir, { recursive: true });
-    await fs.promises.writeFile(ruleFilePath, ROOT_AGENT_RULE_CONTENT);
+    await writeFileAtomic(ruleFilePath, ROOT_AGENT_RULE_CONTENT);
   } else if (!isCloneWorkspace) {
     // Only clean up in root workspace context — clone windows must not touch root rules
     try { await fs.promises.unlink(ruleFilePath); } catch { /* doesn't exist */ }

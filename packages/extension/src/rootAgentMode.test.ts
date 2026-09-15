@@ -19,16 +19,19 @@ vi.mock('vscode', () => ({
 const mockMkdir = vi.fn();
 const mockWriteFile = vi.fn();
 const mockUnlink = vi.fn();
+const mockRename = vi.fn();
 
 vi.mock('fs', () => ({
   promises: {
     mkdir: (...args: any[]) => mockMkdir(...args),
     writeFile: (...args: any[]) => mockWriteFile(...args),
     unlink: (...args: any[]) => mockUnlink(...args),
+    rename: (...args: any[]) => mockRename(...args),
   },
 }));
 
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { registerRootAgentMode } from './rootAgentMode';
 
 function setup(options: {
@@ -53,6 +56,7 @@ function setup(options: {
   mockMkdir.mockResolvedValue(undefined);
   mockWriteFile.mockResolvedValue(undefined);
   mockUnlink.mockResolvedValue(undefined);
+  mockRename.mockResolvedValue(undefined);
 
   const mockContext = { subscriptions: { push: vi.fn() } } as any;
   registerRootAgentMode(mockContext, rootPath, isCloneWorkspace);
@@ -153,6 +157,41 @@ describe('registerRootAgentMode', () => {
     });
   });
 
+  describe('atomic rule file write', () => {
+    const finalPath = path.join('/repo', '.agents', 'rules', 'lumi-ops-root-agent.md');
+
+    it('writes to a temp file in the same directory, then renames it over the rule file', async () => {
+      setup({ enabled: true, isCloneWorkspace: false });
+
+      await vi.waitFor(() => {
+        expect(mockRename).toHaveBeenCalledTimes(1);
+      });
+
+      const [tmpPath, target] = mockRename.mock.calls[0];
+      expect(target).toBe(finalPath);
+      expect(tmpPath).not.toBe(finalPath);
+      expect(path.dirname(tmpPath)).toBe(path.dirname(finalPath));
+      expect(mockWriteFile).toHaveBeenCalledWith(tmpPath, expect.stringContaining('Root Agent Mode'));
+      // The rule file itself is never opened for a truncating write, so a concurrent
+      // reader sees either the previous or the new content — never an empty file.
+      for (const [writtenPath] of mockWriteFile.mock.calls) {
+        expect(writtenPath).not.toBe(finalPath);
+      }
+    });
+
+    it('falls back to an in-place write and removes the temp file when rename fails', async () => {
+      setup({ enabled: true, isCloneWorkspace: false });
+      mockRename.mockRejectedValue(new Error('EPERM'));
+
+      await vi.waitFor(() => {
+        expect(mockWriteFile).toHaveBeenCalledWith(finalPath, expect.stringContaining('Root Agent Mode'));
+      });
+
+      const [tmpPath] = mockRename.mock.calls[0];
+      expect(mockUnlink).toHaveBeenCalledWith(tmpPath);
+    });
+  });
+
   describe('configuration change listener', () => {
     it('registers onDidChangeConfiguration listener', () => {
       setup();
@@ -213,9 +252,10 @@ describe('registerRootAgentMode', () => {
           '/my/project/.agents/rules',
           { recursive: true }
         );
-        expect(mockWriteFile).toHaveBeenCalledWith(
-          '/my/project/.agents/rules/lumi-ops-root-agent.md',
-          expect.any(String)
+        // The content lands at the rule path via the atomic rename
+        expect(mockRename).toHaveBeenCalledWith(
+          expect.any(String),
+          '/my/project/.agents/rules/lumi-ops-root-agent.md'
         );
       });
     });
