@@ -23,13 +23,18 @@ isolation and agent orchestration, so the remaining differentiation is shrinking
   npm publish is currently run manually by the owner).
 - Revisit in ~6 months: if no bug reports arrive, archive the repository.
 
-**Leftovers not yet decided**
-- `origin/develop` + the beta CI job in `ci.yml` (develop is stale since 2026-03).
-- Unmerged branches kept for reference: `feat/prompt-management-tab`,
-  `feat/unit-tests`, `feat/worktree-clone-path-migration`, `feat/background-agents`,
-  `feat/integration-branch`, `lumi-ops-tui` (TUI was to be spun out; never was).
-- 6 local stash entries; local design docs `doc/walkthrough-design.md` and
-  `doc/background-agents-design.md` (gitignored, deletable).
+**Housekeeping done 2026-09-16**
+- `develop` deleted and the CI workflow now watches `main` only.
+- Every parked, unmerged branch was frozen as an `archive/<branch>` tag and the
+  branch deleted: `feat/prompt-management-tab`, `feat/unit-tests`,
+  `feat/worktree-clone-path-migration`, `feat/background-agents`,
+  `feat/integration-branch`, `lumi-ops-tui` (TUI was to be spun out; never was),
+  plus seven local-only branches. `git tag -l 'archive/*'` lists them.
+- Local stash entries and the parked design docs (walkthrough, background
+  agents) were discarded.
+- `HaaLeo/publish-vscode-extension@v2` is the newest release of that action; it
+  already runs on Node 24 on GitHub's runners (v0.6.1 published fine). Replace
+  it with direct `vsce publish` / `ovsx publish` calls only if it ever breaks.
 
 ---
 
