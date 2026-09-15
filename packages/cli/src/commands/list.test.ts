@@ -215,7 +215,26 @@ describe('parseWorktrees', () => {
     expect(result[1].branch).toBe('develop');  // backward compat alias
   });
 
-  it('falls back to last path segment for non-.worktrees/ paths', () => {
+  it('derives full nested dirName from legacy .shadow-clones/ paths', () => {
+    const result = parseWorktrees([
+      'worktree /repo\nHEAD abc\nbranch refs/heads/main',
+      'worktree /repo/.shadow-clones/feat/my-task\nHEAD def\nbranch refs/heads/feat/my-task',
+    ], '/repo');
+
+    // Full identity, not last segment — metadata is keyed by `feat/my-task`
+    expect(result[1].dirName).toBe('feat/my-task');
+  });
+
+  it('derives flat dirName from legacy .shadow-clones/ paths', () => {
+    const result = parseWorktrees([
+      'worktree /repo\nHEAD abc\nbranch refs/heads/main',
+      'worktree /repo/.shadow-clones/my-task\nHEAD def\nbranch refs/heads/my-task',
+    ], '/repo');
+
+    expect(result[1].dirName).toBe('my-task');
+  });
+
+  it('falls back to last path segment for paths outside known containers', () => {
     const result = parseWorktrees([
       'worktree /repo\nHEAD abc\nbranch refs/heads/main',
       'worktree /completely/different/my-clone\nHEAD def\nbranch refs/heads/feat/a',

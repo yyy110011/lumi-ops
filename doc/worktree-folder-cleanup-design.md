@@ -263,3 +263,20 @@ worktrees killed via MCP/palette/CLI now get the same self-tidy.
 **Behavior note.** A manually created worktree (outside any lumi container) is
 now resolvable by its branch name — consistent with the sidebar, which already
 lists every non-main worktree as a manageable clone.
+
+## 9. Legacy dirName identity + metadata-key fallback — APPROVED 2026-07-08
+
+**Problem.** `deriveDirName` (list.ts) only recognized the `.worktrees/`
+marker; legacy paths fell back to the *last path segment*, so
+`.shadow-clones/feat/x` derived `'x'` instead of `'feat/x'`. Metadata is keyed
+by the full spawn-time identifier → kill's metadata cleanup missed the entry,
+leaving a stale record and an undeleted generated prompt. `feat/x` and `fix/x`
+also collided on the same identity `'x'`.
+
+**Fix.**
+- `deriveDirName` recognizes both container markers (`.worktrees/`,
+  `.shadow-clones/`) and extracts the full relative suffix; last-segment
+  fallback remains only for paths outside both.
+- `kill()` step 4: when `metadata[identifier]` misses, fall back to the
+  **actual checked-out branch name** (read via rev-parse before removal) —
+  covers historical mismatches already sitting in metadata files.

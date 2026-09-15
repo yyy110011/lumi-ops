@@ -1,5 +1,6 @@
 import * as path from 'path';
 import { GitUtils } from '../utils/git';
+import { SHADOW_CLONES_DIR } from '../constants';
 import type { ReviewStatus } from '../constants';
 import chalk from 'chalk';
 
@@ -22,16 +23,23 @@ export interface ShadowClone {
 /**
  * Derive the stable `dirName` identity from a worktree path.
  *
- * For worktrees under `.worktrees/`: extracts the relative path suffix.
- *   e.g., `/repo.worktrees/feat/my-task` → `feat/my-task`
+ * For worktrees under a known container — current `.worktrees/` or legacy
+ * `.shadow-clones/` — extracts the relative path suffix, so nested branch
+ * names keep their full identity:
+ *   `/repo.worktrees/feat/my-task`      → `feat/my-task`
+ *   `/repo/.shadow-clones/feat/my-task` → `feat/my-task`
+ * (metadata is keyed by that full identifier — a last-segment `my-task`
+ * would orphan the entry on kill).
  *
- * Fallback for paths NOT under `.worktrees/`: uses the last path segment.
+ * Fallback for paths outside both containers: the last path segment.
  */
 function deriveDirName(worktreePath: string): string {
-  const marker = '.worktrees/';
-  const idx = worktreePath.indexOf(marker);
-  if (idx !== -1) {
-    return worktreePath.substring(idx + marker.length);
+  const markers = ['.worktrees/', `${SHADOW_CLONES_DIR}/`];
+  for (const marker of markers) {
+    const idx = worktreePath.indexOf(marker);
+    if (idx !== -1) {
+      return worktreePath.substring(idx + marker.length);
+    }
   }
   // Fallback: last path segment
   const segments = worktreePath.split('/');

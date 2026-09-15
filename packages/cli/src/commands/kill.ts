@@ -161,13 +161,20 @@ export async function kill(identifier: string, options: { root: string; keepBran
       console.log(chalk.gray(`✓ Branch(es) preserved.`));
     }
 
-    // 4. Clean up generated prompt + remove entry from centralized metadata
+    // 4. Clean up generated prompt + remove entry from centralized metadata.
+    //    Metadata is keyed by the spawn-time identifier; when the caller's
+    //    identifier doesn't match (e.g. a last-segment dirName derived from a
+    //    legacy path), fall back to the actual branch name so the entry and
+    //    its generated prompt don't go stale.
     const metadataPath = path.join(getRepoStorageDir(rootDir), METADATA_FILE);
     try {
       const metadata = await fs.readJSON(metadataPath);
-      if (metadata[identifier]) {
+      const metadataKey = metadata[identifier]
+        ? identifier
+        : (actualBranch && metadata[actualBranch] ? actualBranch : undefined);
+      if (metadataKey) {
         // Delete generated prompt file if tracked
-        const sourcePrompt = metadata[identifier].sourcePrompt;
+        const sourcePrompt = metadata[metadataKey].sourcePrompt;
         if (sourcePrompt && sourcePrompt.startsWith('_generated/')) {
           const promptPath = path.join(rootDir, '.prompts', sourcePrompt);
           try {
@@ -177,7 +184,7 @@ export async function kill(identifier: string, options: { root: string; keepBran
             // Already gone — that's fine
           }
         }
-        delete metadata[identifier];
+        delete metadata[metadataKey];
         await fs.writeJSON(metadataPath, metadata, { spaces: 2 });
         console.log(chalk.gray('✓ Cleaned up metadata.'));
       }
