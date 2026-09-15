@@ -11,6 +11,9 @@ All notable changes to this project will be documented in this file.
 - **Locale-Independent Conflict Detection (#54)** — `merge` now detects conflicts structurally via `git diff --name-only --diff-filter=U` instead of matching "CONFLICT" in git's (localized) error message. On non-English locales real conflicts were downgraded to generic failures, which also broke the MCP `merge_clone` conflict flow. The message heuristic remains only as a fallback when the probe cannot run.
 - **Full `dirName` for Legacy Clone Paths (#55)** — `list` now derives the full nested identifier (e.g. `feat/my-task`) for clones under the legacy `.shadow-clones/` container, not just the last path segment. `kill` falls back to the actual branch name as the metadata key when the caller's identifier does not match, so metadata entries and generated prompts are no longer orphaned.
 
+### 🔧 Improvements
+- **Test Runner for VS Code ≥ 1.137** — Upgraded `@vscode/test-cli` to 0.0.15 and `@vscode/test-electron` to 3.x. VS Code 1.110 renamed the macOS binary from `Electron` to `Code` and 1.137 dropped the compatibility symlink, so the old runner failed with `spawn …/Contents/MacOS/Electron ENOENT` before any test ran. CI now runs on Node 22, which the new runner requires (Node 20 is end-of-life).
+
 ## v0.6.0
 
 ### ✨ Features
