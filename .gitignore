@@ -23,3 +23,9 @@ doc/shadow-mode-ui.md
 GEMINI.md
 .lumi/
 .prompts/
+
+# Written by extension integration tests (rootAgentMode config.update)
+packages/extension/test-fixtures/sample-workspace/.vscode/
+# Local design docs (parked, not part of the release)
+doc/walkthrough-design.md
+doc/background-agents-design.md
