@@ -15,6 +15,9 @@ Equip your AI agent with a protocol for parallel development. Spawn isolated tas
 
 Built on Git Worktrees. Works with Antigravity, Cursor, GitHub Copilot, and any MCP-compatible AI.
 
+> **📌 Project status: maintenance mode (since September 2026).**
+> Lumi-Ops is stable and keeps working, but no new features are planned. Claude Code, Cursor, GitHub Copilot and VS Code itself now ship native git-worktree isolation and agent orchestration, which covers the problem this project set out to solve. Bug reports are welcome and will be fixed; feature requests will be closed.
+
 ### 🆕 v0.5 — Multi-Root Workspace & Auto-Close
 - **Multi-Root Workspace Support** — Extension now detects and aggregates clones across all workspace folders, with clones grouped by repo in the sidebar.
 - **Auto-Close Clone Window** — Clone VS Code windows automatically close when the worktree is killed, keeping your workspace tidy.

@@ -4,6 +4,8 @@ MCP (Model Context Protocol) server for the **Shadow Clone Protocol** — Git Wo
 
 This server exposes the full Lumi-Ops toolset over MCP stdio — 15 tools, 6 read-only resources, and 4 workflow prompt templates, enabling AI agents to spawn, manage, review, and merge shadow clones (Git Worktrees) as part of a parallelised development workflow.
 
+> **📌 Maintenance mode (since September 2026):** bug fixes only, no new features. The server keeps working with any MCP client; see the [project README](https://github.com/yyy110011/lumi-ops#readme) for details.
+
 ## Installation
 
 ```bash

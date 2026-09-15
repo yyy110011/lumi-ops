@@ -4,6 +4,35 @@
 
 ---
 
+## 🛑 Maintenance Mode — decided 2026-09-15
+
+> Lumi-Ops is in **maintenance mode**: bug fixes only, no new features.
+> Everything below this section is historical and is **not** being pursued —
+> including the Worktree Mode / two-mode plan and the parked agent layer.
+
+**Why**: usage snapshot on 2026-09-15 — VS Code Marketplace 31 installs / 965
+downloads; npm `@lumi-ops/mcp-server` monthly downloads 1,550 (Mar) → 70 (Aug)
+→ 19 (Sep to date); GitHub 8 stars, 0 forks, 0 issues, no external contributors.
+Claude Code, Cursor, GitHub Copilot and VS Code itself now ship native worktree
+isolation and agent orchestration, so the remaining differentiation is shrinking.
+
+**Contract**
+- Fix user-reported bugs, keep CI green, keep the extension installable.
+- Feature requests are closed with a pointer to the README notice.
+- Release a patch version only when a fix lands (tag `vX.Y.Z` → publish workflow;
+  npm publish is currently run manually by the owner).
+- Revisit in ~6 months: if no bug reports arrive, archive the repository.
+
+**Leftovers not yet decided**
+- `origin/develop` + the beta CI job in `ci.yml` (develop is stale since 2026-03).
+- Unmerged branches kept for reference: `feat/prompt-management-tab`,
+  `feat/unit-tests`, `feat/worktree-clone-path-migration`, `feat/background-agents`,
+  `feat/integration-branch`, `lumi-ops-tui` (TUI was to be spun out; never was).
+- 6 local stash entries; local design docs `doc/walkthrough-design.md` and
+  `doc/background-agents-design.md` (gitignored, deletable).
+
+---
+
 ## 🧭 Strategic Direction (v0.6+) — Refocus on Worktree
 
 > Decided 2026-06-13 based on real dogfooding: in daily use, only the worktree

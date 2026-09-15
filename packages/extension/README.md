@@ -6,6 +6,9 @@ Equip your AI agent with a protocol for parallel development. Spawn isolated tas
 
 Built on Git Worktrees. Works with Antigravity, Cursor, GitHub Copilot, and any MCP-compatible AI.
 
+> **📌 Project status: maintenance mode (since September 2026).**
+> Lumi-Ops is stable and keeps working, but no new features are planned. Claude Code, Cursor, GitHub Copilot and VS Code itself now ship native git-worktree isolation and agent orchestration, which covers the problem this project set out to solve. Bug reports are welcome and will be fixed; feature requests will be closed.
+
 [![CI Build](https://github.com/yyy110011/lumi-ops/actions/workflows/ci.yml/badge.svg)](https://github.com/yyy110011/lumi-ops/actions/workflows/ci.yml)
 [![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/ZunRenYao.lumi-ops?style=flat&label=VS%20Code&logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=ZunRenYao.lumi-ops)
 [![Open VSX](https://img.shields.io/open-vsx/v/ZunRenYao/lumi-ops?style=flat&label=Open%20VSX&logo=eclipse-ide)](https://open-vsx.org/extension/ZunRenYao/lumi-ops)

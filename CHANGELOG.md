@@ -2,7 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v0.6.1
+
+### 📌 Project Status
+- **Maintenance Mode** — Lumi-Ops now receives bug fixes only; no new features are planned. The platforms it targets (Claude Code, Cursor, GitHub Copilot, VS Code) ship native worktree isolation and agent orchestration. See the README notice.
 
 ### 🐛 Bug Fixes
 - **Locale-Independent Conflict Detection (#54)** — `merge` now detects conflicts structurally via `git diff --name-only --diff-filter=U` instead of matching "CONFLICT" in git's (localized) error message. On non-English locales real conflicts were downgraded to generic failures, which also broke the MCP `merge_clone` conflict flow. The message heuristic remains only as a fallback when the probe cannot run.
